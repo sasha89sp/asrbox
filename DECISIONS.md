@@ -60,3 +60,16 @@
   2. Для минимизации нагрузки на CPU (`NF-001`) на первом этапе использовать режим `HoverZoomMode::SingleIcon` (увеличивается только активная иконка под курсором, без волнового пересчёта соседей) с резервом пространства (`zoom headroom`) внутри окна и остановкой таймера анимации в покое.
   3. Для качественных иконок на Windows использовать `IconSource::AutoShell` (`IShellItemImageFactory` до 256×256 + кэш в `data/cache/icons/`) с возможностью ручного выбора `CustomFile(.ico/.png)` или `ExeResource`.
 - **Причина**: Обеспечивает гибкость настройки, чёткую графику в стиле macOS и предсказуемо низкое потребление CPU/RAM.
+
+---
+
+## ADR-008: Зависимость `windows = "0.61"`, трейты `platform-api` и рендер `UpdateLayeredWindow`
+
+- **Статус**: Принято (v0.0.1, согласовано владельцем)
+- **Решение**:
+  1. Подключить единственную внешнюю зависимость `windows = "0.61"` (лицензия `MIT OR Apache-2.0`) исключительно в `crates/platform-windows` под `[target.'cfg(windows)'.dependencies]`.
+  2. Зафиксировать безопасные платформенные контракты `DockPlatform`, `IconProvider`, `PlatformEvent`, `DockMenuAction`, `TrayAction`, `RgbaImage`, `BgraFrame` в `crates/platform-api` (без `unsafe`).
+  3. Рендер полупрозрачной macOS-капсулы с мягкой тенью и билинейным масштабированием иконок выполнять в безопасном чистом Rust (`crates/mod-dock/src/render.rs`) с передачей 32-битного premultiplied BGRA в `UpdateLayeredWindow`.
+  4. Извлечение иконок выполнять через `IShellItemImageFactory` (до 256×256) + WIC (`IWICImagingFactory`) для пользовательских `.ico`/`.png` + `ExtractIconExW` для `.exe`/`.dll`; выбор файла — через `GetOpenFileNameW`, запуск — через `ShellExecuteW`.
+  5. Хранить неограниченное число док-панелей в портативном `./data/config/docks.cfg` (`settings_version=1`, `written_by`) без внешних крейтов сериализации.
+- **Причина**: Минимальный размер `.exe` (< 25 МБ), минимальный расход RAM (< 30 МБ), 0% CPU в покое за счёт событийного `UpdateLayeredWindow` и строгая изоляция `unsafe` в `crates/platform-windows`.

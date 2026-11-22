@@ -1,9 +1,9 @@
-# MAP: `crates/platform-windows`
+# MAP.md — `crates/platform-windows`
 
-Реализация трейтов `crates/platform-api` через `windows-rs` (Windows 10/11 x64): хуки, док-окна, захват экрана, метрики процессов, Named Pipes, Credential Manager. Единственный крейт с `unsafe` (`// SAFETY`). Лимит: <= 100 строк.
+Единственный крейт workspace с `unsafe` (каждый блок снабжён комментарием `// SAFETY:`). Реализует контракты `crates/platform-api` через `windows` (`0.61`).
 
 ## Файлы
-
-| Путь | Назначение |
-| --- | --- |
-| `src/lib.rs` | Корневой модуль крейта `asrbox-platform-windows` (каркас v0.0.1). |
+- `src/lib.rs` — экспорт `WindowsDockHost`, `WindowsIconProvider`, `SingleInstanceGuard`.
+- `src/window.rs` — прозрачные layered-окна док-панелей (`UpdateLayeredWindow`), `DragAcceptFiles`, таймеры анимации, `WM_DISPLAYCHANGE`, `SingleInstanceGuard` и цикл сообщений.
+- `src/icons.rs` — извлечение качественных иконок (`IShellItemImageFactory` до 256×256, WIC для `.png`/`.ico`, `ExtractIconExW` для `.exe`/`.dll`).
+- `src/tray.rs` — иконка в системном трее (`Shell_NotifyIconW`), нативные ПКМ-меню док-панели и трея, диалог выбора иконки (`GetOpenFileNameW`), запуск целей (`ShellExecuteW`).

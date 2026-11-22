@@ -1,9 +1,6 @@
-# MAP: `crates/platform-api`
+# MAP.md — `crates/platform-api`
 
-Платформонезависимые трейты ОС (`KeyboardHook`, `DockWindow`, `ScreenCapture`, `ProcessMonitor`, транспорт IPC). Без `unsafe` и WinAPI-зависимостей. Лимит: <= 100 строк.
+Контракты платформенного слоя без `unsafe` и зависимостей от WinAPI.
 
 ## Файлы
-
-| Путь | Назначение |
-| --- | --- |
-| `src/lib.rs` | Корневой модуль крейта `asrbox-platform-api` (каркас v0.0.1). |
+- `src/lib.rs` — геометрические типы (`PixelPoint`, `PixelRect`), буферы (`RgbaImage`, `BgraFrame`), события (`PlatformEvent`), меню (`DockMenuAction`, `TrayAction`) и трейты `IconProvider`, `DockPlatform`.

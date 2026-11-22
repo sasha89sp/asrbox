@@ -1,12 +1,12 @@
-# MAP: `crates/mod-dock`
+# MAP.md — `crates/mod-dock`
 
-Неограниченное количество независимых док-панелей в стиле macOS внутри одного процесса-модуля без лишнего расхода ОЗУ. Зависит только от `core` и `platform-api`. Лимит: <= 100 строк.
+Неограниченное количество независимых док-панелей в стиле macOS внутри одного процесса (`specs/mod-dock.md`).
+Без `unsafe`, без `unwrap()`/`expect()`, без прямых вызовов WinAPI.
 
 ## Файлы
-
-| Путь | Назначение |
-| --- | --- |
-| `src/lib.rs` | Публичный API и реэкспорты крейта `asrbox-mod-dock`. |
-| `src/config.rs` | `DockRegistry` (неограниченное число панелей), `DockConfig`, `DockEdge`, `DockAlignment`, `IconSource`, `HoverZoomConfig` и валидация. |
-| `src/layout.rs` | Геометрия панели у краёв экрана, центровка, hit-test, индекс вставки drag-and-drop и масштабирование только активной иконки. |
-| `src/state.rs` | Событийный конечный автомат `DockInstance`, плавная анимация одной иконки с 0 тиков в покое и метрики `DockMetrics`. |
+- `src/lib.rs` — публичный API крейта и реэкспорт типов.
+- `src/config.rs` — `DockRegistry`, `DockConfig`, `DockItem`, `DockEdge`, `DockAlignment`, `IconSource`, `HoverZoomConfig` и валидация.
+- `src/layout.rs` — расчёт геометрии капсулы, 4 краёв экрана, центровки, позиции вставки при drag-and-drop и одноиконочного увеличения.
+- `src/render.rs` — безопасный 32-битный рендерер macOS-капсулы с альфа-тенью, кромкой и билинейным масштабированием иконок.
+- `src/state.rs` — событийный автомат `DockInstance`, остановка таймера в покое и счётчики метрик.
+- `src/storage.rs` — портативное сохранение и загрузка неограниченного числа док-панелей в `./data/config/docks.cfg`.

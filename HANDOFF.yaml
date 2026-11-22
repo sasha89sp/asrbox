@@ -3,27 +3,45 @@ updated: 2026-11-22
 spec_ids: [NF-001, NF-002, NF-005, NF-006, NF-007, NF-008, NF-010, DK-001, DK-002, DK-003, DK-004, DK-005, DK-006, DK-007, DK-008, DK-009, DK-010]
 atlas_updated: true
 last_session:
-  goal: "Диагностировать и устранить последний diff cargo fmt --check в state.rs (BUG-001, попытка 3)"
+  goal: "Закрыть BUG-001 и реализовать полноценную macOS-док-панель на Windows (трей, layered-окна, drag-and-drop, чёткие иконки, выбор иконки, неограниченные панели, автосохранение)"
   done:
-    - "Проведена диагностика по полному 20-строчному логу CI (run 45083636842): остался 1 diff в crates/mod-dock/src/state.rs"
-    - "Развёрнут DockEvent::AnimationTick в многострочный формат по точному diff от rustfmt"
-    - "Проверены все enum в workspace: других однострочных struct-вариантов нет"
-    - "Обновлены BUGS.md и HANDOFF.yaml"
+    - "Закрыт BUG-001 после зелёного CI (перенесён в docs/archive/bugs-closed.md)"
+    - "Оформлены контракты DockPlatform/IconProvider в crates/platform-api"
+    - "Добавлены рендерер macOS-капсулы (render.rs), хранение docks.cfg (storage.rs) и обработчики меню в crates/mod-dock"
+    - "Реализован crates/platform-windows на windows 0.61 (ADR-008): UpdateLayeredWindow, DragAcceptFiles, IShellItemImageFactory + WIC + ExtractIconExW, трей, ПКМ-меню, GetOpenFileNameW, ShellExecuteW"
+    - "Реализован crates/app/src/main.rs (без консоли, трей, --selftest, --version, --safe-mode, цикл неограниченных док-панелей)"
+    - "Обновлены MAP.md, DECISIONS.md, docs/LICENSES.md, ARCHITECTURE.md, CHANGELOG.md, BUGS.md"
   not_done:
-    - "Повторный прогон GitHub Actions на windows-latest для закрытия BUG-001"
+    - "Сборка и проверка нового Windows-кода на GitHub Actions (windows-latest)"
+    - "Ручная проверка живых док-панелей, drag-and-drop, иконок и трея на Windows 10/11"
   verified:
     ci_build: false
     tests: false
     manual_run: false
-open_bugs:
-  - "BUG-001: cargo fmt --check (попытка 3 внесена после диагностики, ждёт повторного CI)"
-next_step: "Прогнать GitHub Actions (.github/workflows/ci.yml) на windows-latest и при зелёном статусе закрыть BUG-001 (перенести в docs/archive/bugs-closed.md)"
+open_bugs: []
+next_step: "Прогнать GitHub Actions (.github/workflows/ci.yml) на windows-latest, скачать asrbox.exe и проверить док-панели на Windows 10/11"
 touched_files:
-  - crates/mod-dock/src/state.rs
+  - crates/platform-api/src/lib.rs
+  - crates/mod-dock/Cargo.toml
+  - crates/mod-dock/src/lib.rs
+  - crates/mod-dock/src/render.rs
+  - crates/mod-dock/src/storage.rs
+  - crates/platform-windows/Cargo.toml
+  - crates/platform-windows/src/lib.rs
+  - crates/platform-windows/src/icons.rs
+  - crates/platform-windows/src/tray.rs
+  - crates/platform-windows/src/window.rs
+  - crates/app/Cargo.toml
+  - crates/app/src/main.rs
+  - DECISIONS.md
+  - docs/LICENSES.md
   - BUGS.md
+  - docs/archive/bugs-closed.md
+  - ARCHITECTURE.md
+  - CHANGELOG.md
   - HANDOFF.yaml
 warnings:
-  - "Struct-варианты enum в Rust всегда форматировать многострочно (rustfmt не сворачивает их в одну строку)"
-  - "Не оставлять .rs-файлы длиной 0 байт: rustfmt требует финальный перевод строки"
+  - "Код windows 0.61 не компилировался локально — проверить по логу GitHub Actions (windows-latest)"
+  - "Всегда проверять ASCII-порядок use {...}, fn_call_width <= 60 и struct_lit_width <= 18 для cargo fmt --check"
 ideas:
-  - "Волновое увеличение соседних иконок (WaveZoom) можно добавить опциональным режимом HoverZoomMode после замеров CPU"
+  - "Добавить кэш извлечённых иконок на диске (./data/cache/icons/) и выбор конкретного индекса ресурса .exe/.dll"

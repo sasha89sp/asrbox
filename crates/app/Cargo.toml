@@ -4,5 +4,10 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 
+[dependencies]
+asrbox-mod-dock = { path = "../mod-dock" }
+asrbox-platform-api = { path = "../platform-api" }
+asrbox-platform-windows = { path = "../platform-windows" }
+
 [lints]
 workspace = true

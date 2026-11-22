@@ -1,12 +1,114 @@
 pub mod config;
 pub mod layout;
+pub mod render;
 pub mod state;
+pub mod storage;
+
+use std::path::PathBuf;
+
+use asrbox_platform_api::{DockMenuAction, DockMenuState, IconRequest, PixelPoint, PixelRect};
 
 pub use config::{
     DockAlignment, DockConfig, DockConfigError, DockEdge, DockId, DockItem, DockRegistry,
     HoverZoomConfig, HoverZoomMode, IconSource,
 };
 pub use layout::{DockLayout, DockSlotLayout, HoverVisualState, Point, Rect};
-pub use state::{DockEvent, DockInstance, DockMetrics, DockStepEffect};
-
 pub use layout::{compute_layout, drop_insert_index, hit_test_item};
+pub use render::render_dock_frame;
+pub use state::{DockEvent, DockInstance, DockMetrics, DockStepEffect};
+pub use storage::{load_docks_from_file, parse_docks, save_docks_to_file, serialize_docks};
+
+pub fn icon_request_for_item(item: &DockItem) -> IconRequest {
+    match &item.icon {
+        IconSource::AutoShell => IconRequest::AutoShell(item.target.clone()),
+        IconSource::CustomFile(path) => IconRequest::CustomFile(path.clone()),
+        IconSource::ExeResource { path, index } => IconRequest::ExeResource {
+            path: path.clone(),
+            index: *index,
+        },
+    }
+}
+
+pub fn build_menu_state(dock: &DockInstance, pt: Point, can_remove: bool) -> DockMenuState {
+    let cfg = dock.config();
+    let edge_code = match cfg.edge {
+        DockEdge::Left => 0,
+        DockEdge::Right => 1,
+        DockEdge::Top => 2,
+        DockEdge::Bottom => 3,
+    };
+    DockMenuState {
+        edge_code,
+        is_centered: matches!(cfg.alignment, DockAlignment::Center),
+        icon_size_px: cfg.icon_size_px,
+        hover_zoom_enabled: cfg.hover_zoom.enabled,
+        hovered_item_id: hit_test_item(dock.layout(), pt),
+        can_remove_dock: can_remove,
+    }
+}
+
+pub fn apply_menu_action(
+    cfg: &mut DockConfig,
+    action: DockMenuAction,
+    picked_icon: Option<PathBuf>,
+) -> bool {
+    match action {
+        DockMenuAction::SetEdgeLeft => cfg.edge = DockEdge::Left,
+        DockMenuAction::SetEdgeRight => cfg.edge = DockEdge::Right,
+        DockMenuAction::SetEdgeTop => cfg.edge = DockEdge::Top,
+        DockMenuAction::SetEdgeBottom => cfg.edge = DockEdge::Bottom,
+        DockMenuAction::AlignCenter => cfg.alignment = DockAlignment::Center,
+        DockMenuAction::OffsetMinus => shift_align(cfg, -80),
+        DockMenuAction::OffsetPlus => shift_align(cfg, 80),
+        DockMenuAction::IconSizeSmall => cfg.icon_size_px = 40,
+        DockMenuAction::IconSizeMedium => cfg.icon_size_px = 48,
+        DockMenuAction::IconSizeLarge => cfg.icon_size_px = 64,
+        DockMenuAction::ToggleHoverZoom => cfg.hover_zoom.enabled = !cfg.hover_zoom.enabled,
+        DockMenuAction::ChooseItemIcon(id) => {
+            let Some(path) = picked_icon else {
+                return false;
+            };
+            if let Some(item) = cfg.items.iter_mut().find(|i| i.id == id) {
+                item.icon = IconSource::CustomFile(path);
+            }
+        }
+        DockMenuAction::ResetItemIcon(id) => {
+            if let Some(item) = cfg.items.iter_mut().find(|i| i.id == id) {
+                item.icon = IconSource::AutoShell;
+            }
+        }
+        DockMenuAction::RemoveItem(id) => cfg.items.retain(|i| i.id != id),
+        DockMenuAction::AddNewDock | DockMenuAction::RemoveDock => return false,
+    }
+    true
+}
+
+fn shift_align(cfg: &mut DockConfig, delta: i32) {
+    let base = match cfg.alignment {
+        DockAlignment::Center => 400,
+        DockAlignment::Offset(px) => px,
+    };
+    cfg.alignment = DockAlignment::Offset(base.saturating_add(delta).max(0));
+}
+
+pub fn to_dock_rect(r: PixelRect) -> Rect {
+    Rect {
+        x: r.x,
+        y: r.y,
+        width: r.width,
+        height: r.height,
+    }
+}
+
+pub fn to_pixel_rect(r: Rect) -> PixelRect {
+    PixelRect {
+        x: r.x,
+        y: r.y,
+        width: r.width,
+        height: r.height,
+    }
+}
+
+pub fn to_dock_point(p: PixelPoint) -> Point {
+    Point { x: p.x, y: p.y }
+}

@@ -1,9 +1,6 @@
-# MAP: `crates/app`
+# MAP.md — `crates/app`
 
-Точка входа `asrbox.exe`, супервизор модулей (`--module <имя>`, рестарт 1/5/30 сек, отключение после 3 падений), системный трей, окно настроек (`X` -> трей), `--safe-mode`, `--selftest`, `--version` и сбор ZIP-диагностики. Лимит: <= 100 строк.
+Точка входа `asrbox.exe` (`#![windows_subsystem = "windows"]` в релизе), CLI (`--version`, `--selftest`, `--safe-mode`), защита одного экземпляра и оркестрация неограниченного числа док-панелей через `platform-api`, `mod-dock` и `platform-windows`.
 
 ## Файлы
-
-| Путь | Назначение |
-| --- | --- |
-| `src/main.rs` | Точка входа бинарного файла `asrbox` (пустая `main` в каркасе v0.0.1). |
+- `src/main.rs` — точка входа, `--selftest`, загрузка/сохранение `./data/config/docks.cfg` и цикл событий `AppController`.

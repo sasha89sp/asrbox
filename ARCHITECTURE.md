@@ -1,12 +1,12 @@
 # ARCHITECTURE.md — Архитектура `asrbox`
 
-Версия: `0.0.1` (каркас).
+Версия: `0.0.1` (каркас + рабочий прототип `mod-dock` / `platform-api` / `platform-windows` / `app`).
 
 ## 1. Правило зависимостей (строго вниз)
 
 - `crates/mod-*` и `crates/platform-windows` зависят **только** от `crates/core` и `crates/platform-api`.
 - Прикладные модули не вызывают друг друга напрямую — только сообщения через `crates/core` и супервизор `crates/app`.
-- Весь `unsafe` и прямые вызовы WinAPI (`windows-rs`) изолированы исключительно в `crates/platform-windows`; в остальных крейтах действует `unsafe_code = "forbid"`.
+- Весь `unsafe` и прямые вызовы WinAPI (`windows = "0.61"`) изолированы исключительно в `crates/platform-windows`; в остальных крейтах действует `unsafe_code = "forbid"`.
 - Во всём workspace действуют `unwrap_used = "deny"` и `expect_used = "deny"`.
 
 ```text
