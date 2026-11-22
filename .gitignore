@@ -1,0 +1,35 @@
+# Rust build artifacts
+/target/
+**/target/
+
+# Portable runtime data (settings, cache, databases, logs)
+/data/
+**/data/
+
+# Logs
+*.log
+
+# Local settings & environment overrides
+*.local.toml
+*.local.json
+*.local.yaml
+*.local.yml
+config.local.*
+settings.local.*
+.env*
+!.env.example
+
+# Editor & OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Web preview tooling artifacts
+node_modules/
+build/
+dist/
+coverage/

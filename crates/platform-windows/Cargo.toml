@@ -1,0 +1,9 @@
+[package]
+name = "asrbox-platform-windows"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"

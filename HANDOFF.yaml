@@ -1,0 +1,48 @@
+project: asrbox
+version: "0.0.1"
+target_platform: "windows-x86_64 (Windows 10/11 portable)"
+stage: "workspace-scaffold"
+ci_status: "pending_remote_ci"
+ci_runner: "windows-latest"
+ci_workflow: ".github/workflows/ci.yml"
+
+summary: >
+  Создан полный каркас Rust workspace для портативной программы asrbox v0.0.1
+  из 12 крейтов (xtask + 11 крейтов в crates/), включая утилиту atlas-check,
+  рабочий CI-файл для GitHub Actions (windows-latest) и полный пакет проектной
+  документации. Локальная компиляция Windows-таргета не выполнялась; проверка
+  требует прогона GitHub Actions.
+
+workspace_members:
+  - xtask
+  - crates/core
+  - crates/platform-api
+  - crates/platform-windows
+  - crates/mod-keyboard
+  - crates/mod-dock
+  - crates/mod-speech
+  - crates/mod-webdav
+  - crates/mod-monitor
+  - crates/mod-screenshot
+  - crates/mod-huawei
+  - crates/app
+
+invariants:
+  no_unwrap_expect: true
+  unsafe_only_in_platform_windows: true
+  modules_depend_only_on_core_and_platform_api: true
+  portable_data_dir: "./data/"
+  close_button_minimizes_to_tray: true
+
+required_ci_checks:
+  - "cargo fmt --check"
+  - "cargo clippy --workspace -- -D warnings"
+  - "cargo run -p xtask -- atlas-check"
+  - "cargo test --workspace"
+  - "cargo build --release"
+
+next_steps:
+  - "Запустить GitHub Actions workflow (.github/workflows/ci.yml) на windows-latest и зафиксировать зелёный статус."
+  - "Спроектировать и реализовать базовые типы ошибок, конфиг ./data/ и переключатель логирования/профилирования (NF-001, NF-007, NF-008) в crates/core."
+  - "Описать трейты системного трея, окна (WM_CLOSE -> трей, NF-010) и сборщика метрик (NF-009) в crates/platform-api."
+  - "Реализовать минимальный жизненный цикл окна и трея в crates/platform-windows и crates/app."

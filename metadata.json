@@ -1,0 +1,6 @@
+{
+  "name": "asrbox",
+  "description": "Portable Windows 10/11 (x64) Rust workspace scaffold and architecture inspector for asrbox v0.0.1.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

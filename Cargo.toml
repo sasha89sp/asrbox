@@ -1,0 +1,28 @@
+[workspace]
+resolver = "2"
+members = [
+    "xtask",
+    "crates/core",
+    "crates/platform-api",
+    "crates/platform-windows",
+    "crates/mod-keyboard",
+    "crates/mod-dock",
+    "crates/mod-speech",
+    "crates/mod-webdav",
+    "crates/mod-monitor",
+    "crates/mod-screenshot",
+    "crates/mod-huawei",
+    "crates/app",
+]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+publish = false
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
