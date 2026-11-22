@@ -9,7 +9,9 @@ use crate::layout::{compute_layout, drop_insert_index, hit_test_item};
 pub enum DockEvent {
     PointerMove(Point),
     PointerLeave,
-    AnimationTick { dt_ms: u16 },
+    AnimationTick {
+        dt_ms: u16,
+    },
     DropFiles {
         paths: Vec<PathBuf>,
         local_point: Point,

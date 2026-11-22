@@ -19,13 +19,14 @@
 ## Открытые баги
 
 ### BUG-001: Падение шага `cargo fmt --check` в GitHub Actions (`windows-latest`)
-- **Статус**: `in-progress` (исправление внесено, ожидает повторного прогона CI)
+- **Статус**: `in-progress` (попытка 3 внесена после диагностики, ожидает повторного прогона CI)
 - **Версия**: `0.0.1`
-- **Крейты**: `xtask`, `crates/mod-dock`
-- **Лог CI**: шаг `Check formatting` завершился с кодом 1 (`write_file(...)` в `xtask/src/main.rs` превышал `fn_call_width = 60`).
-- **Локализация**: несоблюдение дефолтных порогов `rustfmt` (`fn_call_width = 60`, `chain_width = 60`, `array_width = 60`, `single_line_if_else_max_width = 50`, порядок `use` `A-Z` перед `a-z`).
-- **Попытка 1**: переформатированы вызовы в `xtask/src/main.rs` и выполнен аудит `crates/mod-dock/src/{config,layout,state,lib}.rs` — эти файлы прошли `cargo fmt --check` без расхождений.
-- **Попытка 2**: по новому логу CI остались расхождения только в 9 пустых 0-байтовых `src/lib.rs` (`core`, `platform-api`, `platform-windows`, `mod-keyboard`, `mod-speech`, `mod-webdav`, `mod-monitor`, `mod-screenshot`, `mod-huawei`), для которых `rustfmt` требует перевод строки. В каждый добавлен однострочный doc-комментарий `//! Каркас крейта ...` с финальным `\n`. Ожидает подтверждения CI.
+- **Крейты**: `xtask`, `crates/mod-dock`, каркасные `crates/*/src/lib.rs`
+- **Лог CI**: шаг `Check formatting` завершился с кодом 1 (последовательно: run `45082860512`, `45083310668`, `45083636842`).
+- **Локализация**: несоблюдение дефолтных правил `rustfmt` (`fn_call_width = 60`, финальный `\n` в пустых `.rs`, многострочное форматирование struct-вариантов в `enum`).
+- **Попытка 1**: переформатированы вызовы в `xtask/src/main.rs` и выполнен ручной аудит `crates/mod-dock/src/{config,layout,state,lib}.rs`; при этом в `crates/mod-dock/src/state.rs:12` вариант `DockEvent::AnimationTick` был ошибочно свёрнут в одну строку.
+- **Попытка 2**: по логу run `45083310668` в 9 пустых 0-байтовых `src/lib.rs` добавлен однострочный doc-комментарий `//! Каркас крейта ...` с финальным `\n`.
+- **Диагностика (стоп после 2 неудач) и попытка 3**: полный 20-строчный лог run `45083636842` подтвердил, что все остальные `.rs` в 12 крейтах прошли `cargo fmt --check`, а единственный оставшийся diff — `DockEvent::AnimationTick { dt_ms: u16 },` в `crates/mod-dock/src/state.rs:9`. Вариант развёрнут в 3 строки (`AnimationTick {\n        dt_ms: u16,\n    },`), проверено отсутствие других однострочных struct-вариантов `enum` во всём workspace. Ожидает подтверждения CI.
 
 ---
 

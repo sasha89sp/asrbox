@@ -3,10 +3,11 @@ updated: 2026-11-22
 spec_ids: [NF-001, NF-002, NF-005, NF-006, NF-007, NF-008, NF-010, DK-001, DK-002, DK-003, DK-004, DK-005, DK-006, DK-007, DK-008, DK-009, DK-010]
 atlas_updated: true
 last_session:
-  goal: "Исправить оставшиеся 0-байтовые src/lib.rs для cargo fmt --check (BUG-001, попытка 2)"
+  goal: "Диагностировать и устранить последний diff cargo fmt --check в state.rs (BUG-001, попытка 3)"
   done:
-    - "Подтверждено по логу CI: xtask и crates/mod-dock полностью прошли cargo fmt --check"
-    - "В 9 пустых src/lib.rs добавлен однострочный комментарий //! с финальным переводом строки"
+    - "Проведена диагностика по полному 20-строчному логу CI (run 45083636842): остался 1 diff в crates/mod-dock/src/state.rs"
+    - "Развёрнут DockEvent::AnimationTick в многострочный формат по точному diff от rustfmt"
+    - "Проверены все enum в workspace: других однострочных struct-вариантов нет"
     - "Обновлены BUGS.md и HANDOFF.yaml"
   not_done:
     - "Повторный прогон GitHub Actions на windows-latest для закрытия BUG-001"
@@ -15,22 +16,14 @@ last_session:
     tests: false
     manual_run: false
 open_bugs:
-  - "BUG-001: cargo fmt --check (попытка 2 внесена, ждёт повторного CI)"
-next_step: "Прогнать GitHub Actions (.github/workflows/ci.yml) на windows-latest и при зелёном статусе закрыть BUG-001"
+  - "BUG-001: cargo fmt --check (попытка 3 внесена после диагностики, ждёт повторного CI)"
+next_step: "Прогнать GitHub Actions (.github/workflows/ci.yml) на windows-latest и при зелёном статусе закрыть BUG-001 (перенести в docs/archive/bugs-closed.md)"
 touched_files:
-  - crates/core/src/lib.rs
-  - crates/platform-api/src/lib.rs
-  - crates/platform-windows/src/lib.rs
-  - crates/mod-keyboard/src/lib.rs
-  - crates/mod-speech/src/lib.rs
-  - crates/mod-webdav/src/lib.rs
-  - crates/mod-monitor/src/lib.rs
-  - crates/mod-screenshot/src/lib.rs
-  - crates/mod-huawei/src/lib.rs
+  - crates/mod-dock/src/state.rs
   - BUGS.md
   - HANDOFF.yaml
 warnings:
+  - "Struct-варианты enum в Rust всегда форматировать многострочно (rustfmt не сворачивает их в одну строку)"
   - "Не оставлять .rs-файлы длиной 0 байт: rustfmt требует финальный перевод строки"
-  - "Если попытка 2 не закроет BUG-001 — стоп и сбор полной диагностики по правилу AGENTS.md"
 ideas:
   - "Волновое увеличение соседних иконок (WaveZoom) можно добавить опциональным режимом HoverZoomMode после замеров CPU"
