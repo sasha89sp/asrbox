@@ -1,40 +1,38 @@
 version: 0.0.1
 updated: 2026-11-22
-spec_ids: [NF-001, NF-002, NF-003, NF-004, NF-005, NF-006, NF-007, NF-008, NF-009, NF-010]
+spec_ids: [NF-001, NF-002, NF-005, NF-006, NF-007, NF-008, NF-010, DK-001, DK-002, DK-003, DK-004, DK-005, DK-006, DK-007, DK-008, DK-009, DK-010]
 atlas_updated: true
 last_session:
-  goal: "Создать каркас Rust workspace asrbox v0.0.1 и синхронизировать документацию с руководством"
+  goal: "Спроектировать specs/mod-dock.md и реализовать платформонезависимое ядро док-панели (config, layout, state)"
   done:
-    - "Созданы корневой Cargo.toml (12 крейтов), .cargo/config.toml и .gitignore"
-    - "Созданы 11 крейтов в crates/ и утилита xtask (atlas-check)"
-    - "Созданы AGENTS.md, SPEC.md, ATLAS.md, ARCHITECTURE.md, DECISIONS.md, BUGS.md, CHANGELOG.md"
-    - "Созданы specs/README.md, docs/RELEASE_CHECKLIST.md, docs/LICENSES.md, docs/archive/bugs-closed.md"
-    - "Созданы .github/workflows/ci.yml и .github/workflows/release.yml"
+    - "Создана спецификация specs/mod-dock.md (DK-001..DK-010) и снят лимит в 8 панелей (ADR-007)"
+    - "Реализованы crates/mod-dock/src/{config,layout,state,lib}.rs на чистом std без unwrap/expect/unsafe"
+    - "Добавлены модульные тесты реестра, центровки по 4 краям, zoom одной иконки, drag-and-drop и нулевых перерисовок в покое"
+    - "Обновлены crates/mod-dock/MAP.md, ATLAS.md, ARCHITECTURE.md, specs/README.md, DECISIONS.md, CHANGELOG.md"
   not_done:
     - "Удалённый прогон GitHub Actions на windows-latest ещё не запускался"
+    - "Трейт DockWindow в crates/platform-api и реализация окна/иконок в crates/platform-windows ещё не добавлены"
   verified:
     ci_build: false
     tests: false
     manual_run: false
 open_bugs: []
-next_step: "Прогнать GitHub Actions (.github/workflows/ci.yml) на windows-latest, затем реализовать трейт Module и базовые контракты в crates/core"
+next_step: "Прогнать CI на windows-latest, затем согласовать трейт DockWindow и провайдер иконок (IShellItemImageFactory) в crates/platform-api"
 touched_files:
-  - Cargo.toml
-  - .cargo/config.toml
-  - .github/workflows/ci.yml
-  - .github/workflows/release.yml
-  - AGENTS.md
-  - SPEC.md
+  - specs/mod-dock.md
+  - specs/README.md
+  - crates/mod-dock/src/config.rs
+  - crates/mod-dock/src/layout.rs
+  - crates/mod-dock/src/state.rs
+  - crates/mod-dock/src/lib.rs
+  - crates/mod-dock/MAP.md
   - ATLAS.md
   - ARCHITECTURE.md
   - DECISIONS.md
-  - BUGS.md
+  - HANDOFF.yaml
   - CHANGELOG.md
-  - docs/RELEASE_CHECKLIST.md
-  - docs/LICENSES.md
-  - docs/archive/bugs-closed.md
-  - specs/README.md
 warnings:
-  - "Не запускать тяжёлый код внутри коллбэка хука клавиатуры (бюджет NF-004 < 1 мс)"
-  - "Не считать сборку и тесты подтверждёнными до зелёного лога GitHub Actions (windows-latest)"
-ideas: []
+  - "Не запускать тяжёлый код внутри коллбэка хука клавиатуры (NF-004 < 1 мс)"
+  - "Не считать сборку и тесты mod-dock подтверждёнными до зелёного лога GitHub Actions (windows-latest)"
+ideas:
+  - "Волновое увеличение соседних иконок (WaveZoom) можно добавить опциональным режимом HoverZoomMode после замеров CPU"

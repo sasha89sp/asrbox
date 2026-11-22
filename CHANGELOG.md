@@ -11,5 +11,9 @@
 - Каркас 11 крейтов в `crates/` (`core`, `platform-api`, `platform-windows`, `mod-keyboard`, `mod-dock`, `mod-speech`, `mod-webdav`, `mod-monitor`, `mod-screenshot`, `mod-huawei`, `app`) с минимальными `Cargo.toml`, пустыми `src/lib.rs` (в `crates/app` — `src/main.rs` с пустой `main`) и картами `MAP.md`.
 - Утилита `xtask` (`cargo xtask atlas-check` / `cargo run -p xtask -- atlas-check`) без внешних зависимостей и без `unwrap()`/`expect()`.
 - Полный пакет проектной документации по руководству: `AGENTS.md`, `SPEC.md` (с бюджетами `NF-001..NF-010`), `ATLAS.md`, `HANDOFF.yaml`, `ARCHITECTURE.md`, `DECISIONS.md`, `BUGS.md`, `CHANGELOG.md`.
-- Каталоги и документы сопровождения: `specs/README.md`, `docs/RELEASE_CHECKLIST.md`, `docs/LICENSES.md`, `docs/archive/bugs-closed.md`.
+- Каталоги и документы сопровождения: `specs/README.md`, `specs/mod-dock.md` (`DK-001..DK-010`), `docs/RELEASE_CHECKLIST.md`, `docs/LICENSES.md`, `docs/archive/bugs-closed.md`.
 - Конвейеры GitHub Actions: `.github/workflows/ci.yml` (`windows-latest`, `Swatinem/rust-cache@v2`, `fmt`, `clippy`, `xtask atlas-check`, `test`, `build --release`, проверка лимита `< 25 МБ`, смоук `--selftest`, выгрузка артефакта) и `.github/workflows/release.yml` (проверка тега `v*`, переименование `asrbox-vX.Y.Z.exe`, SHA-256, GitHub Releases).
+- Платформонезависимое ядро `crates/mod-dock` (`config.rs`, `layout.rs`, `state.rs`, `lib.rs`): неограниченное количество независимых док-панелей (`DockRegistry`), привязка к 4 краям и центровка, drag-and-drop вставка, выбор источника иконки (`AutoShell` / `CustomFile` / `ExeResource`), событийное увеличение только наведённой иконки с 0 тиков в покое и модульные тесты.
+
+### Изменено
+- Снято фиксированное ограничение «8 док-панелей» в пользу неограниченного числа независимых панелей (`ADR-007`, `ATLAS.md`, `ARCHITECTURE.md`, `crates/mod-dock/MAP.md`).

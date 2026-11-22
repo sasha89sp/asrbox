@@ -1,0 +1,351 @@
+use std::error::Error;
+use std::ffi::OsStr;
+use std::fmt;
+use std::path::{Path, PathBuf};
+
+pub type DockId = u64;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DockEdge {
+    Left,
+    Right,
+    Top,
+    #[default]
+    Bottom,
+}
+
+impl DockEdge {
+    pub fn is_horizontal(self) -> bool {
+        matches!(self, Self::Top | Self::Bottom)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DockAlignment {
+    #[default]
+    Center,
+    Offset(i32),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum IconSource {
+    #[default]
+    AutoShell,
+    CustomFile(PathBuf),
+    ExeResource {
+        path: PathBuf,
+        index: u32,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HoverZoomMode {
+    #[default]
+    SingleIcon,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HoverZoomConfig {
+    pub enabled: bool,
+    pub mode: HoverZoomMode,
+    pub scale: f32,
+    pub duration_ms: u16,
+}
+
+impl Default for HoverZoomConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            mode: HoverZoomMode::SingleIcon,
+            scale: 1.35,
+            duration_ms: 120,
+        }
+    }
+}
+
+impl HoverZoomConfig {
+    pub fn validate(&self) -> Result<(), DockConfigError> {
+        if !self.scale.is_finite() || !(1.0..=2.0).contains(&self.scale) {
+            return Err(DockConfigError::InvalidZoomScale);
+        }
+        if self.duration_ms > 600 {
+            return Err(DockConfigError::InvalidZoomDuration(self.duration_ms));
+        }
+        Ok(())
+    }
+
+    pub fn effective_scale(&self) -> f32 {
+        if self.enabled {
+            self.scale.clamp(1.0, 2.0)
+        } else {
+            1.0
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DockItem {
+    pub id: u64,
+    pub label: String,
+    pub target: PathBuf,
+    pub icon: IconSource,
+}
+
+impl DockItem {
+    pub fn from_dropped_path(id: u64, target: PathBuf) -> Result<Self, DockConfigError> {
+        if target.as_os_str().is_empty() {
+            return Err(DockConfigError::EmptyTargetPath);
+        }
+        let label = derive_label(&target);
+        Ok(Self {
+            id,
+            label,
+            target,
+            icon: IconSource::AutoShell,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DockConfig {
+    pub id: DockId,
+    pub name: String,
+    pub enabled: bool,
+    pub monitor_index: usize,
+    pub edge: DockEdge,
+    pub alignment: DockAlignment,
+    pub edge_margin_px: u16,
+    pub icon_size_px: u16,
+    pub item_spacing_px: u16,
+    pub padding_px: u16,
+    pub corner_radius_px: u16,
+    pub hover_zoom: HoverZoomConfig,
+    pub items: Vec<DockItem>,
+}
+
+impl DockConfig {
+    pub fn new(id: DockId, name: impl Into<String>) -> Self {
+        Self {
+            id,
+            name: name.into(),
+            enabled: true,
+            monitor_index: 0,
+            edge: DockEdge::Bottom,
+            alignment: DockAlignment::Center,
+            edge_margin_px: 8,
+            icon_size_px: 48,
+            item_spacing_px: 10,
+            padding_px: 12,
+            corner_radius_px: 16,
+            hover_zoom: HoverZoomConfig::default(),
+            items: Vec::new(),
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), DockConfigError> {
+        if self.name.trim().is_empty() {
+            return Err(DockConfigError::EmptyName);
+        }
+        if !(24..=128).contains(&self.icon_size_px) {
+            return Err(DockConfigError::InvalidIconSize(self.icon_size_px));
+        }
+        if self.item_spacing_px > 48 {
+            return Err(DockConfigError::InvalidSpacing(self.item_spacing_px));
+        }
+        if !(4..=48).contains(&self.padding_px) {
+            return Err(DockConfigError::InvalidPadding(self.padding_px));
+        }
+        self.hover_zoom.validate()?;
+        for item in &self.items {
+            if item.target.as_os_str().is_empty() {
+                return Err(DockConfigError::EmptyTargetPath);
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DockConfigError {
+    EmptyName,
+    EmptyTargetPath,
+    InvalidIconSize(u16),
+    InvalidSpacing(u16),
+    InvalidPadding(u16),
+    InvalidZoomScale,
+    InvalidZoomDuration(u16),
+    DockNotFound(DockId),
+    ItemNotFound(u64),
+}
+
+impl fmt::Display for DockConfigError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::EmptyName => write!(f, "dock name must not be empty"),
+            Self::EmptyTargetPath => write!(f, "dock item target path must not be empty"),
+            Self::InvalidIconSize(px) => write!(f, "icon_size_px {px} is out of 24..=128"),
+            Self::InvalidSpacing(px) => write!(f, "item_spacing_px {px} exceeds 48"),
+            Self::InvalidPadding(px) => write!(f, "padding_px {px} is out of 4..=48"),
+            Self::InvalidZoomScale => write!(f, "hover zoom scale must be in 1.0..=2.0"),
+            Self::InvalidZoomDuration(ms) => write!(f, "hover zoom duration {ms} ms exceeds 600"),
+            Self::DockNotFound(id) => write!(f, "dock {id} not found"),
+            Self::ItemNotFound(id) => write!(f, "dock item {id} not found"),
+        }
+    }
+}
+
+impl Error for DockConfigError {}
+
+#[derive(Debug, Clone)]
+pub struct DockRegistry {
+    next_dock_id: DockId,
+    next_item_id: u64,
+    docks: Vec<DockConfig>,
+}
+
+impl Default for DockRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl DockRegistry {
+    pub fn new() -> Self {
+        Self {
+            next_dock_id: 1,
+            next_item_id: 1,
+            docks: Vec::new(),
+        }
+    }
+
+    pub fn create_dock(&mut self, name: impl Into<String>) -> Result<DockId, DockConfigError> {
+        let id = self.next_dock_id;
+        let config = DockConfig::new(id, name);
+        config.validate()?;
+        self.next_dock_id = self.next_dock_id.saturating_add(1);
+        self.docks.push(config);
+        Ok(id)
+    }
+
+    pub fn remove_dock(&mut self, id: DockId) -> Result<DockConfig, DockConfigError> {
+        let pos = self
+            .docks
+            .iter()
+            .position(|dock| dock.id == id)
+            .ok_or(DockConfigError::DockNotFound(id))?;
+        Ok(self.docks.remove(pos))
+    }
+
+    pub fn get(&self, id: DockId) -> Option<&DockConfig> {
+        self.docks.iter().find(|dock| dock.id == id)
+    }
+
+    pub fn get_mut(&mut self, id: DockId) -> Option<&mut DockConfig> {
+        self.docks.iter_mut().find(|dock| dock.id == id)
+    }
+
+    pub fn all(&self) -> &[DockConfig] {
+        &self.docks
+    }
+
+    pub fn len(&self) -> usize {
+        self.docks.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.docks.is_empty()
+    }
+
+    pub fn add_dropped_item(
+        &mut self,
+        dock_id: DockId,
+        target: PathBuf,
+        insert_at: Option<usize>,
+    ) -> Result<u64, DockConfigError> {
+        let item_id = self.next_item_id;
+        let item = DockItem::from_dropped_path(item_id, target)?;
+        let dock = self
+            .get_mut(dock_id)
+            .ok_or(DockConfigError::DockNotFound(dock_id))?;
+        let index = insert_at.unwrap_or(dock.items.len()).min(dock.items.len());
+        dock.items.insert(index, item);
+        self.next_item_id = self.next_item_id.saturating_add(1);
+        Ok(item_id)
+    }
+
+    pub fn set_item_icon(
+        &mut self,
+        dock_id: DockId,
+        item_id: u64,
+        source: IconSource,
+    ) -> Result<(), DockConfigError> {
+        let dock = self
+            .get_mut(dock_id)
+            .ok_or(DockConfigError::DockNotFound(dock_id))?;
+        let item = dock
+            .items
+            .iter_mut()
+            .find(|entry| entry.id == item_id)
+            .ok_or(DockConfigError::ItemNotFound(item_id))?;
+        item.icon = source;
+        Ok(())
+    }
+}
+
+fn derive_label(path: &Path) -> String {
+    path.file_stem()
+        .or_else(|| path.file_name())
+        .and_then(OsStr::to_str)
+        .filter(|name| !name.is_empty())
+        .map(str::to_owned)
+        .unwrap_or_else(|| path.to_string_lossy().into_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn registry_supports_unlimited_independent_docks() -> Result<(), Box<dyn Error>> {
+        let mut registry = DockRegistry::new();
+        for idx in 1..=20 {
+            let id = registry.create_dock(format!("Dock {idx}"))?;
+            let dock = registry.get_mut(id).ok_or(DockConfigError::DockNotFound(id))?;
+            dock.edge = match idx % 4 {
+                0 => DockEdge::Bottom,
+                1 => DockEdge::Left,
+                2 => DockEdge::Top,
+                _ => DockEdge::Right,
+            };
+        }
+        assert_eq!(registry.len(), 20);
+        Ok(())
+    }
+
+    #[test]
+    fn custom_icon_choice_updates_target_item() -> Result<(), Box<dyn Error>> {
+        let mut registry = DockRegistry::new();
+        let dock_id = registry.create_dock("Main")?;
+        let item_id = registry.add_dropped_item(dock_id, PathBuf::from("C:/Apps/Code.exe"), None)?;
+
+        let custom = IconSource::CustomFile(PathBuf::from("data/icons/code.png"));
+        registry.set_item_icon(dock_id, item_id, custom.clone())?;
+
+        let dock = registry.get(dock_id).ok_or(DockConfigError::DockNotFound(dock_id))?;
+        let item = dock.items.first().ok_or(DockConfigError::ItemNotFound(item_id))?;
+        assert_eq!(item.label, "Code");
+        assert_eq!(item.icon, custom);
+        Ok(())
+    }
+
+    #[test]
+    fn validation_rejects_invalid_zoom_and_icon_size() {
+        let mut dock = DockConfig::new(1, "Test");
+        dock.icon_size_px = 12;
+        assert_eq!(dock.validate(), Err(DockConfigError::InvalidIconSize(12)));
+
+        dock.icon_size_px = 48;
+        dock.hover_zoom.scale = 3.0;
+        assert_eq!(dock.validate(), Err(DockConfigError::InvalidZoomScale));
+    }
+}
