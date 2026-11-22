@@ -3,10 +3,11 @@ updated: 2026-11-22
 spec_ids: [NF-001, NF-002, NF-005, NF-006, NF-007, NF-008, NF-010, DK-001, DK-002, DK-003, DK-004, DK-005, DK-006, DK-007, DK-008, DK-009, DK-010]
 atlas_updated: true
 last_session:
-  goal: "Исправить расхождения rustfmt (BUG-001) в xtask и crates/mod-dock после лога CI"
+  goal: "Исправить оставшиеся 0-байтовые src/lib.rs для cargo fmt --check (BUG-001, попытка 2)"
   done:
-    - "Зафиксирован BUG-001 по логу Check formatting из GitHub Actions"
-    - "Приведены к дефолтным правилам rustfmt файлы xtask/src/main.rs и crates/mod-dock/src/{config,layout,state,lib}.rs"
+    - "Подтверждено по логу CI: xtask и crates/mod-dock полностью прошли cargo fmt --check"
+    - "В 9 пустых src/lib.rs добавлен однострочный комментарий //! с финальным переводом строки"
+    - "Обновлены BUGS.md и HANDOFF.yaml"
   not_done:
     - "Повторный прогон GitHub Actions на windows-latest для закрытия BUG-001"
   verified:
@@ -14,18 +15,22 @@ last_session:
     tests: false
     manual_run: false
 open_bugs:
-  - "BUG-001: cargo fmt --check (попытка 1 внесена, ждёт повторного CI)"
-next_step: "Перезапустить GitHub Actions (.github/workflows/ci.yml) на windows-latest и при зелёном статусе перенести BUG-001 в docs/archive/bugs-closed.md"
+  - "BUG-001: cargo fmt --check (попытка 2 внесена, ждёт повторного CI)"
+next_step: "Прогнать GitHub Actions (.github/workflows/ci.yml) на windows-latest и при зелёном статусе закрыть BUG-001"
 touched_files:
-  - xtask/src/main.rs
-  - crates/mod-dock/src/config.rs
-  - crates/mod-dock/src/layout.rs
-  - crates/mod-dock/src/state.rs
-  - crates/mod-dock/src/lib.rs
+  - crates/core/src/lib.rs
+  - crates/platform-api/src/lib.rs
+  - crates/platform-windows/src/lib.rs
+  - crates/mod-keyboard/src/lib.rs
+  - crates/mod-speech/src/lib.rs
+  - crates/mod-webdav/src/lib.rs
+  - crates/mod-monitor/src/lib.rs
+  - crates/mod-screenshot/src/lib.rs
+  - crates/mod-huawei/src/lib.rs
   - BUGS.md
   - HANDOFF.yaml
 warnings:
-  - "Учитывать дефолтные пороги rustfmt: fn_call_width=60, chain_width=60, array_width=60, single_line_if_else_max_width=50"
-  - "Не закрывать BUG-001 без зелёного лога GitHub Actions (windows-latest)"
+  - "Не оставлять .rs-файлы длиной 0 байт: rustfmt требует финальный перевод строки"
+  - "Если попытка 2 не закроет BUG-001 — стоп и сбор полной диагностики по правилу AGENTS.md"
 ideas:
   - "Волновое увеличение соседних иконок (WaveZoom) можно добавить опциональным режимом HoverZoomMode после замеров CPU"
