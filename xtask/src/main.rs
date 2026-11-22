@@ -222,8 +222,9 @@ fn normalize_rel_path(path: &Path) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::sync::atomic::{AtomicU64, Ordering};
+
+    use super::*;
 
     static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -280,19 +281,26 @@ mod tests {
     fn detects_missing_crate_in_atlas() -> Result<(), String> {
         let temp = TempDirGuard::new("missing-atlas")?;
         let root = temp.path();
+        let map_md = "# MAP\n\n- `src/lib.rs`\n";
 
         write_file(&root.join("ATLAS.md"), "# Atlas\n\n- crates/alpha\n")?;
-        write_file(&root.join("crates/alpha/Cargo.toml"), "[package]\nname = \"alpha\"\n")?;
-        write_file(&root.join("crates/alpha/MAP.md"), "# MAP\n\n- `src/lib.rs`\n")?;
+        write_file(
+            &root.join("crates/alpha/Cargo.toml"),
+            "[package]\nname = \"alpha\"\n",
+        )?;
+        write_file(&root.join("crates/alpha/MAP.md"), map_md)?;
         write_file(&root.join("crates/alpha/src/lib.rs"), "")?;
 
-        write_file(&root.join("crates/beta/Cargo.toml"), "[package]\nname = \"beta\"\n")?;
-        write_file(&root.join("crates/beta/MAP.md"), "# MAP\n\n- `src/lib.rs`\n")?;
+        write_file(
+            &root.join("crates/beta/Cargo.toml"),
+            "[package]\nname = \"beta\"\n",
+        )?;
+        write_file(&root.join("crates/beta/MAP.md"), map_md)?;
         write_file(&root.join("crates/beta/src/lib.rs"), "")?;
 
         let result = atlas_check(root);
         match result {
-            Ok(_) => Err("expected atlas_check to fail for missing crate in ATLAS.md".to_owned()),
+            Ok(_) => Err("expected failure for missing crate in ATLAS.md".to_owned()),
             Err(errors) => {
                 if errors.iter().any(|e| e.contains("crates/beta")) {
                     Ok(())
@@ -307,16 +315,20 @@ mod tests {
     fn detects_unmapped_rust_file_in_map() -> Result<(), String> {
         let temp = TempDirGuard::new("missing-map")?;
         let root = temp.path();
+        let map_md = "# MAP\n\n- `src/lib.rs`\n";
 
         write_file(&root.join("ATLAS.md"), "# Atlas\n\n- crates/alpha\n")?;
-        write_file(&root.join("crates/alpha/Cargo.toml"), "[package]\nname = \"alpha\"\n")?;
-        write_file(&root.join("crates/alpha/MAP.md"), "# MAP\n\n- `src/lib.rs`\n")?;
+        write_file(
+            &root.join("crates/alpha/Cargo.toml"),
+            "[package]\nname = \"alpha\"\n",
+        )?;
+        write_file(&root.join("crates/alpha/MAP.md"), map_md)?;
         write_file(&root.join("crates/alpha/src/lib.rs"), "")?;
         write_file(&root.join("crates/alpha/src/extra.rs"), "")?;
 
         let result = atlas_check(root);
         match result {
-            Ok(_) => Err("expected atlas_check to fail for unmapped .rs file".to_owned()),
+            Ok(_) => Err("expected failure for unmapped .rs file".to_owned()),
             Err(errors) => {
                 if errors.iter().any(|e| e.contains("src/extra.rs")) {
                     Ok(())

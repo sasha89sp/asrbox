@@ -18,7 +18,13 @@
 
 ## Открытые баги
 
-Открытых багов на версии `0.0.1` нет.
+### BUG-001: Падение шага `cargo fmt --check` в GitHub Actions (`windows-latest`)
+- **Статус**: `in-progress` (исправление внесено, ожидает повторного прогона CI)
+- **Версия**: `0.0.1`
+- **Крейты**: `xtask`, `crates/mod-dock`
+- **Лог CI**: шаг `Check formatting` завершился с кодом 1 (`write_file(...)` в `xtask/src/main.rs` превышал `fn_call_width = 60`).
+- **Локализация**: несоблюдение дефолтных порогов `rustfmt` (`fn_call_width = 60`, `chain_width = 60`, `array_width = 60`, `single_line_if_else_max_width = 50`, порядок `use` `A-Z` перед `a-z`).
+- **Попытка 1**: переформатированы вызовы в `xtask/src/main.rs` и выполнен полный аудит всех `.rs`-файлов в `crates/mod-dock/src/{config,layout,state,lib}.rs` под дефолтные правила `rustfmt`. Ожидает подтверждения CI.
 
 ---
 

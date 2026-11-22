@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
 use crate::config::{DockConfig, DockConfigError, DockItem};
-use crate::layout::{
-    compute_layout, drop_insert_index, hit_test_item, DockLayout, HoverVisualState, Point, Rect,
-};
+use crate::layout::{DockLayout, HoverVisualState, Point, Rect};
+
+use crate::layout::{compute_layout, drop_insert_index, hit_test_item};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DockEvent {
@@ -88,7 +88,7 @@ impl DockInstance {
             DockEvent::PointerMove(point) => self.on_pointer_move(point),
             DockEvent::PointerLeave => self.on_pointer_leave(),
             DockEvent::AnimationTick { dt_ms } => self.on_animation_tick(dt_ms),
-            DockEvent::DropFiles { paths, local_point } => self.on_drop_files(paths, local_point),
+            DockEvent::DropFiles { paths, local_point } => self.on_drop(paths, local_point),
             DockEvent::WorkAreaChanged(rect) => self.on_work_area_changed(rect),
         }
     }
@@ -151,7 +151,11 @@ impl DockInstance {
             return DockStepEffect::default();
         }
 
-        let target = if self.hovered_item.is_some() { 1.0 } else { 0.0 };
+        let target = if self.hovered_item.is_some() {
+            1.0
+        } else {
+            0.0
+        };
         let duration = f32::from(self.config.hover_zoom.duration_ms).max(1.0);
         let delta = f32::from(dt_ms) / duration;
 
@@ -173,7 +177,7 @@ impl DockInstance {
         }
     }
 
-    fn on_drop_files(&mut self, paths: Vec<PathBuf>, local_point: Point) -> DockStepEffect {
+    fn on_drop(&mut self, paths: Vec<PathBuf>, local_point: Point) -> DockStepEffect {
         let mut insert_at = drop_insert_index(&self.layout, self.config.edge, local_point);
         let mut added_item_ids = Vec::new();
 
@@ -249,6 +253,8 @@ impl DockInstance {
 
 #[cfg(test)]
 mod tests {
+    use std::error::Error;
+
     use super::*;
 
     fn work_area() -> Rect {
@@ -261,13 +267,11 @@ mod tests {
     }
 
     #[test]
-    fn idle_dock_produces_zero_redraws_and_stops_animation() -> Result<(), String> {
+    fn idle_dock_produces_zero_redraws_and_stops_animation() -> Result<(), Box<dyn Error>> {
         let mut config = DockConfig::new(1, "Primary");
-        config.items.push(
-            DockItem::from_dropped_path(1, PathBuf::from("C:/Apps/Firefox.exe"))
-                .map_err(|err| err.to_string())?,
-        );
-        let mut dock = DockInstance::new(config, work_area()).map_err(|err| err.to_string())?;
+        let path = PathBuf::from("C:/Apps/Firefox.exe");
+        config.items.push(DockItem::from_dropped_path(1, path)?);
+        let mut dock = DockInstance::new(config, work_area())?;
 
         let idle_tick = dock.handle_event(DockEvent::AnimationTick { dt_ms: 16 });
         assert!(!idle_tick.needs_redraw);
@@ -278,7 +282,7 @@ mod tests {
             .slots
             .first()
             .copied()
-            .ok_or_else(|| "missing first slot".to_owned())?;
+            .ok_or("missing first slot")?;
         let center = Point {
             x: slot.base_rect.x + 10,
             y: slot.base_rect.y + 10,
@@ -311,9 +315,9 @@ mod tests {
     }
 
     #[test]
-    fn drop_files_adds_items_and_requests_redraw() -> Result<(), String> {
+    fn drop_files_adds_items_and_requests_redraw() -> Result<(), Box<dyn Error>> {
         let config = DockConfig::new(1, "Primary");
-        let mut dock = DockInstance::new(config, work_area()).map_err(|err| err.to_string())?;
+        let mut dock = DockInstance::new(config, work_area())?;
 
         let effect = dock.handle_event(DockEvent::DropFiles {
             paths: vec![

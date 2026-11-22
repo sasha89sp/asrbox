@@ -16,8 +16,10 @@ pub struct Rect {
 
 impl Rect {
     pub fn contains(self, point: Point) -> bool {
-        let right = self.x.saturating_add(i32::try_from(self.width).unwrap_or(i32::MAX));
-        let bottom = self.y.saturating_add(i32::try_from(self.height).unwrap_or(i32::MAX));
+        let w = i32::try_from(self.width).unwrap_or(i32::MAX);
+        let h = i32::try_from(self.height).unwrap_or(i32::MAX);
+        let right = self.x.saturating_add(w);
+        let bottom = self.y.saturating_add(h);
         point.x >= self.x && point.x < right && point.y >= self.y && point.y < bottom
     }
 }
@@ -60,16 +62,12 @@ pub fn compute_layout(config: &DockConfig, work_area: Rect, hover: HoverVisualSt
     let bar_cross = icon.saturating_add(padding.saturating_mul(2));
 
     let max_scale = config.hover_zoom.effective_scale();
-    let zoom_extra = ((icon as f32) * (max_scale - 1.0)).ceil().max(0.0) as u32;
+    let raw_extra = (icon as f32) * (max_scale - 1.0);
+    let zoom_extra = raw_extra.ceil().max(0.0) as u32;
     let side_pad = zoom_extra / 2;
 
-    let (win_w, win_h, bar_rect) = build_window_and_bar(
-        config.edge,
-        bar_main,
-        bar_cross,
-        zoom_extra,
-        side_pad,
-    );
+    let (win_w, win_h, bar_rect) =
+        build_window_and_bar(config.edge, bar_main, bar_cross, zoom_extra, side_pad);
     let window_rect = place_window(config, work_area, win_w, win_h);
     let slots = build_slots(config, bar_rect, max_scale, hover);
 
@@ -223,7 +221,9 @@ fn build_slots(
     hover: HoverVisualState,
 ) -> Vec<DockSlotLayout> {
     let icon = u32::from(config.icon_size_px);
-    let step = i32::from(config.icon_size_px).saturating_add(i32::from(config.item_spacing_px));
+    let icon_i32 = i32::from(config.icon_size_px);
+    let spacing_i32 = i32::from(config.item_spacing_px);
+    let step = icon_i32.saturating_add(spacing_i32);
     let pad = i32::from(config.padding_px);
     let progress = hover.progress.clamp(0.0, 1.0);
     let horizontal = config.edge.is_horizontal();
@@ -291,9 +291,12 @@ fn scale_slot_rect(base: Rect, scale: f32, edge: DockEdge) -> Rect {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::config::DockItem;
+    use std::error::Error;
     use std::path::PathBuf;
+
+    use crate::config::DockItem;
+
+    use super::*;
 
     fn sample_work_area() -> Rect {
         Rect {
@@ -304,22 +307,27 @@ mod tests {
         }
     }
 
-    fn dock_with_three_items(edge: DockEdge) -> Result<DockConfig, String> {
+    fn dock_with_three_items(edge: DockEdge) -> Result<DockConfig, Box<dyn Error>> {
         let mut dock = DockConfig::new(1, "Test");
         dock.edge = edge;
         for id in 1..=3 {
-            let item = DockItem::from_dropped_path(id, PathBuf::from(format!("app{id}.exe")))
-                .map_err(|err| err.to_string())?;
-            dock.items.push(item);
+            let path = PathBuf::from(format!("app{id}.exe"));
+            dock.items.push(DockItem::from_dropped_path(id, path)?);
         }
         Ok(dock)
     }
 
     #[test]
-    fn centers_dock_on_all_four_edges() -> Result<(), String> {
+    fn centers_dock_on_all_four_edges() -> Result<(), Box<dyn Error>> {
         let area = sample_work_area();
+        let edges = [
+            DockEdge::Bottom,
+            DockEdge::Top,
+            DockEdge::Left,
+            DockEdge::Right,
+        ];
 
-        for edge in [DockEdge::Bottom, DockEdge::Top, DockEdge::Left, DockEdge::Right] {
+        for edge in edges {
             let dock = dock_with_three_items(edge)?;
             let layout = compute_layout(&dock, area, HoverVisualState::default());
             let w = layout.window_rect;
@@ -346,7 +354,7 @@ mod tests {
     }
 
     #[test]
-    fn hover_zoom_scales_only_single_active_icon() -> Result<(), String> {
+    fn hover_zoom_scales_only_single_active_icon() -> Result<(), Box<dyn Error>> {
         let dock = dock_with_three_items(DockEdge::Bottom)?;
         let hover = HoverVisualState {
             item_id: Some(2),
@@ -354,9 +362,9 @@ mod tests {
         };
         let layout = compute_layout(&dock, sample_work_area(), hover);
 
-        let first = layout.slots.first().ok_or_else(|| "slot 0 missing".to_owned())?;
-        let second = layout.slots.get(1).ok_or_else(|| "slot 1 missing".to_owned())?;
-        let third = layout.slots.get(2).ok_or_else(|| "slot 2 missing".to_owned())?;
+        let first = layout.slots.first().ok_or("slot 0 missing")?;
+        let second = layout.slots.get(1).ok_or("slot 1 missing")?;
+        let third = layout.slots.get(2).ok_or("slot 2 missing")?;
 
         assert_eq!(first.visual_rect, first.base_rect);
         assert_eq!(third.visual_rect, third.base_rect);
@@ -368,11 +376,11 @@ mod tests {
     }
 
     #[test]
-    fn drop_insert_index_respects_icon_midpoints() -> Result<(), String> {
+    fn drop_insert_index_respects_icon_midpoints() -> Result<(), Box<dyn Error>> {
         let dock = dock_with_three_items(DockEdge::Bottom)?;
         let layout = compute_layout(&dock, sample_work_area(), HoverVisualState::default());
-        let first = layout.slots.first().ok_or_else(|| "slot 0 missing".to_owned())?;
-        let second = layout.slots.get(1).ok_or_else(|| "slot 1 missing".to_owned())?;
+        let first = layout.slots.first().ok_or("slot 0 missing")?;
+        let second = layout.slots.get(1).ok_or("slot 1 missing")?;
 
         let left = Point {
             x: 0,

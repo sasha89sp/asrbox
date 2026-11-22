@@ -267,7 +267,8 @@ impl DockRegistry {
         let dock = self
             .get_mut(dock_id)
             .ok_or(DockConfigError::DockNotFound(dock_id))?;
-        let index = insert_at.unwrap_or(dock.items.len()).min(dock.items.len());
+        let len = dock.items.len();
+        let index = insert_at.unwrap_or(len).min(len);
         dock.items.insert(index, item);
         self.next_item_id = self.next_item_id.saturating_add(1);
         Ok(item_id)
@@ -310,7 +311,9 @@ mod tests {
         let mut registry = DockRegistry::new();
         for idx in 1..=20 {
             let id = registry.create_dock(format!("Dock {idx}"))?;
-            let dock = registry.get_mut(id).ok_or(DockConfigError::DockNotFound(id))?;
+            let dock = registry
+                .get_mut(id)
+                .ok_or(DockConfigError::DockNotFound(id))?;
             dock.edge = match idx % 4 {
                 0 => DockEdge::Bottom,
                 1 => DockEdge::Left,
@@ -326,13 +329,19 @@ mod tests {
     fn custom_icon_choice_updates_target_item() -> Result<(), Box<dyn Error>> {
         let mut registry = DockRegistry::new();
         let dock_id = registry.create_dock("Main")?;
-        let item_id = registry.add_dropped_item(dock_id, PathBuf::from("C:/Apps/Code.exe"), None)?;
+        let target = PathBuf::from("C:/Apps/Code.exe");
+        let item_id = registry.add_dropped_item(dock_id, target, None)?;
 
         let custom = IconSource::CustomFile(PathBuf::from("data/icons/code.png"));
         registry.set_item_icon(dock_id, item_id, custom.clone())?;
 
-        let dock = registry.get(dock_id).ok_or(DockConfigError::DockNotFound(dock_id))?;
-        let item = dock.items.first().ok_or(DockConfigError::ItemNotFound(item_id))?;
+        let dock = registry
+            .get(dock_id)
+            .ok_or(DockConfigError::DockNotFound(dock_id))?;
+        let item = dock
+            .items
+            .first()
+            .ok_or(DockConfigError::ItemNotFound(item_id))?;
         assert_eq!(item.label, "Code");
         assert_eq!(item.icon, custom);
         Ok(())
