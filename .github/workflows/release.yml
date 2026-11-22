@@ -1,0 +1,87 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release-windows:
+    name: Build & Publish Portable Release (Windows x64)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify tag matches workspace.package.version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($tag -notmatch '^v(.+)$') {
+            Write-Error "Invalid tag format: $tag (expected vX.Y.Z)"
+            exit 1
+          }
+          $tagVersion = $Matches[1]
+          $cargoToml = Get-Content "Cargo.toml" -Raw
+          if ($cargoToml -notmatch '(?ms)\[workspace\.package\].*?version\s*=\s*"([^"]+)"') {
+            Write-Error "Cannot locate [workspace.package].version in Cargo.toml"
+            exit 1
+          }
+          $cargoVersion = $Matches[1]
+          if ($tagVersion -ne $cargoVersion) {
+            Write-Error "Tag version ($tagVersion) does not match Cargo.toml ($cargoVersion)"
+            exit 1
+          }
+          Write-Host "Verified release version: $cargoVersion"
+          "RELEASE_VERSION=$cargoVersion" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Install Rust stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run pre-release checks
+        run: |
+          cargo fmt --check
+          cargo clippy --workspace -- -D warnings
+          cargo xtask atlas-check
+          cargo test --workspace
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Prepare portable artifact and SHA-256
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "release-out" | Out-Null
+          $artifactName = "asrbox-v$($env:RELEASE_VERSION).exe"
+          $artifactPath = Join-Path "release-out" $artifactName
+          Copy-Item "target/release/asrbox.exe" $artifactPath
+
+          $limit = 25 * 1024 * 1024
+          $size = (Get-Item $artifactPath).Length
+          if ($size -ge $limit) {
+            Write-Error "$artifactName exceeds 25 MB limit ($size bytes)"
+            exit 1
+          }
+
+          $hash = (Get-FileHash -Path $artifactPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $artifactName" | Out-File -FilePath "$artifactPath.sha256" -Encoding ascii -NoNewline
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-out/asrbox-v*.exe
+            release-out/asrbox-v*.exe.sha256
+          generate_release_notes: true

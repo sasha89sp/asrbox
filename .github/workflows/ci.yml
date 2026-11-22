@@ -33,10 +33,37 @@ jobs:
         run: cargo clippy --workspace -- -D warnings
 
       - name: Verify ATLAS and MAP coverage
-        run: cargo run -p xtask -- atlas-check
+        run: cargo xtask atlas-check
 
       - name: Run tests
         run: cargo test --workspace
 
       - name: Build release binary
         run: cargo build --release
+
+      - name: Check portable .exe size limit (NF-005 < 25 MB)
+        shell: pwsh
+        run: |
+          $exe = Get-Item "target/release/asrbox.exe"
+          $limit = 25 * 1024 * 1024
+          $sizeMb = [math]::Round($exe.Length / 1MB, 2)
+          Write-Host "asrbox.exe size: $sizeMb MB ($($exe.Length) bytes)"
+          if ($exe.Length -ge $limit) {
+            Write-Error "asrbox.exe exceeds 25 MB limit ($sizeMb MB)"
+            exit 1
+          }
+
+      - name: Smoke test (--selftest)
+        shell: pwsh
+        run: |
+          & ".\target\release\asrbox.exe" --selftest
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Selftest exited with code $LASTEXITCODE"
+            exit $LASTEXITCODE
+          }
+
+      - name: Upload portable executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: asrbox-windows-x64
+          path: target/release/asrbox.exe

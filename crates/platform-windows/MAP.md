@@ -1,6 +1,6 @@
 # MAP: `crates/platform-windows`
 
-Единственный крейт workspace, в котором разрешён `unsafe` и прямые вызовы Windows 10/11 (x64) API. Реализует трейты из `crates/platform-api` (трей, перехват `WM_CLOSE`, хуки клавиатуры, захват экрана, чтение метрик CPU/RAM, работа с устройствами).
+Реализация трейтов `crates/platform-api` через `windows-rs` (Windows 10/11 x64): хуки, док-окна, захват экрана, метрики процессов, Named Pipes, Credential Manager. Единственный крейт с `unsafe` (`// SAFETY`). Лимит: <= 100 строк.
 
 ## Файлы
 

@@ -2,7 +2,9 @@ import {useMemo, useState} from 'react';
 import {Check, Copy, FileCode2, FileText, FolderOpen, Search, ShieldCheck, Terminal} from 'lucide-react';
 
 import gitignoreRaw from '../.gitignore?raw';
+import cargoConfigRaw from '../.cargo/config.toml?raw';
 import ciYmlRaw from '../.github/workflows/ci.yml?raw';
+import releaseYmlRaw from '../.github/workflows/release.yml?raw';
 import rootCargoRaw from '../Cargo.toml?raw';
 import agentsRaw from '../AGENTS.md?raw';
 import specRaw from '../SPEC.md?raw';
@@ -13,6 +15,9 @@ import decisionsRaw from '../DECISIONS.md?raw';
 import bugsRaw from '../BUGS.md?raw';
 import changelogRaw from '../CHANGELOG.md?raw';
 import releaseChecklistRaw from '../docs/RELEASE_CHECKLIST.md?raw';
+import licensesRaw from '../docs/LICENSES.md?raw';
+import bugsClosedRaw from '../docs/archive/bugs-closed.md?raw';
+import specsReadmeRaw from '../specs/README.md?raw';
 
 const crateModules = import.meta.glob<string>(
   ['../crates/**/*.toml', '../crates/**/*.rs', '../crates/**/*.md', '../xtask/**/*.toml', '../xtask/**/*.rs', '../xtask/**/*.md'],
@@ -44,130 +49,130 @@ interface AtlasCheckSummary {
 const NF_BUDGETS = [
   {
     id: 'NF-001',
-    name: 'Портативность и ./data/',
-    budget: '100% файлов состояния, кешей и логов в ./data/ рядом с asrbox.exe',
-    verification: 'Запуск в пустой директории без записей в %APPDATA% и реестр',
+    name: 'CPU в покое',
+    budget: 'Меньше 1% (события вместо опроса по таймеру)',
+    verification: 'Наблюдение через mod-monitor в фоне',
   },
   {
     id: 'NF-002',
-    name: 'Холодный старт',
-    budget: '<= 500 мс до готовности системного трея и хоткеев',
-    verification: 'Встроенный замер этапа bootstrap',
-  },
-  {
-    id: 'NF-003',
-    name: 'Память в простое (Idle RAM)',
-    budget: '<= 40 МБ Working Set (без активных речевых моделей)',
+    name: 'RAM в покое (без Whisper)',
+    budget: 'Меньше 30 МБ (ленивая загрузка Whisper, полное освобождение после стопа)',
     verification: 'mod-monitor и Windows Task Manager',
   },
   {
+    id: 'NF-003',
+    name: 'Запуск до готовности трея',
+    budget: 'Меньше 1 сек',
+    verification: 'Замер времени старта в логе bootstrap',
+  },
+  {
     id: 'NF-004',
-    name: 'CPU в простое',
-    budget: '<= 0.5% средней загрузки, без busy-wait циклов',
-    verification: 'Прогон простоя >= 5 мин через mod-monitor',
+    name: 'Обработка хука клавиатуры',
+    budget: 'Меньше 1 мс на событие (без тяжёлого кода внутри коллбэка)',
+    verification: 'Профилировщик tracing::instrument в mod-keyboard',
   },
   {
     id: 'NF-005',
-    name: 'Размер артефакта',
-    budget: '<= 15 МБ для asrbox.exe (x64 release), без сторонних DLL',
-    verification: 'Проверка размера в CI и аудит зависимостей DLL',
+    name: 'Размер portable .exe',
+    budget: 'Меньше 25 МБ для asrbox.exe (x64 release)',
+    verification: 'Автопроверка размера в ci.yml и release.yml',
   },
   {
     id: 'NF-006',
-    name: 'Безопасность и отказоустойчивость',
-    budget: '0 unwrap()/expect(); unsafe строго в crates/platform-windows',
-    verification: '[workspace.lints] и cargo clippy --workspace -- -D warnings',
+    name: 'Изоляция падений модулей',
+    budget: 'Падение любого модуля не закрывает программу и другие модули',
+    verification: 'Отдельные процессы (--module <имя>) и супервизор в app',
   },
   {
     id: 'NF-007',
-    name: 'Управляемое логирование',
-    budget: 'Переключение вкл/выкл на лету; 0 I/O при выкл; ротация <= 20 МБ',
-    verification: 'Тест рантайм-переключения и маскирования секретов',
+    name: 'Выключенный модуль',
+    budget: '0% CPU и 0 МБ RAM (выключенный модуль не загружается)',
+    verification: 'Проверка списка процессов при enabled = false',
   },
   {
     id: 'NF-008',
-    name: 'Профилирование функций',
-    budget: 'Замер p50/p95/max и счётчиков вызовов; < 1% overhead при выкл',
-    verification: 'Бенчмарк вкл/выкл и отчёт в core / mod-monitor',
+    name: 'Перезапуск упавшего модуля',
+    budget: 'Не дольше 3 сек (бэкофф 1 / 5 / 30 сек, отключение после 3 падений подряд)',
+    verification: 'Тест супервизора с уведомлением в трее и записью в лог',
   },
   {
     id: 'NF-009',
-    name: 'Онлайн-монитор нагрузки',
-    budget: 'CPU, RAM, потоки, активные модули, профилировщик (шаг 1000 мс; пауза в трее)',
-    verification: 'Проверка mod-monitor в открытом и свёрнутом режимах',
+    name: 'Единая версия',
+    budget: 'workspace.package.version в имени .exe, --version, трее, «О программе» и логах',
+    verification: 'Проверка совпадения тега в release.yml и сверка версии дочерних процессов',
   },
   {
     id: 'NF-010',
-    name: 'Сворачивание по X в трей',
-    budget: 'WM_CLOSE скрывает окно в системный трей; выход только из меню <= 2000 мс',
-    verification: 'Проверка WM_CLOSE, восстановления и graceful shutdown',
+    name: 'Логи, профилирование и монитор',
+    budget: 'Вкл/выкл логов (5x2 МБ, off..trace) и tracing::instrument на лету + mod-monitor + ZIP диагностики',
+    verification: 'Онлайн-монитор нагрузки и выгрузка диагностического ZIP из трея',
   },
 ];
 
 const CRATE_LAYERS = [
   {
-    layer: 'Точка входа (Composition Root)',
+    layer: 'Точка входа и супервизор (один .exe)',
     crates: [
       {
         path: 'crates/app',
         pkg: 'asrbox',
         deps: 'core, platform-api, platform-windows, mod-*',
         unsafeAllowed: 'Запрещён',
-        role: 'Сборка asrbox.exe, связывание модулей, окно и системный трей',
+        role: 'Супервизор (--module, --safe-mode, --selftest), трей, окно настроек (X -> трей)',
       },
     ],
   },
   {
-    layer: 'Прикладные модули (строго core + platform-api)',
+    layer: 'Прикладные модули (строго core + platform-api, связь через Named Pipes)',
     crates: [
       {
         path: 'crates/mod-keyboard',
         pkg: 'asrbox-mod-keyboard',
         deps: 'core, platform-api',
         unsafeAllowed: 'Запрещён',
-        role: 'Хоткеи, раскладки и обработка клавиатуры',
+        role: 'Отдельный процесс · Переназначение клавиш и аварийное отключение',
       },
       {
         path: 'crates/mod-dock',
         pkg: 'asrbox-mod-dock',
         deps: 'core, platform-api',
         unsafeAllowed: 'Запрещён',
-        role: 'Панель быстрого запуска и управления окнами',
+        role: 'Один процесс на весь док · 8 независимых док-панелей в своих потоках',
       },
       {
         path: 'crates/mod-speech',
         pkg: 'asrbox-mod-speech',
         deps: 'core, platform-api',
         unsafeAllowed: 'Запрещён',
-        role: 'Распознавание и синтез речи (ASR/TTS)',
+        role: 'Отдельный процесс · Голос в текст (Whisper, ленивая загрузка + SHA-256)',
       },
       {
         path: 'crates/mod-webdav',
         pkg: 'asrbox-mod-webdav',
         deps: 'core, platform-api',
         unsafeAllowed: 'Запрещён',
-        role: 'Синхронизация и обмен файлами по WebDAV',
+        role: 'Отдельный процесс · WebDAV и синхронизация папок (секреты в Credential Manager)',
       },
       {
         path: 'crates/mod-monitor',
         pkg: 'asrbox-mod-monitor',
         deps: 'core, platform-api',
         unsafeAllowed: 'Запрещён',
-        role: 'Онлайн-монитор нагрузки и таблица профилировщика',
+        role: 'Процесс при открытом окне · Онлайн-монитор CPU/RAM/событий/функций',
       },
       {
         path: 'crates/mod-screenshot',
         pkg: 'asrbox-mod-screenshot',
         deps: 'core, platform-api',
         unsafeAllowed: 'Запрещён',
-        role: 'Захват, разметка и сохранение снимков экрана',
+        role: 'Процесс по запросу · Скриншоты (живёт секунды и закрывается)',
       },
       {
         path: 'crates/mod-huawei',
         pkg: 'asrbox-mod-huawei',
         deps: 'core, platform-api',
         unsafeAllowed: 'Запрещён',
-        role: 'Интеграция с устройствами и сервисами Huawei',
+        role: 'Отдельный процесс · Модем Huawei (AT-команды, изоляция сбоев порта)',
       },
     ],
   },
@@ -179,21 +184,21 @@ const CRATE_LAYERS = [
         pkg: 'asrbox-core',
         deps: 'Нет внутренних зависимостей',
         unsafeAllowed: 'Запрещён',
-        role: 'Домен, ошибки, ./data/ конфиг, шина событий, логи и профилировщик',
+        role: 'Настройки (settings_version/written_by), шина, трейт Module, логи, профилировщик',
       },
       {
         path: 'crates/platform-api',
         pkg: 'asrbox-platform-api',
         deps: 'core',
         unsafeAllowed: 'Запрещён',
-        role: 'Платформонезависимые трейты ОС',
+        role: 'Трейты KeyboardHook, DockWindow, ScreenCapture, ProcessMonitor',
       },
       {
         path: 'crates/platform-windows',
         pkg: 'asrbox-platform-windows',
         deps: 'core, platform-api',
         unsafeAllowed: 'Разрешён (// SAFETY)',
-        role: 'Единственный крейт с WinAPI и unsafe для Windows 10/11 x64',
+        role: 'Реализация трейтов через windows-rs (единственный крейт с unsafe)',
       },
     ],
   },
@@ -205,7 +210,7 @@ const CRATE_LAYERS = [
         pkg: 'xtask',
         deps: 'Только Rust std',
         unsafeAllowed: 'Запрещён',
-        role: 'CLI-утилита atlas-check для верификации ATLAS.md и MAP.md',
+        role: 'Команда cargo xtask atlas-check (проверка ATLAS.md и MAP.md)',
       },
     ],
   },
@@ -214,16 +219,21 @@ const CRATE_LAYERS = [
 const CI_STEPS = [
   {order: '01', name: 'Check formatting', command: 'cargo fmt --check'},
   {order: '02', name: 'Run Clippy', command: 'cargo clippy --workspace -- -D warnings'},
-  {order: '03', name: 'Verify ATLAS and MAP coverage', command: 'cargo run -p xtask -- atlas-check'},
+  {order: '03', name: 'Verify ATLAS and MAP coverage', command: 'cargo xtask atlas-check'},
   {order: '04', name: 'Run tests', command: 'cargo test --workspace'},
   {order: '05', name: 'Build release binary', command: 'cargo build --release'},
+  {order: '06', name: 'Check size limit (NF-005 < 25 MB)', command: 'target/release/asrbox.exe < 25 MB'},
+  {order: '07', name: 'Smoke test (--selftest)', command: '.\\target\\release\\asrbox.exe --selftest'},
+  {order: '08', name: 'Upload portable artifact', command: 'actions/upload-artifact@v4'},
 ];
 
 function buildWorkspaceFiles(): WorkspaceFile[] {
   const staticFiles: WorkspaceFile[] = [
     {path: '.gitignore', content: gitignoreRaw, category: 'config', group: 'Корень и CI'},
     {path: 'Cargo.toml', content: rootCargoRaw, category: 'config', group: 'Корень и CI'},
+    {path: '.cargo/config.toml', content: cargoConfigRaw, category: 'config', group: 'Корень и CI'},
     {path: '.github/workflows/ci.yml', content: ciYmlRaw, category: 'config', group: 'Корень и CI'},
+    {path: '.github/workflows/release.yml', content: releaseYmlRaw, category: 'config', group: 'Корень и CI'},
     {path: 'AGENTS.md', content: agentsRaw, category: 'docs', group: 'Документация'},
     {path: 'SPEC.md', content: specRaw, category: 'docs', group: 'Документация'},
     {path: 'ATLAS.md', content: atlasRaw, category: 'docs', group: 'Документация'},
@@ -232,7 +242,10 @@ function buildWorkspaceFiles(): WorkspaceFile[] {
     {path: 'DECISIONS.md', content: decisionsRaw, category: 'docs', group: 'Документация'},
     {path: 'BUGS.md', content: bugsRaw, category: 'docs', group: 'Документация'},
     {path: 'CHANGELOG.md', content: changelogRaw, category: 'docs', group: 'Документация'},
-    {path: 'docs/RELEASE_CHECKLIST.md', content: releaseChecklistRaw, category: 'docs', group: 'Документация'},
+    {path: 'specs/README.md', content: specsReadmeRaw, category: 'docs', group: 'Спецификации и docs'},
+    {path: 'docs/RELEASE_CHECKLIST.md', content: releaseChecklistRaw, category: 'docs', group: 'Спецификации и docs'},
+    {path: 'docs/LICENSES.md', content: licensesRaw, category: 'docs', group: 'Спецификации и docs'},
+    {path: 'docs/archive/bugs-closed.md', content: bugsClosedRaw, category: 'docs', group: 'Спецификации и docs'},
   ];
 
   const dynamicFiles: WorkspaceFile[] = Object.entries(crateModules).map(([rawKey, content]) => {
