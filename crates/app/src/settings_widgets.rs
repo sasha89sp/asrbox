@@ -1,0 +1,177 @@
+#![cfg(windows)]
+
+use asrbox_core::{ModuleId, SupervisorCmd};
+use asrbox_mod_debug::LogLevel;
+use asrbox_mod_settings::SettingsAction;
+use asrbox_mod_widgets::{
+    load_sysmon_config, load_widget_config, rows_for_height, save_sysmon_config,
+    save_widget_config, uncomment_calendar_sources, widget_height, CalendarSource, PeriodFilter,
+    MAX_REFRESH_MS, MAX_SYSMON_HEIGHT, MAX_SYSMON_WIDTH, MIN_REFRESH_MS, MIN_SYSMON_HEIGHT,
+    MIN_SYSMON_WIDTH,
+};
+use asrbox_platform_api::{DockPlatform, IconProvider, ToolsPlatform, WidgetPlatform};
+
+use crate::AppController;
+
+impl<I: IconProvider> AppController<I> {
+    pub(crate) fn apply_widget_setting<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
+        &mut self,
+        host: &mut H,
+        action: &SettingsAction,
+    ) {
+        if self.apply_sysmon_setting(host, action) {
+            return;
+        }
+        self.apply_calendar_setting(host, action);
+    }
+
+    fn apply_sysmon_setting<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
+        &mut self,
+        host: &mut H,
+        action: &SettingsAction,
+    ) -> bool {
+        if matches!(action, SettingsAction::RefreshSysMonitorNow) {
+            self.send_or_run_widgets_cmd(host, SupervisorCmd::RefreshSysMonitor);
+            return true;
+        }
+        if matches!(action, SettingsAction::OpenSysMonitorConfig) {
+            let _ = ToolsPlatform::open_text_file(host, &self.paths.sysmon_cfg);
+            return true;
+        }
+        let mut cfg = load_sysmon_config(&self.paths.sysmon_cfg).unwrap_or_default();
+        let changed = match action {
+            SettingsAction::SetSysMonitorVisible(v) => {
+                cfg.visible = *v;
+                true
+            }
+            SettingsAction::SetSysMonitorOpacity(o) => {
+                cfg.opacity_percent = (*o).clamp(20, 100);
+                true
+            }
+            SettingsAction::SetSysMonitorLayer(l) => {
+                cfg.layer = *l;
+                true
+            }
+            SettingsAction::SetSysMonitorRefreshMs(ms) => {
+                cfg.refresh_interval_ms = (*ms).clamp(MIN_REFRESH_MS, MAX_REFRESH_MS);
+                true
+            }
+            SettingsAction::SetSysMonitorWidth(w) => {
+                cfg.width = (*w).clamp(MIN_SYSMON_WIDTH, MAX_SYSMON_WIDTH);
+                true
+            }
+            SettingsAction::SetSysMonitorHeight(h) => {
+                cfg.height = (*h).clamp(MIN_SYSMON_HEIGHT, MAX_SYSMON_HEIGHT);
+                true
+            }
+            SettingsAction::MatchSysMonitorToCalendar => {
+                let cal = load_widget_config(&self.paths.widgets_cfg).unwrap_or_default();
+                cfg.width = cal.width.clamp(MIN_SYSMON_WIDTH, MAX_SYSMON_WIDTH);
+                cfg.height =
+                    widget_height(cal.visible_rows).clamp(MIN_SYSMON_HEIGHT, MAX_SYSMON_HEIGHT);
+                true
+            }
+            _ => return false,
+        };
+        if changed && save_sysmon_config(&self.paths.sysmon_cfg, &cfg).is_ok() {
+            self.reload_module_config(host, ModuleId::Widgets);
+        }
+        true
+    }
+
+    fn apply_calendar_setting<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
+        &mut self,
+        host: &mut H,
+        action: &SettingsAction,
+    ) {
+        let now = host.local_time_now();
+        if matches!(action, SettingsAction::UncommentCalendarSources) {
+            match uncomment_calendar_sources(&self.paths.widgets_cfg) {
+                Ok(n) => {
+                    self.debug.log(
+                        now,
+                        LogLevel::Info,
+                        "widgets",
+                        format!("Автоматически включено календарей (убран #): {n}"),
+                    );
+                    self.reload_module_config(host, ModuleId::Widgets);
+                }
+                Err(e) => self.debug.log(now, LogLevel::Error, "widgets", e),
+            }
+            return;
+        }
+        if matches!(action, SettingsAction::RefreshCalendarNow) {
+            self.send_or_run_widgets_cmd(host, SupervisorCmd::RefreshCalendar);
+            return;
+        }
+        let mut cfg = load_widget_config(&self.paths.widgets_cfg).unwrap_or_default();
+        let changed = match action {
+            SettingsAction::SetCalendarVisible(v) => {
+                cfg.visible = *v;
+                true
+            }
+            SettingsAction::SetCalendarOpacity(o) => {
+                cfg.opacity_percent = (*o).clamp(20, 100);
+                true
+            }
+            SettingsAction::SetCalendarLayer(l) => {
+                cfg.layer = *l;
+                true
+            }
+            SettingsAction::SetCalendarPeriod(p) => {
+                cfg.period = match p {
+                    0 => PeriodFilter::Today,
+                    1 => PeriodFilter::Days7,
+                    3 => PeriodFilter::All,
+                    _ => PeriodFilter::Days30,
+                };
+                true
+            }
+            SettingsAction::SetCalendarWidth(w) => {
+                cfg.width = (*w).clamp(280, 860);
+                true
+            }
+            SettingsAction::SetCalendarRows(r) => {
+                cfg.visible_rows = (*r).clamp(3, 16);
+                true
+            }
+            SettingsAction::MatchCalendarToSysMonitor => {
+                let sys = load_sysmon_config(&self.paths.sysmon_cfg).unwrap_or_default();
+                cfg.width = sys.width.clamp(280, 860);
+                cfg.visible_rows = rows_for_height(sys.height);
+                true
+            }
+            SettingsAction::AddCalendarUrlFromInput => {
+                let raw = host.settings_url_input_text();
+                let url = raw.trim().trim_matches('"').trim_matches('\'');
+                if url.starts_with("https://") || url.starts_with("http://") {
+                    let id = format!("cal_{}", cfg.sources.len() + 1);
+                    cfg.sources.push(CalendarSource {
+                        id,
+                        url: url.to_owned(),
+                        color_rgb: None,
+                    });
+                    cfg.commented_calendar_hint = false;
+                    host.set_settings_url_input_text("");
+                    true
+                } else {
+                    self.debug.log(
+                        now,
+                        LogLevel::Warn,
+                        "widgets",
+                        "Введите корректный URL (https://.../basic.ics)",
+                    );
+                    false
+                }
+            }
+            SettingsAction::RemoveCalendarSource(idx) if *idx < cfg.sources.len() => {
+                cfg.sources.remove(*idx);
+                true
+            }
+            _ => false,
+        };
+        if changed && save_widget_config(&self.paths.widgets_cfg, &cfg).is_ok() {
+            self.reload_module_config(host, ModuleId::Widgets);
+        }
+    }
+}

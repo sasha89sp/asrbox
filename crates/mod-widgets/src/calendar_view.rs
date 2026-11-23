@@ -77,6 +77,39 @@ impl CalendarState {
             }
         }
     }
+
+    pub fn apply_http_done(
+        &mut self,
+        cfg: &CalendarWidgetConfig,
+        cache_dir: &Path,
+        now: LocalDateTime,
+        request_id: u64,
+        result: HttpFetchResult,
+    ) -> Option<(bool, String)> {
+        let source_id = self.pending_requests.remove(&request_id)?;
+        match evaluate_http_response(&source_id, result) {
+            HttpEval::Err {
+                status_err,
+                log_msg,
+            } => {
+                self.status_error = Some(status_err);
+                Some((true, log_msg))
+            }
+            HttpEval::Ok(body) => {
+                let bytes_len = body.len();
+                let _ = crate::storage::save_cached_ics(cache_dir, &source_id, &body);
+                self.cached_by_source.insert(source_id.clone(), body);
+                self.last_updated = Some(format!("{:02}:{:02}", now.hour, now.minute));
+                self.status_error = None;
+                self.reparse(cfg, now);
+                let n = self.all_events.len();
+                Some((
+                    false,
+                    format!("http[{source_id}] 200 OK ({bytes_len} B, events={n})"),
+                ))
+            }
+        }
+    }
 }
 
 pub fn build_calendar_frame(

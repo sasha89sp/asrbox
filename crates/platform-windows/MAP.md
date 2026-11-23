@@ -11,9 +11,14 @@
 - `src/running.rs` — определение запущенных приложений (`EnumWindows` + `QueryFullProcessImageNameW`), резолв `.lnk` (`IShellLinkW`) и активация открытого окна по клику.
 - `src/job.rs` — Win32 `JobObject` (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`) для изоляции дочерних процессов модулей и `is_process_alive(pid)`.
 - `src/settings_proc.rs` — изменяемое окно настроек (`AsrboxSettingsWindow`, `WS_OVERLAPPEDWINDOW`, min 680×480), двойная буферизация DIB и встроенный `EDIT` для URL календаря.
-- `src/widget_win.rs` — реализация `WidgetPlatform` для `WindowsDockHost`.
-- `src/widget_proc.rs` — оконная процедура виджета, перетаскивание, слои и ПКМ-меню с пунктом «Настройки календаря...».
+- `src/widget_win.rs` — реализация `WidgetPlatform` для `WindowsDockHost` (окна виджетов, границы ресайза, таймеры, запрос телеметрии).
+- `src/widget_proc.rs` — оконная процедура виджета: перетаскивание за заголовок, 8-сторонний интерактивный ресайз с курсорами и управление слоем.
+- `src/widget_menu.rs` — ПКМ-меню виджетов (Календарь и Системный монитор с подменю частоты обновления и прозрачности).
 - `src/widget_text.rs` — рендер кириллического текста `Segoe UI` (`DrawTextW`) на BGRA-кадр, tooltip и локальное время.
+- `src/sys_telemetry.rs` — фоновый поток сбора телеметрии (`WM_TELEMETRY_DONE`, uptime, план питания, разрешение таймера ОС `NtQueryTimerResolution`).
+- `src/sys_procs.rs` — реальная телеметрия CPU/частоты (`CallNtPowerInformation`), ОЗУ/кэша/PF, топ-5 процессов CPU/ОЗУ и дисков (`IOCTL_DISK_PERFORMANCE`).
+- `src/sys_gpu.rs` — телеметрия GPU (DXGI VRAM, частота экрана Гц, динамическая загрузка `nvml.dll` при наличии NVIDIA).
+- `src/sys_net.rs` — телеметрия сети (IPv4, детектор VPN, трафик `GetIfTable2`, ICMP-пинг шлюза и `1.1.1.1` с джиттером и потерями).
 - `src/http.rs` — фоновый WinHTTP GET-клиент с `WM_HTTP_DONE`.
 - `src/icons.rs` — извлечение иконок (`IShellItemImageFactory`, WIC, `ExtractIconExW`).
 - `src/tray.rs` — иконка в трее и сгруппированное по модулям ПКМ-подменю (`MF_POPUP`) трея.

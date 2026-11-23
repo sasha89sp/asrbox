@@ -1,8 +1,8 @@
 use asrbox_platform_api::{BgraFrame, PixelPoint, TextAlign, WidgetFrame, WidgetTextCmd};
 
 use crate::draw::{
-    draw_calendar_badge, draw_hline, draw_triangle_down, draw_triangle_up, fill_rounded_card,
-    fill_rounded_rect,
+    draw_calendar_badge, draw_hline, draw_resize_grip, draw_triangle_down, draw_triangle_up,
+    fill_macos_glass_card, fill_pill_badge, fill_rounded_rect,
 };
 use crate::storage::{DateFormatMode, PeriodFilter};
 
@@ -51,8 +51,15 @@ pub struct RenderView<'a> {
 }
 
 pub fn widget_height(visible_rows: u8) -> u32 {
-    let rows = i32::from(visible_rows.clamp(3, 12));
+    let rows = i32::from(visible_rows.clamp(3, 16));
     (HEADER_HEIGHT + FILTER_HEIGHT + rows * ROW_HEIGHT + FOOTER_HEIGHT) as u32
+}
+
+pub fn rows_for_height(height: u32) -> u8 {
+    let chrome = HEADER_HEIGHT + FILTER_HEIGHT + FOOTER_HEIGHT;
+    let body = (height as i32 - chrome).max(ROW_HEIGHT * 3);
+    let rows = (body + ROW_HEIGHT / 2) / ROW_HEIGHT;
+    rows.clamp(3, 16) as u8
 }
 
 pub fn hit_test_widget(
@@ -131,15 +138,10 @@ pub fn render_calendar_widget(view: &RenderView<'_>) -> WidgetFrame {
     let mut texts = Vec::with_capacity(32);
 
     let pct = u16::from(view.opacity_percent.clamp(20, 100));
-    let bg_alpha = ((pct * 255) / 100) as u8;
-    let border_alpha = ((u16::from(bg_alpha) * 32) / 255).clamp(16, 44) as u8;
-    let div_alpha = ((u16::from(bg_alpha) * 24) / 255).clamp(12, 32) as u8;
+    let bg_alpha = ((pct * 244) / 100) as u8;
+    let div_alpha = ((u16::from(bg_alpha) * 28) / 255).clamp(14, 36) as u8;
 
-    fill_rounded_card(
-        &mut bgra,
-        [19, 20, 24, bg_alpha],
-        [255, 255, 255, border_alpha],
-    );
+    fill_macos_glass_card(&mut bgra, view.opacity_percent);
     draw_header(&mut bgra, &mut texts, view, w as i32);
     let div = [255, 255, 255, div_alpha];
     draw_hline(&mut bgra, HEADER_HEIGHT, div);
@@ -150,6 +152,7 @@ pub fn render_calendar_widget(view: &RenderView<'_>) -> WidgetFrame {
     let footer_y = h as i32 - FOOTER_HEIGHT;
     draw_hline(&mut bgra, footer_y, div);
     draw_footer(&mut bgra, &mut texts, view, w as i32, footer_y);
+    draw_resize_grip(&mut bgra);
 
     WidgetFrame { bgra, texts }
 }
@@ -222,15 +225,17 @@ fn draw_filter_bar(
     for (tab, tx, tw, label) in tabs {
         let active = view.period == tab;
         let hovered = view.hovered == WidgetHitTarget::FilterTab(tab);
-        if hovered && !active {
-            fill_rounded_rect(frame, tx - 3, y + 2, tw + 6, 24, 5.0, [255, 255, 255, 16]);
+        if active {
+            fill_pill_badge(frame, tx - 5, y + 2, tw + 10, 24);
+        } else if hovered {
+            fill_rounded_rect(frame, tx - 4, y + 2, tw + 8, 24, 6.0, [255, 255, 255, 18]);
         }
         let color = if active {
-            [78, 161, 255, 255]
+            [114, 214, 255, 255]
         } else if hovered {
-            [229, 231, 235, 255]
+            [236, 242, 248, 255]
         } else {
-            [148, 155, 168, 255]
+            [156, 168, 182, 255]
         };
         texts.push(WidgetTextCmd {
             x: tx,
@@ -241,7 +246,7 @@ fn draw_filter_bar(
             font_size_px: 12,
             bold: active,
             color_rgba: color,
-            align: TextAlign::Left,
+            align: TextAlign::Center,
         });
     }
 
@@ -273,7 +278,7 @@ fn draw_event_rows(
     w: i32,
 ) {
     let base_y = HEADER_HEIGHT + FILTER_HEIGHT;
-    let max_rows = usize::from(view.visible_rows.clamp(3, 12));
+    let max_rows = usize::from(view.visible_rows.clamp(3, 16));
     for (idx, row) in view.rows.iter().take(max_rows).enumerate() {
         let ry = base_y + (idx as i32) * ROW_HEIGHT;
         if view.hovered == WidgetHitTarget::EventRow(idx) {

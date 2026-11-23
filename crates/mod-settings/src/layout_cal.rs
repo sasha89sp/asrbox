@@ -95,13 +95,21 @@ fn add_calendar_display_card(b: &mut LayoutBuilder, c: &CalendarSettingsView) {
         row(
             206,
             52,
-            "Видимых строк",
+            "Ширина окна",
+            Some("Можно тянуть края виджета на рабочем столе"),
+            Some(format!("{} px", c.width)),
+            true,
+        ),
+        row(
+            258,
+            52,
+            "Видимых строк (высота)",
             None,
             Some(format!("{}", c.visible_rows)),
             false,
         ),
     ];
-    let cy = b.add_card(Some("ОТОБРАЖЕНИЕ"), false, rows);
+    let cy = b.add_card(Some("ОТОБРАЖЕНИЕ И РАЗМЕР"), false, rows);
     let tx = b.content_x + b.content_w as i32 - 60;
     let sx = b.content_x + b.content_w as i32 - 220;
     b.push_toggle(
@@ -163,21 +171,28 @@ fn add_calendar_display_card(b: &mut LayoutBuilder, c: &CalendarSettingsView) {
             ),
         ],
     );
+    b.push_slider(sx, cy + 220, SliderKind::CalendarWidth, c.width);
     b.push_slider(
         sx,
-        cy + 220,
+        cy + 272,
         SliderKind::CalendarRows,
         u32::from(c.visible_rows),
     );
     let (x, y) = (b.content_x, b.cursor_y);
     b.push_btn(
-        (x, y, 164, 32),
-        "↻ Обновить сейчас",
+        (x, y, 198, 32),
+        "Выровнять с Монитором",
         ButtonTone::Primary,
+        SettingsAction::MatchCalendarToSysMonitor,
+    );
+    b.push_btn(
+        (x + 208, y, 146, 32),
+        "↻ Обновить",
+        ButtonTone::Secondary,
         SettingsAction::RefreshCalendarNow,
     );
     b.push_btn(
-        (x + 174, y, 176, 32),
+        (x + 364, y, 174, 32),
         "Открыть widgets.cfg",
         ButtonTone::Secondary,
         SettingsAction::OpenWidgetsConfig,

@@ -9,6 +9,7 @@ pub struct AppPaths {
     pub data_dir: PathBuf,
     pub docks_cfg: PathBuf,
     pub widgets_cfg: PathBuf,
+    pub sysmon_cfg: PathBuf,
     pub cache_dir: PathBuf,
     pub logs_dir: PathBuf,
 }
@@ -25,6 +26,7 @@ impl AppPaths {
             exe_dir,
             docks_cfg: config_dir.join("docks.cfg"),
             widgets_cfg: config_dir.join("widgets.cfg"),
+            sysmon_cfg: config_dir.join("sysmon.cfg"),
             cache_dir: data_dir.join("cache"),
             logs_dir: data_dir.join("logs"),
             data_dir,
@@ -62,7 +64,8 @@ pub fn build_paths_clipboard(paths: &AppPaths) -> String {
          Папка программы  : {}\r\n\
          Папка данных     : {}\r\n\
          Настройки доков  : {}\r\n\
-         Настройки виджета: {}\r\n\
+         Настройки календ.: {}\r\n\
+         Системн. монитор : {}\r\n\
          Кэш календарей   : {}\r\n\
          Логи и отчёты    : {}\r\n",
         paths.exe_path.display(),
@@ -70,6 +73,7 @@ pub fn build_paths_clipboard(paths: &AppPaths) -> String {
         paths.data_dir.display(),
         paths.docks_cfg.display(),
         paths.widgets_cfg.display(),
+        paths.sysmon_cfg.display(),
         paths.cache_dir.display(),
         paths.logs_dir.display(),
     )

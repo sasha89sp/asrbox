@@ -1,8 +1,18 @@
+pub mod menu;
+pub mod telemetry;
 pub mod tools;
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+pub use menu::{
+    DockMenuAction, DockMenuState, TrayAction, TrayMenuEntry, TrayModuleFlags, WidgetLayer,
+    WidgetMenuAction, WidgetMenuState,
+};
+pub use telemetry::{
+    CpuTelemetry, DriveTelemetry, GpuTelemetry, NetTelemetry, ProcUsage, RamTelemetry,
+    SysTelemetry, WidgetSizeBounds,
+};
 pub use tools::{AboutUiCommand, DebugUiCommand, ProcessMetrics, SettingsUiEvent, ToolsPlatform};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -104,32 +114,6 @@ pub struct WidgetFrame {
     pub texts: Vec<WidgetTextCmd>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum WidgetLayer {
-    #[default]
-    Wallpaper,
-    Normal,
-    Topmost,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct WidgetMenuState {
-    pub layer: WidgetLayer,
-    pub opacity_percent: u8,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WidgetMenuAction {
-    Refresh,
-    OpenSettings,
-    OpenConfig,
-    SetLayerWallpaper,
-    SetLayerNormal,
-    SetLayerTopmost,
-    SetOpacity(u8),
-    HideWidget,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HttpFetchResult {
     pub status_code: u16,
@@ -142,80 +126,6 @@ pub enum IconRequest {
     AutoShell(PathBuf),
     CustomFile(PathBuf),
     ExeResource { path: PathBuf, index: u32 },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct DockMenuState {
-    pub edge_code: u8,
-    pub is_centered: bool,
-    pub icon_size_px: u16,
-    pub opacity_percent: u8,
-    pub locked: bool,
-    pub hover_zoom_enabled: bool,
-    pub show_running_indicator: bool,
-    pub focus_running_window: bool,
-    pub hovered_item_id: Option<u64>,
-    pub hovered_is_separator: bool,
-    pub show_settings_button: bool,
-    pub can_remove_dock: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DockMenuAction {
-    SetEdgeLeft,
-    SetEdgeRight,
-    SetEdgeTop,
-    SetEdgeBottom,
-    AlignCenter,
-    ToggleLock,
-    SetOpacity(u8),
-    IconSizeSmall,
-    IconSizeMedium,
-    IconSizeLarge,
-    ToggleHoverZoom,
-    ToggleRunningIndicator,
-    ToggleFocusRunning,
-    ChooseItemIcon(u64),
-    ResetItemIcon(u64),
-    RemoveItem(u64),
-    AddSeparator,
-    ToggleSettingsButton,
-    OpenSettings,
-    OpenDockConfig,
-    ReloadDockConfig,
-    AddNewDock,
-    RemoveDock,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TrayMenuEntry {
-    pub dock_id: u64,
-    pub title: String,
-    pub enabled: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct TrayModuleFlags {
-    pub dock_module_enabled: bool,
-    pub widgets_module_enabled: bool,
-    pub calendar_visible: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TrayAction {
-    OpenSettings,
-    ToggleDockModule,
-    AddDock,
-    ToggleDock(u64),
-    RemoveDock(u64),
-    OpenDockConfig,
-    ToggleWidgetsModule,
-    ToggleCalendarWidget,
-    RefreshCalendarWidget,
-    OpenWidgetConfig,
-    OpenDebugWindow,
-    OpenAboutWindow,
-    Exit,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -287,11 +197,22 @@ pub enum PlatformEvent {
         x: i32,
         y: i32,
     },
+    WidgetResized {
+        widget_id: u64,
+        x: i32,
+        y: i32,
+        width: u32,
+        height: u32,
+        finished: bool,
+    },
     WidgetMinuteTick {
         widget_id: u64,
     },
     WidgetRefreshTick {
         widget_id: u64,
+    },
+    SysTelemetryReady {
+        snapshot: Box<SysTelemetry>,
     },
     HttpFetchDone {
         request_id: u64,
@@ -357,6 +278,11 @@ pub trait WidgetPlatform {
     ) -> Result<(), String>;
     fn destroy_widget_window(&mut self, widget_id: u64) -> Result<(), String>;
     fn set_widget_layer(&mut self, widget_id: u64, layer: WidgetLayer) -> Result<(), String>;
+    fn set_widget_resize_bounds(
+        &mut self,
+        widget_id: u64,
+        bounds: WidgetSizeBounds,
+    ) -> Result<(), String>;
     fn present_widget_frame(
         &mut self,
         widget_id: u64,
@@ -370,6 +296,8 @@ pub trait WidgetPlatform {
         refresh_sec: u32,
         minute_tick: bool,
     ) -> Result<(), String>;
+    fn set_widget_refresh_ms(&mut self, widget_id: u64, interval_ms: u32) -> Result<(), String>;
+    fn request_sys_telemetry(&mut self) -> Result<(), String>;
     fn show_widget_menu(
         &mut self,
         widget_id: u64,

@@ -8,7 +8,7 @@ use asrbox_mod_about::{build_about_text, build_paths_clipboard, AppPaths};
 use asrbox_mod_debug::LogLevel;
 use asrbox_mod_dock::load_docks_from_file;
 use asrbox_mod_settings::SettingsTab;
-use asrbox_mod_widgets::load_widget_config;
+use asrbox_mod_widgets::{load_sysmon_config, load_widget_config};
 use asrbox_platform_api::{
     AboutUiCommand, DebugUiCommand, DockPlatform, IconProvider, PixelPoint, ToolsPlatform,
     TrayAction, TrayMenuEntry, TrayModuleFlags, WidgetPlatform,
@@ -42,10 +42,20 @@ impl<I: IconProvider> AppController<I> {
                     .map(|c| c.visible)
                     .unwrap_or(true)
             });
+        let sys_vis = self
+            .sysmon
+            .as_ref()
+            .map(|s| s.is_visible())
+            .unwrap_or_else(|| {
+                load_sysmon_config(&self.paths.sysmon_cfg)
+                    .map(|c| c.visible)
+                    .unwrap_or(true)
+            });
         let flags = TrayModuleFlags {
             dock_module_enabled: self.modules_cfg.dock_enabled,
             widgets_module_enabled: self.modules_cfg.widgets_enabled,
             calendar_visible: cal_vis,
+            sys_monitor_visible: sys_vis,
         };
         let Ok(Some(action)) = host.show_tray_menu(screen, &entries, flags) else {
             return;
@@ -121,6 +131,17 @@ impl<I: IconProvider> AppController<I> {
             TrayAction::OpenWidgetConfig => {
                 let res = ToolsPlatform::open_text_file(host, &self.paths.widgets_cfg);
                 self.log_io_result(now, "widgets", "Трей: открыт widgets.cfg", res);
+            }
+            TrayAction::ToggleSysMonitorWidget => {
+                self.safe_mode = false;
+                self.send_or_run_widgets_cmd(host, SupervisorCmd::ToggleSysMonitor);
+            }
+            TrayAction::RefreshSysMonitorWidget => {
+                self.send_or_run_widgets_cmd(host, SupervisorCmd::RefreshSysMonitor);
+            }
+            TrayAction::OpenSysMonitorConfig => {
+                let res = ToolsPlatform::open_text_file(host, &self.paths.sysmon_cfg);
+                self.log_io_result(now, "widgets", "Трей: открыт sysmon.cfg", res);
             }
             TrayAction::OpenDebugWindow => self.open_debug_window(host),
             TrayAction::OpenAboutWindow => self.open_about_window(host),

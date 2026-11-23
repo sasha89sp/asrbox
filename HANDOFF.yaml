@@ -1,44 +1,40 @@
 version: 0.0.1
 updated: 2026-11-23
-spec_ids: [NF-001, NF-002, NF-005, NF-006, NF-007, NF-008, DK-013, DK-014, DK-015, DK-016, DK-017, WG-013, ST-001, ST-002, ST-003, ST-004, ST-005, ST-006]
+spec_ids: [NF-001, NF-002, NF-005, NF-006, NF-007, NF-008, WG-014, WG-015, WG-016, WG-017, WG-018]
 atlas_updated: true
 last_session:
-  goal: "Доработать mod-dock, починить календарь (# calendar=), сгруппировать трей, добавить macOS-окно mod-settings и мультипроцессную изоляцию с вкл/выкл модулей"
+  goal: "Добавить виджет Системный монитор в стиле macOS Dark-Glass, унифицировать стиль с Календарём, добавить изменение размеров обоих виджетов и настройку частоты обновления"
   done:
-    - "Док-панели (mod-dock + app/dock_drag.rs + platform-windows/running.rs): перетаскивание значков/разделителей внутри и между панелями, удаление выносом за пределы панелей, индикатор и фокус запущенных программ, закрепление/открепление с ручкой и Offset(px), прозрачность 20..100%, размер иконок 24..128 px"
-    - "Календарь (mod-widgets): найдена причина из скриншота (ссылки вставлены в # calendar=...), добавлены commented_calendar_hint, подсказка в подвале, кнопка «Включить (убрать #)» и поле ввода URL в Настройках"
-    - "Трей (platform-windows/tray.rs): ПКМ-меню сгруппировано по подменю модулей (Настройки, Док-панели, Google Календарь, Диагностика, О программе)"
-    - "Новый крейт crates/mod-settings + settings_proc.rs + settings_ctl.rs: изменяемое тёмное macOS-окно настроек по модулям"
-    - "Мультипроцессная изоляция (core/modules_cfg.rs, ipc.rs, app/supervisor.rs, worker.rs, job.rs): воркеры --worker dock|widgets в Win32 JobObject с автоперезапуском, переключением process/inproc и вкл/выкл модулей в modules.cfg"
+    - "Системный монитор (mod-widgets/sys_config.rs, sys_render.rs, sys_widget.rs + platform-windows/sys_telemetry.rs, sys_procs.rs, sys_gpu.rs, sys_net.rs): реальная Windows-телеметрия в фоновом потоке (шапка, CPU, GPU NVML+DXGI, RAM+диски, сеть+VPN+ICMP пинг+таймер ОС, Топ-5 CPU/RAM)"
+    - "Единый стиль macOS Dark-Glass (mod-widgets/draw.rs, render.rs, sys_render.rs): общая подложка стекла, тонкая рамка, пилюли, бирюзовые бары и ручка ресайза для Календаря и Системного монитора"
+    - "Ресайз обоих виджетов (platform-windows/widget_proc.rs + mod-widgets + mod-settings): перетаскивание за 8 краёв/углов с системными курсорами + ползунки размеров и кнопки «Выровнять с Монитором / Календарём» в Настройках"
+    - "Частота обновления (sysmon.cfg, widget_menu.rs, mod-settings/layout_sys.rs): пресеты 1с/2с/3с/5с/10с (по умолчанию 2с), 0% CPU при скрытии или отключении модуля"
+    - "Трей, IPC и воркер (core/ipc.rs, platform-windows/tray.rs, app/worker_widgets.rs, settings_widgets.rs): оба виджета в --worker widgets и inproc"
   not_done:
     - "Прогон GitHub Actions (.github/workflows/ci.yml) на windows-latest"
-    - "Ручная проверка на Windows 10/11 (drag между доками, вынос для удаления, точка запущенных, открепление, Настройки, «Включить (убрать #)», изолированные воркеры)"
+    - "Ручная проверка на Windows 10/11 (телеметрия Системного монитора, NVML/DXGI, ресайз краёв обоих виджетов, выравнивание размеров, интервал 1с..10с)"
   verified:
     ci_build: false
     tests: false
     manual_run: false
 open_bugs: [BUG-003, BUG-004, BUG-005]
-next_step: "Запустить GitHub Actions (windows-latest), скачать asrbox.exe и проверить все новые функции дока, окно Настроек, разкомментирование календаря и изоляцию процессов"
+next_step: "Запустить GitHub Actions (windows-latest), скачать asrbox.exe и проверить Системный монитор, единый стиль с Календарём, ресайз и выравнивание размеров"
 touched_files:
-  - Cargo.toml
   - ATLAS.md
   - ARCHITECTURE.md
   - DECISIONS.md
   - CHANGELOG.md
-  - BUGS.md
   - HANDOFF.yaml
-  - specs/README.md
-  - specs/mod-dock.md
   - specs/mod-widgets.md
-  - specs/mod-settings.md
-  - crates/core/ (lib.rs, modules_cfg.rs, ipc.rs, MAP.md)
-  - crates/platform-api/ (lib.rs, tools.rs)
-  - crates/mod-dock/ (config.rs, storage.rs, layout.rs, layout_ops.rs, render.rs, render_ops.rs, state.rs, lib.rs, MAP.md)
-  - crates/mod-widgets/ (storage.rs, calendar_view.rs, calendar.rs, lib.rs)
-  - crates/mod-settings/ (Cargo.toml, MAP.md, lib.rs, types.rs, draw.rs, layout.rs, layout_tabs.rs, layout_cal.rs, render.rs)
-  - crates/platform-windows/ (Cargo.toml, MAP.md, lib.rs, job.rs, running.rs, settings_proc.rs, dock_proc.rs, dock_menu.rs, dock_win.rs, tray.rs, widget_proc.rs, tools_win.rs, window.rs)
-  - crates/app/ (Cargo.toml, MAP.md, main.rs, docks.rs, dock_ops.rs, dock_drag.rs, supervisor.rs, worker.rs, worker_bus.rs, settings_ctl.rs, tools.rs, selftest.rs)
+  - crates/core/src/ipc.rs
+  - crates/platform-api/ (lib.rs, menu.rs, telemetry.rs, MAP.md)
+  - crates/platform-windows/ (Cargo.toml, lib.rs, window.rs, tray.rs, widget_win.rs, widget_proc.rs, widget_menu.rs, sys_telemetry.rs, sys_procs.rs, sys_gpu.rs, sys_net.rs, MAP.md)
+  - crates/mod-about/src/lib.rs
+  - crates/mod-widgets/ (lib.rs, draw.rs, storage.rs, render.rs, calendar.rs, sys_config.rs, sys_render.rs, sys_widget.rs, MAP.md)
+  - crates/mod-settings/ (lib.rs, types.rs, layout.rs, layout_cal.rs, layout_sys.rs, MAP.md)
+  - crates/app/ (main.rs, worker.rs, worker_widgets.rs, worker_bus.rs, settings_ctl.rs, settings_widgets.rs, tools.rs, selftest.rs, MAP.md)
 warnings:
-  - "Проверено локально (fmt/clippy x86_64-pc-windows-msvc/test/selftest/atlas-check), НЕ проверено в GitHub Actions (windows-latest)"
+  - "Ожидает сборки и проверки на GitHub Actions (windows-latest); температура CPU и RPM вентилятора на Windows без ring0-драйвера отображаются как «—»"
 ideas:
   - "Этап 2: OAuth2 Google Calendar API для создания/редактирования событий прямо из виджета"
+

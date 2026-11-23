@@ -27,6 +27,9 @@ const TRAY_OPEN_ABOUT: u32 = 1007;
 const TRAY_TOGGLE_DOCK_MOD: u32 = 1008;
 const TRAY_TOGGLE_WIDGETS_MOD: u32 = 1009;
 const TRAY_REFRESH_CALENDAR: u32 = 1010;
+const TRAY_TOGGLE_SYSMON: u32 = 1011;
+const TRAY_REFRESH_SYSMON: u32 = 1012;
+const TRAY_OPEN_SYSMON_CFG: u32 = 1013;
 const TRAY_TOGGLE_BASE: u32 = 2000;
 const TRAY_REMOVE_BASE: u32 = 3000;
 
@@ -156,26 +159,47 @@ pub(crate) fn show_tray_context_menu(
             add_item(
                 cal_sub,
                 TRAY_TOGGLE_CALENDAR,
-                "Показывать виджет",
+                "Календарь: показывать",
                 flags.calendar_visible,
                 flags.widgets_module_enabled,
             );
             add_item(
                 cal_sub,
                 TRAY_REFRESH_CALENDAR,
-                "Обновить календарь сейчас",
+                "Календарь: обновить сейчас",
                 false,
                 flags.widgets_module_enabled,
+            );
+            add_item(
+                cal_sub,
+                TRAY_OPEN_WIDGET_CFG,
+                "Календарь: открыть widgets.cfg",
+                false,
+                true,
             );
             add_sep(cal_sub);
             add_item(
                 cal_sub,
-                TRAY_OPEN_WIDGET_CFG,
-                "Открыть widgets.cfg",
+                TRAY_TOGGLE_SYSMON,
+                "Системный монитор: показывать",
+                flags.sys_monitor_visible,
+                flags.widgets_module_enabled,
+            );
+            add_item(
+                cal_sub,
+                TRAY_REFRESH_SYSMON,
+                "Системный монитор: обновить",
+                false,
+                flags.widgets_module_enabled,
+            );
+            add_item(
+                cal_sub,
+                TRAY_OPEN_SYSMON_CFG,
+                "Системный монитор: sysmon.cfg",
                 false,
                 true,
             );
-            add_submenu(menu, cal_sub, "Модуль: Google Календарь");
+            add_submenu(menu, cal_sub, "Модуль: Виджеты");
         }
 
         add_sep(menu);
@@ -209,6 +233,9 @@ fn decode_tray_command(cmd: u32, docks: &[TrayMenuEntry]) -> Option<TrayAction> 
         TRAY_TOGGLE_CALENDAR => Some(TrayAction::ToggleCalendarWidget),
         TRAY_REFRESH_CALENDAR => Some(TrayAction::RefreshCalendarWidget),
         TRAY_OPEN_WIDGET_CFG => Some(TrayAction::OpenWidgetConfig),
+        TRAY_TOGGLE_SYSMON => Some(TrayAction::ToggleSysMonitorWidget),
+        TRAY_REFRESH_SYSMON => Some(TrayAction::RefreshSysMonitorWidget),
+        TRAY_OPEN_SYSMON_CFG => Some(TrayAction::OpenSysMonitorConfig),
         TRAY_OPEN_DEBUG => Some(TrayAction::OpenDebugWindow),
         TRAY_OPEN_ABOUT => Some(TrayAction::OpenAboutWindow),
         TRAY_EXIT => Some(TrayAction::Exit),

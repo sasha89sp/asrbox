@@ -1,5 +1,6 @@
 use asrbox_platform_api::PixelRect;
 
+use crate::layout_sys::build_sysmon_tab;
 use crate::layout_tabs::{
     build_about_tab, build_calendar_tab, build_debug_tab, build_dock_tab, build_modules_tab,
 };
@@ -96,6 +97,7 @@ pub fn build_layout(
         SettingsTab::Modules => build_modules_tab(&mut b, snap),
         SettingsTab::Dock => build_dock_tab(&mut b, snap, selected_dock),
         SettingsTab::Calendar => build_calendar_tab(&mut b, snap),
+        SettingsTab::SysMonitor => build_sysmon_tab(&mut b, snap),
         SettingsTab::Debug => build_debug_tab(&mut b, snap),
         SettingsTab::About => build_about_tab(&mut b, snap),
     }

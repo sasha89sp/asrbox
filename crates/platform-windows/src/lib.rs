@@ -19,11 +19,21 @@ mod settings_proc;
 #[cfg(windows)]
 mod shell;
 #[cfg(windows)]
+mod sys_gpu;
+#[cfg(windows)]
+mod sys_net;
+#[cfg(windows)]
+mod sys_procs;
+#[cfg(windows)]
+mod sys_telemetry;
+#[cfg(windows)]
 mod tools_proc;
 #[cfg(windows)]
 mod tools_win;
 #[cfg(windows)]
 mod tray;
+#[cfg(windows)]
+mod widget_menu;
 #[cfg(windows)]
 mod widget_proc;
 #[cfg(windows)]

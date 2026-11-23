@@ -1,50 +1,39 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::mem;
+use std::time::Instant;
 
-use asrbox_platform_api::{
-    PixelPoint, PlatformEvent, WidgetLayer, WidgetMenuAction, WidgetMenuState,
-};
+use asrbox_platform_api::{PixelPoint, PlatformEvent, WidgetLayer, WidgetSizeBounds};
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::ClientToScreen;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     ReleaseCapture, SetCapture, TrackMouseEvent, TME_LEAVE, TRACKMOUSEEVENT,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreatePopupMenu, DefWindowProcW, DestroyMenu, GetCursorPos, GetWindowLongPtrW, GetWindowRect,
-    PostMessageW, SetForegroundWindow, SetWindowPos, TrackPopupMenuEx, GWLP_USERDATA, HWND_BOTTOM,
-    HWND_NOTOPMOST, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, TPM_NONOTIFY,
-    TPM_RETURNCMD, TPM_RIGHTBUTTON, WINDOWPOS, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
-    WM_MOUSEWHEEL, WM_NULL, WM_RBUTTONUP, WM_TIMER, WM_WINDOWPOSCHANGING,
+    DefWindowProcW, GetCursorPos, GetWindowLongPtrW, GetWindowRect, LoadCursorW, SetCursor,
+    SetWindowPos, GWLP_USERDATA, HWND_BOTTOM, HWND_NOTOPMOST, HWND_TOPMOST, SWP_NOACTIVATE,
+    SWP_NOMOVE, SWP_NOSIZE, WINDOWPOS, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL,
+    WM_RBUTTONUP, WM_SETCURSOR, WM_TIMER, WM_WINDOWPOSCHANGING,
 };
 
-use crate::tray::{add_item, add_sep};
+use crate::widget_win::{compute_resized_rect, cursor_for_edges, hit_resize_edges};
 use crate::window::{lparam_point, push_event, WM_MOUSELEAVE};
 
 pub(crate) const WIDGET_MINUTE_TIMER_ID: usize = 101;
 pub(crate) const WIDGET_REFRESH_TIMER_ID: usize = 102;
 
-const CMD_REFRESH: u32 = 401;
-const CMD_OPEN_SETTINGS: u32 = 400;
-const CMD_OPEN_CFG: u32 = 402;
-const CMD_LAYER_WALLPAPER: u32 = 403;
-const CMD_LAYER_NORMAL: u32 = 404;
-const CMD_LAYER_TOPMOST: u32 = 405;
-const CMD_OPACITY_100: u32 = 410;
-const CMD_OPACITY_85: u32 = 411;
-const CMD_OPACITY_70: u32 = 412;
-const CMD_OPACITY_50: u32 = 413;
-const CMD_OPACITY_35: u32 = 414;
-const CMD_HIDE: u32 = 420;
-
 #[derive(Clone, Copy)]
 struct WidgetDragMeta {
     layer: WidgetLayer,
     drag_header_h: i32,
+    bounds: Option<WidgetSizeBounds>,
     pressing_header: bool,
     dragging: bool,
+    resize_edges: u8,
     press_screen: POINT,
-    win_origin: POINT,
+    win_start: RECT,
+    last_resize_emit: Option<Instant>,
+    last_emitted_rect: RECT,
 }
 
 thread_local! {
@@ -58,12 +47,24 @@ pub(crate) fn register_widget_meta(widget_id: u64, layer: WidgetLayer, drag_head
             WidgetDragMeta {
                 layer,
                 drag_header_h,
+                bounds: None,
                 pressing_header: false,
                 dragging: false,
+                resize_edges: 0,
                 press_screen: POINT::default(),
-                win_origin: POINT::default(),
+                win_start: RECT::default(),
+                last_resize_emit: None,
+                last_emitted_rect: RECT::default(),
             },
         );
+    });
+}
+
+pub(crate) fn set_widget_bounds_meta(widget_id: u64, bounds: WidgetSizeBounds) {
+    WIDGET_META.with(|m| {
+        if let Some(meta) = m.borrow_mut().get_mut(&widget_id) {
+            meta.bounds = Some(bounds);
+        }
     });
 }
 
@@ -101,109 +102,6 @@ pub(crate) fn apply_widget_layer(hwnd: HWND, layer: WidgetLayer) {
     }
 }
 
-pub(crate) fn show_widget_context_menu(
-    hwnd: HWND,
-    screen_pt: PixelPoint,
-    state: &WidgetMenuState,
-) -> Result<Option<WidgetMenuAction>, String> {
-    let active_preset = closest_opacity_preset(state.opacity_percent);
-    // SAFETY: Popup menu is created, tracked, and destroyed synchronously on UI thread.
-    unsafe {
-        let menu = CreatePopupMenu().map_err(|err| format!("CreatePopupMenu failed: {err}"))?;
-        add_item(
-            menu,
-            CMD_OPEN_SETTINGS,
-            "Настройки календаря...",
-            false,
-            true,
-        );
-        add_item(menu, CMD_REFRESH, "Обновить календарь сейчас", false, true);
-        add_item(
-            menu,
-            CMD_OPEN_CFG,
-            "Открыть widgets.cfg (Блокнот)",
-            false,
-            true,
-        );
-        add_sep(menu);
-        let is_wall = state.layer == WidgetLayer::Wallpaper;
-        let is_norm = state.layer == WidgetLayer::Normal;
-        let is_top = state.layer == WidgetLayer::Topmost;
-        add_item(menu, CMD_LAYER_WALLPAPER, "Слой: На обоях", is_wall, true);
-        add_item(menu, CMD_LAYER_NORMAL, "Слой: Обычное окно", is_norm, true);
-        add_item(menu, CMD_LAYER_TOPMOST, "Слой: Поверх всех", is_top, true);
-        add_sep(menu);
-        add_item(
-            menu,
-            CMD_OPACITY_100,
-            "Прозрачность: 100% (плотный)",
-            active_preset == 100,
-            true,
-        );
-        add_item(
-            menu,
-            CMD_OPACITY_85,
-            "Прозрачность: 85%",
-            active_preset == 85,
-            true,
-        );
-        add_item(
-            menu,
-            CMD_OPACITY_70,
-            "Прозрачность: 70%",
-            active_preset == 70,
-            true,
-        );
-        add_item(
-            menu,
-            CMD_OPACITY_50,
-            "Прозрачность: 50%",
-            active_preset == 50,
-            true,
-        );
-        add_item(
-            menu,
-            CMD_OPACITY_35,
-            "Прозрачность: 35%",
-            active_preset == 35,
-            true,
-        );
-        add_sep(menu);
-        add_item(menu, CMD_HIDE, "Скрыть виджет", false, true);
-
-        let _ = SetForegroundWindow(hwnd);
-        let flags = (TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON).0;
-        let raw = TrackPopupMenuEx(menu, flags, screen_pt.x, screen_pt.y, hwnd, None);
-        let _ = PostMessageW(Some(hwnd), WM_NULL, WPARAM(0), LPARAM(0));
-        let _ = DestroyMenu(menu);
-        Ok(match raw.0 as u32 {
-            CMD_OPEN_SETTINGS => Some(WidgetMenuAction::OpenSettings),
-            CMD_REFRESH => Some(WidgetMenuAction::Refresh),
-            CMD_OPEN_CFG => Some(WidgetMenuAction::OpenConfig),
-            CMD_LAYER_WALLPAPER => Some(WidgetMenuAction::SetLayerWallpaper),
-            CMD_LAYER_NORMAL => Some(WidgetMenuAction::SetLayerNormal),
-            CMD_LAYER_TOPMOST => Some(WidgetMenuAction::SetLayerTopmost),
-            CMD_OPACITY_100 => Some(WidgetMenuAction::SetOpacity(100)),
-            CMD_OPACITY_85 => Some(WidgetMenuAction::SetOpacity(85)),
-            CMD_OPACITY_70 => Some(WidgetMenuAction::SetOpacity(70)),
-            CMD_OPACITY_50 => Some(WidgetMenuAction::SetOpacity(50)),
-            CMD_OPACITY_35 => Some(WidgetMenuAction::SetOpacity(35)),
-            CMD_HIDE => Some(WidgetMenuAction::HideWidget),
-            _ => None,
-        })
-    }
-}
-
-fn closest_opacity_preset(pct: u8) -> u8 {
-    match pct {
-        93..=100 => 100,
-        78..=92 => 85,
-        60..=77 => 70,
-        43..=59 => 50,
-        _ => 35,
-    }
-}
-
 pub(crate) unsafe extern "system" fn widget_wnd_proc(
     hwnd: HWND,
     msg: u32,
@@ -212,6 +110,7 @@ pub(crate) unsafe extern "system" fn widget_wnd_proc(
 ) -> LRESULT {
     let widget_id = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as u64;
     match msg {
+        WM_SETCURSOR => on_widget_set_cursor(hwnd, widget_id, wparam, lparam),
         WM_LBUTTONDOWN => on_widget_lbutton_down(hwnd, widget_id, lparam),
         WM_MOUSEMOVE => on_widget_mouse_move(hwnd, widget_id, lparam),
         WM_LBUTTONUP => on_widget_lbutton_up(hwnd, widget_id, lparam),
@@ -238,22 +137,70 @@ pub(crate) unsafe extern "system" fn widget_wnd_proc(
     }
 }
 
+unsafe fn on_widget_set_cursor(
+    hwnd: HWND,
+    widget_id: u64,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
+    let mut cursor = POINT::default();
+    let mut wr = RECT::default();
+    if GetCursorPos(&mut cursor).is_ok() && GetWindowRect(hwnd, &mut wr).is_ok() {
+        let local = PixelPoint {
+            x: cursor.x - wr.left,
+            y: cursor.y - wr.top,
+        };
+        let w = wr.right - wr.left;
+        let h = wr.bottom - wr.top;
+        let edges = WIDGET_META.with(|m| {
+            let map = m.borrow();
+            let meta = map.get(&widget_id)?;
+            if meta.resize_edges != 0 {
+                return Some(meta.resize_edges);
+            }
+            meta.bounds.map(|_| hit_resize_edges(local, w, h))
+        });
+        if let Some(e) = edges {
+            if let Some(id) = cursor_for_edges(e) {
+                if let Ok(hc) = LoadCursorW(None, id) {
+                    SetCursor(Some(hc));
+                    return LRESULT(1);
+                }
+            }
+        }
+    }
+    DefWindowProcW(hwnd, WM_SETCURSOR, wparam, lparam)
+}
+
 unsafe fn on_widget_lbutton_down(hwnd: HWND, widget_id: u64, lparam: LPARAM) -> LRESULT {
     let pt = lparam_point(lparam);
     let mut cursor = POINT::default();
     let _ = GetCursorPos(&mut cursor);
     let mut wr = RECT::default();
     let _ = GetWindowRect(hwnd, &mut wr);
+    let w = wr.right - wr.left;
+    let h = wr.bottom - wr.top;
     let captured = WIDGET_META.with(|m| {
         if let Some(meta) = m.borrow_mut().get_mut(&widget_id) {
+            if meta.bounds.is_some() {
+                let edges = hit_resize_edges(pt, w, h);
+                if edges != 0 {
+                    meta.resize_edges = edges;
+                    meta.pressing_header = false;
+                    meta.dragging = false;
+                    meta.press_screen = cursor;
+                    meta.win_start = wr;
+                    meta.last_emitted_rect = wr;
+                    meta.last_resize_emit = None;
+                    return true;
+                }
+            }
             if pt.y < meta.drag_header_h {
                 meta.pressing_header = true;
                 meta.dragging = false;
+                meta.resize_edges = 0;
                 meta.press_screen = cursor;
-                meta.win_origin = POINT {
-                    x: wr.left,
-                    y: wr.top,
-                };
+                meta.win_start = wr;
                 return true;
             }
         }
@@ -266,29 +213,77 @@ unsafe fn on_widget_lbutton_down(hwnd: HWND, widget_id: u64, lparam: LPARAM) -> 
 }
 
 unsafe fn on_widget_mouse_move(hwnd: HWND, widget_id: u64, lparam: LPARAM) -> LRESULT {
-    let drag_target = WIDGET_META.with(|m| {
-        let mut map = m.borrow_mut();
-        let meta = map.get_mut(&widget_id)?;
-        if !meta.pressing_header {
-            return None;
-        }
-        let mut cursor = POINT::default();
-        let _ = GetCursorPos(&mut cursor);
-        let dx = cursor.x - meta.press_screen.x;
-        let dy = cursor.y - meta.press_screen.y;
-        if !meta.dragging && dx.abs() + dy.abs() >= 4 {
-            meta.dragging = true;
-        }
-        if meta.dragging {
-            Some((meta.win_origin.x + dx, meta.win_origin.y + dy))
-        } else {
-            None
-        }
-    });
-    if let Some((nx, ny)) = drag_target {
-        let _ = SetWindowPos(hwnd, None, nx, ny, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
-        return LRESULT(0);
+    let mut cursor = POINT::default();
+    let _ = GetCursorPos(&mut cursor);
+
+    enum MoveAction {
+        Resize(RECT),
+        Drag(i32, i32),
+        Hover,
     }
+    let action = WIDGET_META.with(|m| {
+        let mut map = m.borrow_mut();
+        let Some(meta) = map.get_mut(&widget_id) else {
+            return MoveAction::Hover;
+        };
+        if meta.resize_edges != 0 {
+            if let Some(bounds) = meta.bounds {
+                let next = compute_resized_rect(
+                    meta.win_start,
+                    meta.resize_edges,
+                    cursor.x - meta.press_screen.x,
+                    cursor.y - meta.press_screen.y,
+                    bounds,
+                );
+                let due = meta
+                    .last_resize_emit
+                    .is_none_or(|t| t.elapsed().as_millis() >= 24);
+                let changed = next.left != meta.last_emitted_rect.left
+                    || next.top != meta.last_emitted_rect.top
+                    || next.right != meta.last_emitted_rect.right
+                    || next.bottom != meta.last_emitted_rect.bottom;
+                if due && changed {
+                    meta.last_resize_emit = Some(Instant::now());
+                    meta.last_emitted_rect = next;
+                    return MoveAction::Resize(next);
+                }
+                return MoveAction::Resize(RECT::default());
+            }
+        }
+        if meta.pressing_header {
+            let dx = cursor.x - meta.press_screen.x;
+            let dy = cursor.y - meta.press_screen.y;
+            if !meta.dragging && dx.abs() + dy.abs() >= 4 {
+                meta.dragging = true;
+            }
+            if meta.dragging {
+                return MoveAction::Drag(meta.win_start.left + dx, meta.win_start.top + dy);
+            }
+        }
+        MoveAction::Hover
+    });
+
+    match action {
+        MoveAction::Resize(r) => {
+            if r.right > r.left && r.bottom > r.top {
+                push_event(PlatformEvent::WidgetResized {
+                    widget_id,
+                    x: r.left,
+                    y: r.top,
+                    width: (r.right - r.left) as u32,
+                    height: (r.bottom - r.top) as u32,
+                    finished: false,
+                });
+            }
+            return LRESULT(0);
+        }
+        MoveAction::Drag(nx, ny) => {
+            let _ = SetWindowPos(hwnd, None, nx, ny, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+            return LRESULT(0);
+        }
+        MoveAction::Hover => {}
+    }
+
     let mut tme = TRACKMOUSEEVENT {
         cbSize: u32::try_from(mem::size_of::<TRACKMOUSEEVENT>()).unwrap_or(0),
         dwFlags: TME_LEAVE,
@@ -304,17 +299,43 @@ unsafe fn on_widget_mouse_move(hwnd: HWND, widget_id: u64, lparam: LPARAM) -> LR
 }
 
 unsafe fn on_widget_lbutton_up(hwnd: HWND, widget_id: u64, lparam: LPARAM) -> LRESULT {
-    let was_drag = WIDGET_META.with(|m| {
+    let mut cursor = POINT::default();
+    let _ = GetCursorPos(&mut cursor);
+    let outcome = WIDGET_META.with(|m| {
         if let Some(meta) = m.borrow_mut().get_mut(&widget_id) {
+            if meta.resize_edges != 0 {
+                let edges = meta.resize_edges;
+                meta.resize_edges = 0;
+                meta.last_resize_emit = None;
+                if let Some(bounds) = meta.bounds {
+                    let final_r = compute_resized_rect(
+                        meta.win_start,
+                        edges,
+                        cursor.x - meta.press_screen.x,
+                        cursor.y - meta.press_screen.y,
+                        bounds,
+                    );
+                    return (false, Some(final_r));
+                }
+            }
             let d = meta.dragging;
             meta.pressing_header = false;
             meta.dragging = false;
-            return d;
+            return (d, None);
         }
-        false
+        (false, None)
     });
     let _ = ReleaseCapture();
-    if was_drag {
+    if let Some(r) = outcome.1 {
+        push_event(PlatformEvent::WidgetResized {
+            widget_id,
+            x: r.left,
+            y: r.top,
+            width: (r.right - r.left).max(1) as u32,
+            height: (r.bottom - r.top).max(1) as u32,
+            finished: true,
+        });
+    } else if outcome.0 {
         let mut wr = RECT::default();
         if GetWindowRect(hwnd, &mut wr).is_ok() {
             push_event(PlatformEvent::WidgetMoved {

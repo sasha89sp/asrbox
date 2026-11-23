@@ -2,21 +2,24 @@ use std::path::Path;
 
 use asrbox_platform_api::{
     LocalDateTime, PixelPoint, PixelRect, WidgetFrame, WidgetLayer, WidgetMenuAction,
-    WidgetMenuState, WidgetPlatform,
+    WidgetMenuState, WidgetPlatform, WidgetSizeBounds,
 };
 use windows::core::{w, PCWSTR};
-use windows::Win32::Foundation::{HWND, POINT};
+use windows::Win32::Foundation::{HWND, POINT, RECT};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DestroyWindow, GetCursorPos, KillTimer, SetTimer, SetWindowLongPtrW,
-    ShowWindow, GWLP_USERDATA, SW_HIDE, SW_SHOWNOACTIVATE, WS_EX_LAYERED, WS_EX_NOACTIVATE,
-    WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
+    ShowWindow, GWLP_USERDATA, IDC_ARROW, IDC_SIZENESW, IDC_SIZENS, IDC_SIZENWSE, IDC_SIZEWE,
+    SW_HIDE, SW_SHOWNOACTIVATE, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
+    WS_EX_TRANSPARENT, WS_POPUP,
 };
 
 use crate::http::spawn_http_get;
 use crate::present_layered_bgra;
 use crate::shell::{open_in_notepad, open_url_str};
+use crate::sys_telemetry::request_telemetry_sample;
+use crate::widget_menu::show_widget_context_menu;
 use crate::widget_proc::{
-    apply_widget_layer, register_widget_meta, remove_widget_meta, show_widget_context_menu,
+    apply_widget_layer, register_widget_meta, remove_widget_meta, set_widget_bounds_meta,
     update_widget_layer_meta, WIDGET_MINUTE_TIMER_ID, WIDGET_REFRESH_TIMER_ID,
 };
 use crate::widget_text::{composite_widget_frame, query_local_time, render_tooltip_frame};
@@ -94,6 +97,15 @@ impl WidgetPlatform for WindowsDockHost {
         Ok(())
     }
 
+    fn set_widget_resize_bounds(
+        &mut self,
+        widget_id: u64,
+        bounds: asrbox_platform_api::WidgetSizeBounds,
+    ) -> Result<(), String> {
+        set_widget_bounds_meta(widget_id, bounds);
+        Ok(())
+    }
+
     fn present_widget_frame(
         &mut self,
         widget_id: u64,
@@ -162,6 +174,23 @@ impl WidgetPlatform for WindowsDockHost {
         Ok(())
     }
 
+    fn set_widget_refresh_ms(&mut self, widget_id: u64, interval_ms: u32) -> Result<(), String> {
+        let Some(&hwnd) = self.widget_windows.get(&widget_id) else {
+            return Ok(());
+        };
+        let ms = interval_ms.clamp(500, 60_000);
+        // SAFETY: Configuring sub-minute Win32 refresh timer on owned widget HWND.
+        unsafe {
+            let _ = SetTimer(Some(hwnd), WIDGET_REFRESH_TIMER_ID, ms, None);
+        }
+        Ok(())
+    }
+
+    fn request_sys_telemetry(&mut self) -> Result<(), String> {
+        request_telemetry_sample(self.host_hwnd);
+        Ok(())
+    }
+
     fn show_widget_menu(
         &mut self,
         widget_id: u64,
@@ -217,5 +246,82 @@ impl WindowsDockHost {
         };
         self.tooltip_hwnd = Some(hwnd);
         Ok(hwnd)
+    }
+}
+
+const EDGE_LEFT: u8 = 1;
+const EDGE_RIGHT: u8 = 2;
+const EDGE_TOP: u8 = 4;
+const EDGE_BOTTOM: u8 = 8;
+const RESIZE_BORDER_PX: i32 = 8;
+const RESIZE_CORNER_PX: i32 = 14;
+
+pub(crate) fn hit_resize_edges(pt: PixelPoint, w: i32, h: i32) -> u8 {
+    if pt.x < 0 || pt.y < 0 || pt.x >= w || pt.y >= h {
+        return 0;
+    }
+    if pt.x >= w - RESIZE_CORNER_PX && pt.y >= h - RESIZE_CORNER_PX {
+        return EDGE_RIGHT | EDGE_BOTTOM;
+    }
+    if pt.x < RESIZE_CORNER_PX && pt.y >= h - RESIZE_CORNER_PX {
+        return EDGE_LEFT | EDGE_BOTTOM;
+    }
+    if pt.x >= w - RESIZE_CORNER_PX && pt.y < RESIZE_CORNER_PX {
+        return EDGE_RIGHT | EDGE_TOP;
+    }
+    if pt.x < RESIZE_CORNER_PX && pt.y < RESIZE_CORNER_PX {
+        return EDGE_LEFT | EDGE_TOP;
+    }
+    let mut edges = 0u8;
+    if pt.x < RESIZE_BORDER_PX {
+        edges |= EDGE_LEFT;
+    } else if pt.x >= w - RESIZE_BORDER_PX {
+        edges |= EDGE_RIGHT;
+    }
+    if pt.y < RESIZE_BORDER_PX {
+        edges |= EDGE_TOP;
+    } else if pt.y >= h - RESIZE_BORDER_PX {
+        edges |= EDGE_BOTTOM;
+    }
+    edges
+}
+
+pub(crate) fn cursor_for_edges(edges: u8) -> Option<PCWSTR> {
+    match edges {
+        0 => Some(IDC_ARROW),
+        e if e == EDGE_LEFT || e == EDGE_RIGHT => Some(IDC_SIZEWE),
+        e if e == EDGE_TOP || e == EDGE_BOTTOM => Some(IDC_SIZENS),
+        e if e == (EDGE_LEFT | EDGE_TOP) || e == (EDGE_RIGHT | EDGE_BOTTOM) => Some(IDC_SIZENWSE),
+        e if e == (EDGE_RIGHT | EDGE_TOP) || e == (EDGE_LEFT | EDGE_BOTTOM) => Some(IDC_SIZENESW),
+        _ => None,
+    }
+}
+
+pub(crate) fn compute_resized_rect(
+    start: RECT,
+    edges: u8,
+    dx: i32,
+    dy: i32,
+    bounds: WidgetSizeBounds,
+) -> RECT {
+    let (mut left, mut right, mut top, mut bottom) =
+        (start.left, start.right, start.top, start.bottom);
+    let (min_w, max_w) = (bounds.min_w as i32, bounds.max_w as i32);
+    let (min_h, max_h) = (bounds.min_h as i32, bounds.max_h as i32);
+    if (edges & EDGE_RIGHT) != 0 {
+        right = left + (right - left + dx).clamp(min_w, max_w);
+    } else if (edges & EDGE_LEFT) != 0 {
+        left = right - (right - left - dx).clamp(min_w, max_w);
+    }
+    if (edges & EDGE_BOTTOM) != 0 {
+        bottom = top + (bottom - top + dy).clamp(min_h, max_h);
+    } else if (edges & EDGE_TOP) != 0 {
+        top = bottom - (bottom - top - dy).clamp(min_h, max_h);
+    }
+    RECT {
+        left,
+        top,
+        right,
+        bottom,
     }
 }

@@ -14,14 +14,15 @@ use asrbox_mod_dock::{
 };
 use asrbox_mod_settings::{
     AboutSettingsView, CalendarSettingsView, DebugSettingsView, DockSettingsView, ModuleStatusView,
-    SettingsSnapshot, SettingsTab, SettingsUiState,
+    SettingsSnapshot, SettingsTab, SettingsUiState, SysMonitorSettingsView,
 };
 use asrbox_mod_widgets::{
-    parse_ics_bytes, parse_widget_config, render_calendar_widget, serialize_widget_config,
-    CalendarWidgetConfig, DateFormatMode, DisplayRow, IcsDateTime, ParseOptions, PeriodFilter,
-    RenderView, WidgetHitTarget,
+    parse_ics_bytes, parse_sysmon_config, parse_widget_config, render_calendar_widget,
+    render_sysmon_widget, serialize_sysmon_config, serialize_widget_config, CalendarWidgetConfig,
+    DateFormatMode, DisplayRow, IcsDateTime, ParseOptions, PeriodFilter, RenderView, SysHitTarget,
+    SysMonitorConfig, SysRenderInput, WidgetHitTarget,
 };
-use asrbox_platform_api::{LocalDateTime, ProcessMetrics, WidgetLayer};
+use asrbox_platform_api::{LocalDateTime, ProcessMetrics, SysTelemetry, WidgetLayer};
 
 pub fn run_selftest(app_version: &str) -> Result<(), String> {
     selftest_core()?;
@@ -140,6 +141,31 @@ fn selftest_widgets() -> Result<(), String> {
     if parse_widget_config(&serialize_widget_config(&cfg)) != cfg {
         return Err("widget config roundtrip mismatch".to_owned());
     }
+    let sys_cfg = SysMonitorConfig::default();
+    if parse_sysmon_config(&serialize_sysmon_config(&sys_cfg)) != sys_cfg {
+        return Err("sysmon config roundtrip mismatch".to_owned());
+    }
+    let now = LocalDateTime {
+        year: 2026,
+        month: 11,
+        day: 23,
+        hour: 4,
+        minute: 20,
+        second: 0,
+        utc_offset_min: 180,
+    };
+    let sframe = render_sysmon_widget(&SysRenderInput {
+        width: sys_cfg.width,
+        height: sys_cfg.height,
+        opacity_percent: sys_cfg.opacity_percent,
+        refresh_ms: sys_cfg.refresh_interval_ms,
+        now,
+        data: &SysTelemetry::default(),
+        hovered: SysHitTarget::None,
+    });
+    if sframe.bgra.pixels.is_empty() || sframe.texts.is_empty() {
+        return Err("sysmon widget frame render failed".to_owned());
+    }
     Ok(())
 }
 
@@ -169,9 +195,18 @@ fn selftest_settings(app_version: &str) -> Result<(), String> {
             opacity_percent: 88,
             layer: WidgetLayer::Wallpaper,
             period_index: 2,
+            width: 336,
             visible_rows: 8,
             commented_calendar_hint: true,
             sources: vec![],
+        },
+        sysmon: SysMonitorSettingsView {
+            visible: true,
+            opacity_percent: 88,
+            layer: WidgetLayer::Wallpaper,
+            refresh_interval_ms: 2000,
+            width: 560,
+            height: 492,
         },
         debug: DebugSettingsView {
             verbose: false,

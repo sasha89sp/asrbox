@@ -6,6 +6,8 @@ pub enum SupervisorCmd {
     RemoveDock(u64),
     ToggleCalendar,
     RefreshCalendar,
+    ToggleSysMonitor,
+    RefreshSysMonitor,
     Shutdown,
 }
 
@@ -46,6 +48,8 @@ pub fn encode_supervisor_cmd(cmd: &SupervisorCmd) -> String {
         SupervisorCmd::RemoveDock(id) => format!("REMOVE_DOCK|{id}"),
         SupervisorCmd::ToggleCalendar => "TOGGLE_CALENDAR".to_owned(),
         SupervisorCmd::RefreshCalendar => "REFRESH_CALENDAR".to_owned(),
+        SupervisorCmd::ToggleSysMonitor => "TOGGLE_SYSMON".to_owned(),
+        SupervisorCmd::RefreshSysMonitor => "REFRESH_SYSMON".to_owned(),
         SupervisorCmd::Shutdown => "SHUTDOWN".to_owned(),
     }
 }
@@ -63,6 +67,12 @@ pub fn decode_supervisor_cmd(line: &str) -> Option<SupervisorCmd> {
     }
     if t == "REFRESH_CALENDAR" {
         return Some(SupervisorCmd::RefreshCalendar);
+    }
+    if t == "TOGGLE_SYSMON" {
+        return Some(SupervisorCmd::ToggleSysMonitor);
+    }
+    if t == "REFRESH_SYSMON" {
+        return Some(SupervisorCmd::RefreshSysMonitor);
     }
     if t == "SHUTDOWN" {
         return Some(SupervisorCmd::Shutdown);
@@ -165,6 +175,8 @@ mod tests {
             SupervisorCmd::RemoveDock(2),
             SupervisorCmd::ToggleCalendar,
             SupervisorCmd::RefreshCalendar,
+            SupervisorCmd::ToggleSysMonitor,
+            SupervisorCmd::RefreshSysMonitor,
             SupervisorCmd::Shutdown,
         ];
         for c in cmds {

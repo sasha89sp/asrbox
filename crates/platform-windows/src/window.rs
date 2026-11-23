@@ -20,6 +20,7 @@ use crate::http::{drain_http_results, WM_HTTP_DONE};
 use crate::metrics::ProcessMetricsSampler;
 use crate::query_primary_work_area;
 use crate::settings_proc::settings_wnd_proc;
+use crate::sys_telemetry::{drain_telemetry_results, WM_TELEMETRY_DONE};
 use crate::tools_proc::{about_wnd_proc, debug_wnd_proc};
 use crate::tools_win::ToolsWinState;
 use crate::tray::{TrayIconHandle, WM_TRAYICON};
@@ -265,6 +266,14 @@ unsafe extern "system" fn host_wnd_proc(
         WM_HTTP_DONE => {
             for (request_id, result) in drain_http_results() {
                 push_event(PlatformEvent::HttpFetchDone { request_id, result });
+            }
+            LRESULT(0)
+        }
+        WM_TELEMETRY_DONE => {
+            for snap in drain_telemetry_results() {
+                push_event(PlatformEvent::SysTelemetryReady {
+                    snapshot: Box::new(snap),
+                });
             }
             LRESULT(0)
         }

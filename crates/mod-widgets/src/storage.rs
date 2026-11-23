@@ -173,8 +173,8 @@ pub fn parse_widget_config(raw: &str) -> CalendarWidgetConfig {
         apply_kv(&mut cfg, k.trim(), v.trim());
     }
     cfg.commented_calendar_hint = cfg.sources.is_empty() && saw_commented_real_url;
-    cfg.visible_rows = cfg.visible_rows.clamp(3, 12);
-    cfg.width = cfg.width.clamp(280, 560);
+    cfg.visible_rows = cfg.visible_rows.clamp(3, 16);
+    cfg.width = cfg.width.clamp(280, 860);
     cfg.opacity_percent = cfg
         .opacity_percent
         .clamp(MIN_OPACITY_PERCENT, MAX_OPACITY_PERCENT);

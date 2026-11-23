@@ -7,15 +7,17 @@ pub enum SettingsTab {
     Modules,
     Dock,
     Calendar,
+    SysMonitor,
     Debug,
     About,
 }
 
 impl SettingsTab {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Modules,
         Self::Dock,
         Self::Calendar,
+        Self::SysMonitor,
         Self::Debug,
         Self::About,
     ];
@@ -25,6 +27,7 @@ impl SettingsTab {
             Self::Modules => "Модули",
             Self::Dock => "Док-панели",
             Self::Calendar => "Google Календарь",
+            Self::SysMonitor => "Системный монитор",
             Self::Debug => "Диагностика",
             Self::About => "О программе",
         }
@@ -35,6 +38,7 @@ impl SettingsTab {
             Self::Modules => "◈",
             Self::Dock => "▭",
             Self::Calendar => "▦",
+            Self::SysMonitor => "▤",
             Self::Debug => "◉",
             Self::About => "ⓘ",
         }
@@ -75,9 +79,20 @@ pub struct CalendarSettingsView {
     pub opacity_percent: u8,
     pub layer: WidgetLayer,
     pub period_index: u8,
+    pub width: u32,
     pub visible_rows: u8,
     pub commented_calendar_hint: bool,
     pub sources: Vec<CalendarSourceView>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SysMonitorSettingsView {
+    pub visible: bool,
+    pub opacity_percent: u8,
+    pub layer: WidgetLayer,
+    pub refresh_interval_ms: u32,
+    pub width: u32,
+    pub height: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -101,6 +116,7 @@ pub struct SettingsSnapshot {
     pub modules: Vec<ModuleStatusView>,
     pub docks: Vec<DockSettingsView>,
     pub calendar: CalendarSettingsView,
+    pub sysmon: SysMonitorSettingsView,
     pub debug: DebugSettingsView,
     pub about: AboutSettingsView,
 }
@@ -124,12 +140,23 @@ pub enum SettingsAction {
     SetCalendarOpacity(u8),
     SetCalendarLayer(WidgetLayer),
     SetCalendarPeriod(u8),
+    SetCalendarWidth(u32),
     SetCalendarRows(u8),
+    MatchCalendarToSysMonitor,
     AddCalendarUrlFromInput,
     RemoveCalendarSource(usize),
     UncommentCalendarSources,
     RefreshCalendarNow,
     OpenWidgetsConfig,
+    SetSysMonitorVisible(bool),
+    SetSysMonitorOpacity(u8),
+    SetSysMonitorLayer(WidgetLayer),
+    SetSysMonitorRefreshMs(u32),
+    SetSysMonitorWidth(u32),
+    SetSysMonitorHeight(u32),
+    MatchSysMonitorToCalendar,
+    RefreshSysMonitorNow,
+    OpenSysMonitorConfig,
     SetDebugVerbose(bool),
     SetDebugFileLog(bool),
     OpenDebugWindow,
@@ -142,15 +169,22 @@ pub enum SliderKind {
     DockIconSize,
     DockOpacity,
     CalendarOpacity,
+    CalendarWidth,
     CalendarRows,
+    SysMonitorOpacity,
+    SysMonitorWidth,
+    SysMonitorHeight,
 }
 
 impl SliderKind {
     pub fn range(self) -> (u32, u32) {
         match self {
             Self::DockIconSize => (24, 128),
-            Self::DockOpacity | Self::CalendarOpacity => (20, 100),
-            Self::CalendarRows => (3, 12),
+            Self::DockOpacity | Self::CalendarOpacity | Self::SysMonitorOpacity => (20, 100),
+            Self::CalendarWidth => (280, 860),
+            Self::CalendarRows => (3, 16),
+            Self::SysMonitorWidth => (440, 900),
+            Self::SysMonitorHeight => (380, 780),
         }
     }
 }

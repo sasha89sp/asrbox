@@ -2,17 +2,19 @@ use std::path::PathBuf;
 
 use asrbox_platform_api::{
     HttpFetchResult, PixelPoint, PixelRect, WidgetLayer, WidgetMenuAction, WidgetMenuState,
-    WidgetPlatform,
+    WidgetPlatform, WidgetSizeBounds,
 };
 
 use crate::calendar_view::{
-    build_calendar_frame, build_display_rows, clamp_scroll_offset, evaluate_http_response,
-    filter_events, format_status_summary, tooltip_for_target, CalendarState, HttpEval,
+    build_calendar_frame, build_display_rows, clamp_scroll_offset, filter_events,
+    format_status_summary, tooltip_for_target, CalendarState,
 };
 use crate::format::event_day_url;
-use crate::render::{hit_test_widget, widget_height, WidgetHitTarget, HEADER_HEIGHT};
+use crate::render::{
+    hit_test_widget, rows_for_height, widget_height, WidgetHitTarget, HEADER_HEIGHT,
+};
 use crate::storage::{
-    load_widget_config, save_cached_ics, save_widget_config, CalendarWidgetConfig, DateFormatMode,
+    load_widget_config, save_widget_config, CalendarWidgetConfig, DateFormatMode,
     MAX_OPACITY_PERCENT, MIN_OPACITY_PERCENT,
 };
 
@@ -51,12 +53,9 @@ impl CalendarWidget {
     }
 
     pub fn status_summary(&self) -> String {
-        format_status_summary(
-            &self.config,
-            self.st.all_events.len(),
-            self.st.pending_requests.len(),
-            self.st.status_error.as_deref(),
-        )
+        let n = self.st.all_events.len();
+        let p = self.st.pending_requests.len();
+        format_status_summary(&self.config, n, p, self.st.status_error.as_deref())
     }
 
     pub fn sync_window(
@@ -64,19 +63,25 @@ impl CalendarWidget {
         host: &mut dyn WidgetPlatform,
         safe_mode: bool,
     ) -> Result<(), String> {
-        let show = !safe_mode && self.config.visible;
-        if show {
+        if !safe_mode && self.config.visible {
             let now = host.local_time_now();
             self.st.reparse(&self.config, now);
             if !self.window_open {
-                let rect = self.window_rect();
+                let r = self.window_rect();
                 host.create_widget_window(
                     CALENDAR_WIDGET_ID,
                     &self.config.title,
-                    rect,
+                    r,
                     self.config.layer,
                     HEADER_HEIGHT,
                 )?;
+                let b = WidgetSizeBounds {
+                    min_w: 280,
+                    min_h: widget_height(3),
+                    max_w: 860,
+                    max_h: widget_height(16),
+                };
+                let _ = host.set_widget_resize_bounds(CALENDAR_WIDGET_ID, b);
                 self.window_open = true;
             }
             self.sync_timers(host);
@@ -105,24 +110,24 @@ impl CalendarWidget {
     }
 
     pub fn on_pointer_move(&mut self, host: &mut dyn WidgetPlatform, point: PixelPoint) {
-        let target = hit_test_widget(
-            point,
+        let (w, rows, shown) = (
             self.config.width,
             self.config.visible_rows,
             self.st.shown_row_count,
         );
+        let target = hit_test_widget(point, w, rows, shown);
         if target == self.st.hovered {
             return;
         }
         self.st.hovered = target;
         let now = host.local_time_now();
-        let rows = build_display_rows(
+        let disp = build_display_rows(
             &self.st.all_events,
             &self.config,
             now,
             self.st.scroll_offset,
         );
-        let tip = tooltip_for_target(target, &rows);
+        let tip = tooltip_for_target(target, &disp);
         if tip != self.st.last_tooltip {
             let _ = host.set_widget_tooltip(CALENDAR_WIDGET_ID, tip.as_deref());
             self.st.last_tooltip = tip;
@@ -131,9 +136,8 @@ impl CalendarWidget {
     }
 
     pub fn on_pointer_leave(&mut self, host: &mut dyn WidgetPlatform) {
-        if self.st.last_tooltip.is_some() {
+        if self.st.last_tooltip.take().is_some() {
             let _ = host.set_widget_tooltip(CALENDAR_WIDGET_ID, None);
-            self.st.last_tooltip = None;
         }
         if self.st.hovered != WidgetHitTarget::None {
             self.st.hovered = WidgetHitTarget::None;
@@ -144,16 +148,18 @@ impl CalendarWidget {
     pub fn on_left_click(&mut self, host: &mut dyn WidgetPlatform, point: PixelPoint) -> String {
         let now = host.local_time_now();
         let filtered = filter_events(&self.st.all_events, &self.config, now);
-        let max_rows = usize::from(self.config.visible_rows);
         let shown = filtered
             .len()
             .saturating_sub(self.st.scroll_offset)
-            .min(max_rows);
-        let hit = hit_test_widget(point, self.config.width, self.config.visible_rows, shown);
-        match hit {
-            WidgetHitTarget::TitleLink => self.open_url_log(host, GOOGLE_CAL_HOME, "title"),
+            .min(usize::from(self.config.visible_rows));
+        match hit_test_widget(point, self.config.width, self.config.visible_rows, shown) {
+            WidgetHitTarget::TitleLink => {
+                let _ = host.open_url(GOOGLE_CAL_HOME);
+                "click: title".to_owned()
+            }
             WidgetHitTarget::AddEventBtn => {
-                self.open_url_log(host, GOOGLE_CAL_NEW_EVENT, "add event")
+                let _ = host.open_url(GOOGLE_CAL_NEW_EVENT);
+                "click: add event".to_owned()
             }
             WidgetHitTarget::SettingsBtn => "open_settings".to_owned(),
             WidgetHitTarget::RefreshBtn => self.reload_config_and_refresh(host),
@@ -193,6 +199,7 @@ impl CalendarWidget {
         let state = WidgetMenuState {
             layer: self.config.layer,
             opacity_percent: self.config.opacity_percent,
+            refresh_ms: None,
         };
         let Ok(Some(action)) = host.show_widget_menu(CALENDAR_WIDGET_ID, screen, &state) else {
             return String::new();
@@ -200,7 +207,10 @@ impl CalendarWidget {
         match action {
             WidgetMenuAction::Refresh => self.reload_config_and_refresh(host),
             WidgetMenuAction::OpenSettings => "open_settings".to_owned(),
-            WidgetMenuAction::OpenConfig => self.open_cfg_log(host, "menu"),
+            WidgetMenuAction::OpenConfig => match self.open_config_file(host) {
+                Ok(()) => "menu: open widgets.cfg".to_owned(),
+                Err(err) => format!("error: open widgets.cfg failed: {err}"),
+            },
             WidgetMenuAction::SetLayerWallpaper => self.set_layer(host, WidgetLayer::Wallpaper),
             WidgetMenuAction::SetLayerNormal => self.set_layer(host, WidgetLayer::Normal),
             WidgetMenuAction::SetLayerTopmost => self.set_layer(host, WidgetLayer::Topmost),
@@ -216,6 +226,7 @@ impl CalendarWidget {
                 let _ = self.sync_window(host, false);
                 "widget hidden".to_owned()
             }
+            WidgetMenuAction::SetRefreshMs(_) => String::new(),
         }
     }
 
@@ -227,6 +238,25 @@ impl CalendarWidget {
         if self.config.x != x || self.config.y != y {
             self.config.x = x;
             self.config.y = y;
+            self.persist();
+        }
+    }
+
+    pub fn on_resized(
+        &mut self,
+        host: &mut dyn WidgetPlatform,
+        x: i32,
+        y: i32,
+        width: u32,
+        height: u32,
+        finished: bool,
+    ) {
+        self.config.x = x;
+        self.config.y = y;
+        self.config.width = width.clamp(280, 860);
+        self.config.visible_rows = rows_for_height(height);
+        self.redraw(host);
+        if finished {
             self.persist();
         }
     }
@@ -249,46 +279,14 @@ impl CalendarWidget {
         request_id: u64,
         result: HttpFetchResult,
     ) -> Option<(bool, String)> {
-        let source_id = self.st.pending_requests.remove(&request_id)?;
-        let out = match evaluate_http_response(&source_id, result) {
-            HttpEval::Err {
-                status_err,
-                log_msg,
-            } => {
-                self.st.status_error = Some(status_err);
-                (true, log_msg)
-            }
-            HttpEval::Ok(body) => {
-                let bytes_len = body.len();
-                let _ = save_cached_ics(&self.cache_dir, &source_id, &body);
-                self.st.cached_by_source.insert(source_id.clone(), body);
-                let now = host.local_time_now();
-                self.st.last_updated = Some(format!("{:02}:{:02}", now.hour, now.minute));
-                self.st.status_error = None;
-                self.st.reparse(&self.config, now);
-                let msg = format!(
-                    "http[{source_id}] 200 OK ({bytes_len} B, events={})",
-                    self.st.all_events.len()
-                );
-                (false, msg)
-            }
-        };
+        let now = host.local_time_now();
+        let out =
+            self.st
+                .apply_http_done(&self.config, &self.cache_dir, now, request_id, result)?;
         if self.window_open {
             self.redraw(host);
         }
         Some(out)
-    }
-
-    fn open_url_log(&self, host: &dyn WidgetPlatform, url: &str, tag: &str) -> String {
-        let _ = host.open_url(url);
-        format!("click: {tag}")
-    }
-
-    fn open_cfg_log(&self, host: &dyn WidgetPlatform, tag: &str) -> String {
-        match self.open_config_file(host) {
-            Ok(()) => format!("{tag}: open widgets.cfg"),
-            Err(err) => format!("error: open widgets.cfg failed: {err}"),
-        }
     }
 
     pub fn reload_config_and_refresh(&mut self, host: &mut dyn WidgetPlatform) -> String {
@@ -316,11 +314,8 @@ impl CalendarWidget {
         self.sync_timers(host);
         self.trigger_network_refresh(host);
         self.redraw(host);
-        format!(
-            "reload widgets.cfg: sources={}, opacity={}%",
-            self.config.sources.len(),
-            self.config.opacity_percent
-        )
+        let (s, o) = (self.config.sources.len(), self.config.opacity_percent);
+        format!("reload widgets.cfg: sources={s}, opacity={o}%")
     }
 
     fn trigger_network_refresh(&mut self, host: &mut dyn WidgetPlatform) {

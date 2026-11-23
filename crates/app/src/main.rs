@@ -10,6 +10,8 @@ mod selftest;
 #[cfg(windows)]
 mod settings_ctl;
 #[cfg(windows)]
+mod settings_widgets;
+#[cfg(windows)]
 mod supervisor;
 #[cfg(windows)]
 mod tools;
@@ -17,6 +19,8 @@ mod tools;
 mod worker;
 #[cfg(windows)]
 mod worker_bus;
+#[cfg(windows)]
+mod worker_widgets;
 
 use std::env;
 use std::process::ExitCode;
@@ -35,7 +39,7 @@ use asrbox_mod_dock::{to_dock_point, to_dock_rect, DockEvent, Rect};
 #[cfg(windows)]
 use asrbox_mod_settings::{SettingsTab, SettingsUiState};
 #[cfg(windows)]
-use asrbox_mod_widgets::{CalendarWidget, CALENDAR_WIDGET_ID};
+use asrbox_mod_widgets::{CalendarWidget, SysMonitorWidget, CALENDAR_WIDGET_ID, SYS_WIDGET_ID};
 #[cfg(windows)]
 use asrbox_platform_api::{
     DockPlatform, IconProvider, PlatformEvent, ToolsPlatform, WidgetPlatform,
@@ -143,6 +147,7 @@ pub(crate) struct AppController<I: IconProvider> {
     pub(crate) supervisor: ModuleSupervisor,
     pub(crate) docks: Option<DockManager<I>>,
     pub(crate) calendar: Option<CalendarWidget>,
+    pub(crate) sysmon: Option<SysMonitorWidget>,
     pub(crate) settings_ui: SettingsUiState,
     pub(crate) debug: DebugHub,
     pub(crate) safe_mode: bool,
@@ -168,6 +173,7 @@ impl<I: IconProvider> AppController<I> {
             supervisor,
             docks: None,
             calendar: None,
+            sysmon: None,
             settings_ui: SettingsUiState::default(),
             debug,
             safe_mode,
@@ -216,6 +222,19 @@ impl<I: IconProvider> AppController<I> {
             self.calendar = Some(cal);
         } else if !want_inproc_cal && self.calendar.take().is_some() {
             let _ = host.destroy_widget_window(CALENDAR_WIDGET_ID);
+        }
+        if want_inproc_cal && self.sysmon.is_none() {
+            let mut sys = SysMonitorWidget::load(self.paths.sysmon_cfg.clone());
+            let _ = sys.sync_window(host, self.safe_mode);
+            self.debug.log(
+                now,
+                LogLevel::Info,
+                "widgets",
+                format!("Системный монитор (inproc): {}", sys.status_summary()),
+            );
+            self.sysmon = Some(sys);
+        } else if !want_inproc_cal && self.sysmon.take().is_some() {
+            let _ = host.destroy_widget_window(SYS_WIDGET_ID);
         }
     }
 

@@ -5,6 +5,7 @@ use std::time::Instant;
 use asrbox_core::{IsolationMode, ModuleId, SupervisorCmd, WorkerMsg};
 use asrbox_mod_debug::LogLevel;
 use asrbox_mod_settings::SettingsTab;
+use asrbox_mod_widgets::{CALENDAR_WIDGET_ID, SYS_WIDGET_ID};
 use asrbox_platform_api::{
     DockPlatform, IconProvider, LocalDateTime, PlatformEvent, ToolsPlatform, WidgetPlatform,
 };
@@ -93,6 +94,7 @@ impl<I: IconProvider> AppController<I> {
                 let t = match tab.as_str() {
                     "dock" => SettingsTab::Dock,
                     "calendar" => SettingsTab::Calendar,
+                    "sysmon" => SettingsTab::SysMonitor,
                     _ => SettingsTab::Modules,
                 };
                 self.open_settings_tab(host, t);
@@ -163,16 +165,36 @@ impl<I: IconProvider> AppController<I> {
             let _ = self.supervisor.send_cmd(ModuleId::Widgets, &cmd);
             return;
         }
-        let Some(cal) = self.calendar.as_mut() else {
-            return;
-        };
         match cmd {
             SupervisorCmd::ReloadConfig => {
-                let _ = cal.reload_config_and_refresh(host);
-                let _ = cal.sync_window(host, self.safe_mode);
+                if let Some(cal) = self.calendar.as_mut() {
+                    let _ = cal.reload_config_and_refresh(host);
+                    let _ = cal.sync_window(host, self.safe_mode);
+                }
+                if let Some(sys) = self.sysmon.as_mut() {
+                    let _ = sys.reload_config(host, self.safe_mode);
+                }
             }
-            SupervisorCmd::ToggleCalendar => cal.toggle_visible(host, false),
-            SupervisorCmd::RefreshCalendar => cal.on_refresh_tick(host),
+            SupervisorCmd::ToggleCalendar => {
+                if let Some(cal) = self.calendar.as_mut() {
+                    cal.toggle_visible(host, false);
+                }
+            }
+            SupervisorCmd::RefreshCalendar => {
+                if let Some(cal) = self.calendar.as_mut() {
+                    cal.on_refresh_tick(host);
+                }
+            }
+            SupervisorCmd::ToggleSysMonitor => {
+                if let Some(sys) = self.sysmon.as_mut() {
+                    sys.toggle_visible(host, false);
+                }
+            }
+            SupervisorCmd::RefreshSysMonitor => {
+                if let Some(sys) = self.sysmon.as_mut() {
+                    sys.on_refresh_tick(host);
+                }
+            }
             _ => {}
         }
     }
@@ -194,59 +216,139 @@ impl<I: IconProvider> AppController<I> {
         ev: PlatformEvent,
     ) {
         let t0 = Instant::now();
-        let mut open_settings = false;
+        let mut open_tab: Option<SettingsTab> = None;
         let mut msg_out: Option<(LogLevel, &'static str, String)> = None;
-        {
-            let Some(cal) = self.calendar.as_mut() else {
-                return;
-            };
-            match ev {
-                PlatformEvent::WidgetPointerMove { point, .. } => cal.on_pointer_move(host, point),
-                PlatformEvent::WidgetPointerLeave { .. } => cal.on_pointer_leave(host),
-                PlatformEvent::WidgetLeftClick { point, .. } => {
-                    let m = cal.on_left_click(host, point);
-                    if m == "open_settings" {
-                        open_settings = true;
-                    } else if !m.is_empty() {
-                        msg_out = Some((LogLevel::Info, "widgets", m));
-                    }
+        match ev {
+            PlatformEvent::WidgetPointerMove { widget_id, point } => {
+                match (widget_id, self.calendar.as_mut(), self.sysmon.as_mut()) {
+                    (CALENDAR_WIDGET_ID, Some(c), _) => c.on_pointer_move(host, point),
+                    (SYS_WIDGET_ID, _, Some(s)) => s.on_pointer_move(host, point),
+                    _ => {}
+                }
+            }
+            PlatformEvent::WidgetPointerLeave { widget_id } => {
+                match (widget_id, self.calendar.as_mut(), self.sysmon.as_mut()) {
+                    (CALENDAR_WIDGET_ID, Some(c), _) => c.on_pointer_leave(host),
+                    (SYS_WIDGET_ID, _, Some(s)) => s.on_pointer_leave(host),
+                    _ => {}
+                }
+            }
+            PlatformEvent::WidgetLeftClick { widget_id, point } => {
+                let m = self.click_widget(host, widget_id, point, false);
+                classify_widget_reply(m, &mut open_tab, &mut msg_out);
+                self.record_frame("widgets", t0);
+            }
+            PlatformEvent::WidgetRightClick {
+                widget_id,
+                screen_point,
+            } => {
+                let m = self.click_widget(host, widget_id, screen_point, true);
+                classify_widget_reply(m, &mut open_tab, &mut msg_out);
+            }
+            PlatformEvent::WidgetWheel { widget_id, delta } if widget_id == CALENDAR_WIDGET_ID => {
+                if let Some(c) = self.calendar.as_mut() {
+                    c.on_wheel(host, delta);
                     self.record_frame("widgets", t0);
                 }
-                PlatformEvent::WidgetRightClick { screen_point, .. } => {
-                    let m = cal.on_right_click(host, screen_point);
-                    if m == "open_settings" {
-                        open_settings = true;
-                    } else if !m.is_empty() {
-                        msg_out = Some((LogLevel::Info, "widgets", m));
-                    }
+            }
+            other => self.handle_widget_state_event(host, other, t0, &mut msg_out),
+        }
+        if let Some(tab) = open_tab {
+            self.open_settings_tab(host, tab);
+        }
+        if let Some((lvl, tag, m)) = msg_out {
+            self.debug.log(host.local_time_now(), lvl, tag, m);
+            self.render_settings_ui(host);
+        }
+    }
+
+    fn click_widget<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
+        &mut self,
+        host: &mut H,
+        widget_id: u64,
+        pt: asrbox_platform_api::PixelPoint,
+        right: bool,
+    ) -> String {
+        match (widget_id, self.calendar.as_mut(), self.sysmon.as_mut()) {
+            (CALENDAR_WIDGET_ID, Some(c), _) if right => c.on_right_click(host, pt),
+            (CALENDAR_WIDGET_ID, Some(c), _) => c.on_left_click(host, pt),
+            (SYS_WIDGET_ID, _, Some(s)) if right => s.on_right_click(host, pt),
+            (SYS_WIDGET_ID, _, Some(s)) => s.on_left_click(host, pt),
+            _ => String::new(),
+        }
+    }
+
+    fn handle_widget_state_event<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
+        &mut self,
+        host: &mut H,
+        ev: PlatformEvent,
+        t0: Instant,
+        msg_out: &mut Option<(LogLevel, &'static str, String)>,
+    ) {
+        match ev {
+            PlatformEvent::WidgetMoved { widget_id, x, y } => {
+                match (widget_id, self.calendar.as_mut(), self.sysmon.as_mut()) {
+                    (CALENDAR_WIDGET_ID, Some(c), _) => c.on_moved(x, y),
+                    (SYS_WIDGET_ID, _, Some(s)) => s.on_moved(x, y),
+                    _ => {}
                 }
-                PlatformEvent::WidgetWheel { delta, .. } => {
-                    cal.on_wheel(host, delta);
+            }
+            PlatformEvent::WidgetResized {
+                widget_id,
+                x,
+                y,
+                width,
+                height,
+                finished,
+            } => {
+                match (widget_id, self.calendar.as_mut(), self.sysmon.as_mut()) {
+                    (CALENDAR_WIDGET_ID, Some(c), _) => {
+                        c.on_resized(host, x, y, width, height, finished);
+                    }
+                    (SYS_WIDGET_ID, _, Some(s)) => {
+                        s.on_resized(host, x, y, width, height, finished);
+                    }
+                    _ => {}
+                }
+                if finished {
+                    self.render_settings_ui(host);
+                }
+                self.record_frame("widgets", t0);
+            }
+            PlatformEvent::WidgetMinuteTick {
+                widget_id: CALENDAR_WIDGET_ID,
+            } => {
+                if let Some(c) = self.calendar.as_mut() {
+                    c.on_minute_tick(host);
+                }
+            }
+            PlatformEvent::WidgetRefreshTick { widget_id } => {
+                match (widget_id, self.calendar.as_mut(), self.sysmon.as_mut()) {
+                    (CALENDAR_WIDGET_ID, Some(c), _) => c.on_refresh_tick(host),
+                    (SYS_WIDGET_ID, _, Some(s)) => s.on_refresh_tick(host),
+                    _ => {}
+                }
+            }
+            PlatformEvent::SysTelemetryReady { snapshot } => {
+                if let Some(s) = self.sysmon.as_mut() {
+                    s.on_telemetry_ready(host, *snapshot);
                     self.record_frame("widgets", t0);
                 }
-                PlatformEvent::WidgetMoved { x, y, .. } => cal.on_moved(x, y),
-                PlatformEvent::WidgetMinuteTick { .. } => cal.on_minute_tick(host),
-                PlatformEvent::WidgetRefreshTick { .. } => cal.on_refresh_tick(host),
-                PlatformEvent::HttpFetchDone { request_id, result } => {
-                    if let Some((is_err, m)) = cal.on_http_done(host, request_id, result) {
+            }
+            PlatformEvent::HttpFetchDone { request_id, result } => {
+                if let Some(c) = self.calendar.as_mut() {
+                    if let Some((is_err, m)) = c.on_http_done(host, request_id, result) {
                         let lvl = if is_err {
                             LogLevel::Error
                         } else {
                             LogLevel::Info
                         };
-                        msg_out = Some((lvl, "http", m));
+                        *msg_out = Some((lvl, "http", m));
                     }
                     self.record_frame("widgets", t0);
                 }
-                _ => {}
             }
-        }
-        if open_settings {
-            self.open_settings_tab(host, SettingsTab::Calendar);
-        }
-        if let Some((lvl, tag, m)) = msg_out {
-            self.debug.log(host.local_time_now(), lvl, tag, m);
-            self.render_settings_ui(host);
+            _ => {}
         }
     }
 
@@ -267,5 +369,25 @@ impl<I: IconProvider> AppController<I> {
             LogLevel::Info
         };
         self.debug.log(host.local_time_now(), lvl, module, msg);
+    }
+}
+
+fn classify_widget_reply(
+    msg: String,
+    open_tab: &mut Option<SettingsTab>,
+    msg_out: &mut Option<(LogLevel, &'static str, String)>,
+) {
+    match msg.as_str() {
+        "" => {}
+        "open_settings" => *open_tab = Some(SettingsTab::Calendar),
+        "open_settings_sysmon" => *open_tab = Some(SettingsTab::SysMonitor),
+        _ => {
+            let lvl = if msg.starts_with("error:") {
+                LogLevel::Error
+            } else {
+                LogLevel::Info
+            };
+            *msg_out = Some((lvl, "widgets", msg));
+        }
     }
 }

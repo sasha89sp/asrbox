@@ -1,6 +1,7 @@
 pub mod draw;
 pub mod layout;
 pub mod layout_cal;
+pub mod layout_sys;
 pub mod layout_tabs;
 pub mod render;
 pub mod types;
@@ -12,6 +13,7 @@ pub use render::render_settings_frame;
 pub use types::{
     AboutSettingsView, CalendarSettingsView, CalendarSourceView, DebugSettingsView,
     DockSettingsView, ModuleStatusView, SettingsAction, SettingsSnapshot, SettingsTab, SliderKind,
+    SysMonitorSettingsView,
 };
 
 use layout::{rect_contains, HitKind, SettingsLayout};
@@ -188,7 +190,11 @@ impl SettingsUiState {
                     })
             }
             SliderKind::CalendarOpacity => Some(SettingsAction::SetCalendarOpacity(val as u8)),
+            SliderKind::CalendarWidth => Some(SettingsAction::SetCalendarWidth(val)),
             SliderKind::CalendarRows => Some(SettingsAction::SetCalendarRows(val as u8)),
+            SliderKind::SysMonitorOpacity => Some(SettingsAction::SetSysMonitorOpacity(val as u8)),
+            SliderKind::SysMonitorWidth => Some(SettingsAction::SetSysMonitorWidth(val)),
+            SliderKind::SysMonitorHeight => Some(SettingsAction::SetSysMonitorHeight(val)),
         }
     }
 }
@@ -231,9 +237,18 @@ mod tests {
                 opacity_percent: 88,
                 layer: WidgetLayer::Wallpaper,
                 period_index: 2,
+                width: 336,
                 visible_rows: 8,
                 commented_calendar_hint: true,
                 sources: vec![],
+            },
+            sysmon: SysMonitorSettingsView {
+                visible: true,
+                opacity_percent: 88,
+                layer: WidgetLayer::Wallpaper,
+                refresh_interval_ms: 2000,
+                width: 560,
+                height: 492,
             },
             debug: DebugSettingsView {
                 verbose: false,

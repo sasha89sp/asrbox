@@ -8,7 +8,6 @@ use std::time::Instant;
 
 use asrbox_core::{decode_supervisor_cmd, encode_worker_msg, ModuleId, SupervisorCmd, WorkerMsg};
 use asrbox_mod_dock::{to_dock_point, to_dock_rect, DockEvent};
-use asrbox_mod_widgets::CalendarWidget;
 use asrbox_platform_api::{DockPlatform, PlatformEvent, ToolsPlatform};
 use asrbox_platform_windows::{
     is_process_alive, wake_host_window, WindowsDockHost, WindowsIconProvider,
@@ -16,6 +15,7 @@ use asrbox_platform_windows::{
 
 use crate::docks::DockManager;
 use crate::tools::resolve_app_paths;
+use crate::worker_widgets::run_widgets_worker;
 use crate::APP_VERSION;
 
 pub fn run_worker(module: ModuleId, parent_pid: u32, safe_mode: bool) -> Result<(), String> {
@@ -213,127 +213,16 @@ fn handle_dock_message(msg: String) {
     });
 }
 
-fn run_widgets_worker(
-    host: &mut WindowsDockHost,
-    cmds: Arc<Mutex<VecDeque<SupervisorCmd>>>,
-    parent_pid: u32,
-    mut safe_mode: bool,
-) -> Result<(), String> {
-    let paths = resolve_app_paths();
-    let mut cal = CalendarWidget::load(paths.widgets_cfg, paths.cache_dir);
-    cal.sync_window(host, safe_mode)?;
-    emit_log(
-        "INFO",
-        "widgets",
-        format!("Календарь (worker): {}", cal.status_summary()),
-    );
-    let mut stats = WorkerStats::new("widgets");
-
-    host.run_event_loop(|platform, ev| {
-        if let PlatformEvent::SupervisorTick = ev {
-            if parent_pid > 0 && !is_process_alive(parent_pid) {
-                platform.request_quit();
-                return;
-            }
-            for cmd in drain_cmds(&cmds) {
-                match cmd {
-                    SupervisorCmd::ReloadConfig => {
-                        let _ = cal.reload_config_and_refresh(platform);
-                        let _ = cal.sync_window(platform, safe_mode);
-                        emit_log(
-                            "INFO",
-                            "widgets",
-                            format!("Перечитан widgets.cfg: {}", cal.status_summary()),
-                        );
-                    }
-                    SupervisorCmd::ToggleCalendar => {
-                        safe_mode = false;
-                        cal.toggle_visible(platform, false);
-                        emit_msg(&WorkerMsg::ConfigChanged {
-                            module: "widgets".to_owned(),
-                        });
-                    }
-                    SupervisorCmd::RefreshCalendar => {
-                        cal.on_refresh_tick(platform);
-                        emit_log("INFO", "http", "Ручное обновление .ics".to_owned());
-                    }
-                    SupervisorCmd::Shutdown => platform.request_quit(),
-                    _ => {}
-                }
-            }
-            stats.maybe_emit(platform);
-            return;
-        }
-        handle_widget_worker_event(platform, &mut cal, &mut stats, ev);
-    });
-    Ok(())
-}
-
-fn handle_widget_worker_event(
-    host: &mut WindowsDockHost,
-    cal: &mut CalendarWidget,
-    stats: &mut WorkerStats,
-    ev: PlatformEvent,
-) {
-    let t0 = Instant::now();
-    stats.events += 1;
-    match ev {
-        PlatformEvent::WidgetPointerMove { point, .. } => cal.on_pointer_move(host, point),
-        PlatformEvent::WidgetPointerLeave { .. } => cal.on_pointer_leave(host),
-        PlatformEvent::WidgetLeftClick { point, .. } => {
-            let msg = cal.on_left_click(host, point);
-            route_widget_msg(msg);
-            stats.record_frame(t0);
-        }
-        PlatformEvent::WidgetRightClick { screen_point, .. } => {
-            let msg = cal.on_right_click(host, screen_point);
-            route_widget_msg(msg);
-        }
-        PlatformEvent::WidgetWheel { delta, .. } => {
-            cal.on_wheel(host, delta);
-            stats.record_frame(t0);
-        }
-        PlatformEvent::WidgetMoved { x, y, .. } => cal.on_moved(x, y),
-        PlatformEvent::WidgetMinuteTick { .. } => cal.on_minute_tick(host),
-        PlatformEvent::WidgetRefreshTick { .. } => cal.on_refresh_tick(host),
-        PlatformEvent::HttpFetchDone { request_id, result } => {
-            if let Some((is_err, msg)) = cal.on_http_done(host, request_id, result) {
-                emit_log(if is_err { "ERROR" } else { "INFO" }, "http", msg);
-            }
-            stats.record_frame(t0);
-        }
-        _ => {}
-    }
-}
-
-fn route_widget_msg(msg: String) {
-    if msg == "open_settings" {
-        emit_msg(&WorkerMsg::OpenSettings {
-            tab: "calendar".to_owned(),
-        });
-    } else if !msg.is_empty() {
-        let lvl = if msg.starts_with("error:") {
-            "ERROR"
-        } else {
-            "INFO"
-        };
-        emit_log(lvl, "widgets", msg);
-        emit_msg(&WorkerMsg::ConfigChanged {
-            module: "widgets".to_owned(),
-        });
-    }
-}
-
-struct WorkerStats {
+pub(crate) struct WorkerStats {
     module: &'static str,
-    events: u64,
+    pub(crate) events: u64,
     frames: u64,
     max_us: u64,
     last_emit: Instant,
 }
 
 impl WorkerStats {
-    fn new(module: &'static str) -> Self {
+    pub(crate) fn new(module: &'static str) -> Self {
         Self {
             module,
             events: 0,
@@ -343,7 +232,7 @@ impl WorkerStats {
         }
     }
 
-    fn record_frame(&mut self, t0: Instant) {
+    pub(crate) fn record_frame(&mut self, t0: Instant) {
         self.frames += 1;
         let us = u64::try_from(t0.elapsed().as_micros()).unwrap_or(0);
         if us > self.max_us {
@@ -351,7 +240,7 @@ impl WorkerStats {
         }
     }
 
-    fn maybe_emit(&mut self, host: &mut WindowsDockHost) {
+    pub(crate) fn maybe_emit(&mut self, host: &mut WindowsDockHost) {
         if self.last_emit.elapsed().as_secs() < 2 {
             return;
         }
@@ -370,13 +259,13 @@ impl WorkerStats {
     }
 }
 
-fn drain_cmds(q: &Arc<Mutex<VecDeque<SupervisorCmd>>>) -> Vec<SupervisorCmd> {
+pub(crate) fn drain_cmds(q: &Arc<Mutex<VecDeque<SupervisorCmd>>>) -> Vec<SupervisorCmd> {
     q.lock()
         .map(|mut g| g.drain(..).collect())
         .unwrap_or_default()
 }
 
-fn emit_log(level: &str, module: &str, message: String) {
+pub(crate) fn emit_log(level: &str, module: &str, message: String) {
     emit_msg(&WorkerMsg::Log {
         level: level.to_owned(),
         module: module.to_owned(),
@@ -384,7 +273,7 @@ fn emit_log(level: &str, module: &str, message: String) {
     });
 }
 
-fn emit_msg(msg: &WorkerMsg) {
+pub(crate) fn emit_msg(msg: &WorkerMsg) {
     let mut out = io::stdout().lock();
     let _ = writeln!(out, "{}", encode_worker_msg(msg));
     let _ = out.flush();
