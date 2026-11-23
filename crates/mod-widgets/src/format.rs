@@ -4,9 +4,9 @@ use crate::ics::CalendarEvent;
 use crate::rrule::{days_from_civil, weekday_mon0, IcsDateTime};
 use crate::storage::{DateFormatMode, PeriodFilter};
 
-const COLOR_TODAY: [u8; 3] = [52, 211, 153];
-const COLOR_TOMORROW: [u8; 3] = [245, 158, 11];
-const COLOR_LATER: [u8; 3] = [59, 130, 246];
+const COLOR_TODAY: [u8; 3] = [232, 122, 72];
+const COLOR_TOMORROW: [u8; 3] = [104, 199, 148];
+const COLOR_LATER: [u8; 3] = [100, 168, 240];
 
 pub fn local_now_as_ics(now: LocalDateTime) -> IcsDateTime {
     IcsDateTime::date_time(now.year, now.month, now.day, now.hour, now.minute)
@@ -19,8 +19,8 @@ pub fn event_matches_period(
     lookahead_days: u16,
 ) -> bool {
     let today_day = days_from_civil(now.year, now.month, now.day);
-    let now_min = local_now_as_ics(now).to_epoch_min();
-    if ev.end.to_epoch_min() <= now_min {
+    let today_start_min = today_day * 1440;
+    if ev.end.to_epoch_min() <= today_start_min {
         return false;
     }
     let max_days = match period {
@@ -122,6 +122,13 @@ fn format_countdown(ev: &CalendarEvent, now: LocalDateTime) -> String {
     let now_min = local_now_as_ics(now).to_epoch_min();
     let start_min = ev.start.to_epoch_min();
     let end_min = ev.end.to_epoch_min();
+    if now_min >= end_min {
+        return if ev.all_day {
+            "завершено · весь день".to_owned()
+        } else {
+            format!("завершено · {:02}:{:02}", ev.start.hour, ev.start.minute)
+        };
+    }
     if now_min >= start_min && now_min < end_min {
         if ev.all_day {
             return "идёт сейчас (весь день)".to_owned();
@@ -210,6 +217,55 @@ mod tests {
         assert_eq!(
             format_event_subtitle(&ev, now, DateFormatMode::Countdown),
             "через 45 мин"
+        );
+    }
+
+    #[test]
+    fn includes_passed_events_from_today() {
+        let now = LocalDateTime {
+            year: 2026,
+            month: 11,
+            day: 23,
+            hour: 15,
+            minute: 30,
+            second: 0,
+            utc_offset_min: 180,
+        };
+        let passed_today = CalendarEvent {
+            uid: "past".to_owned(),
+            calendar_id: "main".to_owned(),
+            summary: "Утренний созвон".to_owned(),
+            description: String::new(),
+            start: IcsDateTime::date_time(2026, 11, 23, 9, 0),
+            end: IcsDateTime::date_time(2026, 11, 23, 10, 0),
+            all_day: false,
+            custom_color: None,
+        };
+        let yesterday = CalendarEvent {
+            uid: "yest".to_owned(),
+            calendar_id: "main".to_owned(),
+            summary: "Вчера".to_owned(),
+            description: String::new(),
+            start: IcsDateTime::date_time(2026, 11, 22, 18, 0),
+            end: IcsDateTime::date_time(2026, 11, 22, 19, 0),
+            all_day: false,
+            custom_color: None,
+        };
+        assert!(event_matches_period(
+            &passed_today,
+            now,
+            PeriodFilter::Today,
+            30
+        ));
+        assert!(!event_matches_period(
+            &yesterday,
+            now,
+            PeriodFilter::Today,
+            30
+        ));
+        assert_eq!(
+            format_event_subtitle(&passed_today, now, DateFormatMode::Countdown),
+            "завершено · 09:00"
         );
     }
 }

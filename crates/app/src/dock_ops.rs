@@ -99,6 +99,7 @@ impl<I: IconProvider> DockManager<I> {
                         let _ = host.set_animation_timer(id, false);
                     }
                     if dock.window_open {
+                        let _ = host.set_dock_layer(id, dock.instance.config().layer);
                         let _ = present_dock(host, dock, self.drag.overlay_for(dock));
                     }
                     self.persist();

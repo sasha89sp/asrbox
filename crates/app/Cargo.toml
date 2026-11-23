@@ -7,9 +7,11 @@ publish.workspace = true
 [dependencies]
 asrbox-core = { path = "../core" }
 asrbox-mod-about = { path = "../mod-about" }
+asrbox-mod-backup = { path = "../mod-backup" }
 asrbox-mod-debug = { path = "../mod-debug" }
 asrbox-mod-dock = { path = "../mod-dock" }
 asrbox-mod-settings = { path = "../mod-settings" }
+asrbox-mod-webdav = { path = "../mod-webdav" }
 asrbox-mod-widgets = { path = "../mod-widgets" }
 asrbox-platform-api = { path = "../platform-api" }
 asrbox-platform-windows = { path = "../platform-windows" }

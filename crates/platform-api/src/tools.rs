@@ -39,6 +39,21 @@ pub enum SettingsUiEvent {
     Closed,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct SettingsInputRects {
+    pub primary: Option<PixelRect>,
+    pub secret: Option<PixelRect>,
+    pub extra: Option<PixelRect>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WebDavResult {
+    pub op_id: u64,
+    pub ok: bool,
+    pub status_code: u16,
+    pub message: String,
+}
+
 pub trait ToolsPlatform {
     fn open_debug_window(&mut self, title: &str) -> Result<(), String>;
 
@@ -57,11 +72,11 @@ pub trait ToolsPlatform {
 
     fn open_settings_window(&mut self, title: &str, width: u32, height: u32) -> Result<(), String>;
 
-    fn present_settings_frame(&mut self, frame: &WidgetFrame, url_box_rect: Option<PixelRect>);
+    fn present_settings_frame(&mut self, frame: &WidgetFrame, inputs: SettingsInputRects);
 
-    fn settings_url_input_text(&self) -> String;
+    fn settings_input_text(&self, slot: u8) -> String;
 
-    fn set_settings_url_input_text(&self, text: &str);
+    fn set_settings_input_text(&self, slot: u8, text: &str);
 
     fn is_settings_window_open(&self) -> bool;
 
@@ -72,4 +87,29 @@ pub trait ToolsPlatform {
     fn open_folder(&self, path: &Path) -> Result<(), String>;
 
     fn open_text_file(&self, path: &Path) -> Result<(), String>;
+
+    fn is_autostart_enabled(&self) -> bool;
+
+    fn set_autostart_enabled(&self, enabled: bool) -> Result<(), String>;
+
+    fn cred_save(&self, target: &str, user: &str, secret: &str) -> Result<(), String>;
+
+    fn cred_load(&self, target: &str) -> Result<Option<(String, String)>, String>;
+
+    fn cred_delete(&self, target: &str) -> Result<(), String>;
+
+    fn webdav_test(&self, op_id: u64, base_url: &str, user: &str, pass: &str)
+        -> Result<(), String>;
+
+    #[allow(clippy::too_many_arguments)]
+    fn webdav_upload(
+        &self,
+        op_id: u64,
+        base_url: &str,
+        remote_dir: &str,
+        remote_name: &str,
+        local_path: &Path,
+        user: &str,
+        pass: &str,
+    ) -> Result<(), String>;
 }

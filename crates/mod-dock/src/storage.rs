@@ -1,6 +1,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use asrbox_platform_api::WidgetLayer;
+
 use crate::config::{
     DockAlignment, DockConfig, DockEdge, DockItem, DockItemKind, HoverZoomConfig, HoverZoomMode,
     IconSource, MAX_DOCK_OPACITY, MIN_DOCK_OPACITY,
@@ -21,6 +23,7 @@ pub fn serialize_docks(docks: &[DockConfig], app_version: &str) -> String {
         out.push_str(&format!("name={}\n", escape_field(&dock.name)));
         out.push_str(&format!("enabled={}\n", dock.enabled));
         out.push_str(&format!("locked={}\n", dock.locked));
+        out.push_str(&format!("layer={}\n", layer_to_str(dock.layer)));
         if let Some((x, y)) = dock.free_pos {
             out.push_str(&format!("free_pos={x},{y}\n"));
         }
@@ -123,6 +126,7 @@ fn apply_field(dock: &mut DockConfig, key: &str, val: &str) -> Result<(), String
         "name" => dock.name = unescape_field(val),
         "enabled" => dock.enabled = parse_bool(val),
         "locked" => dock.locked = parse_bool(val),
+        "layer" => dock.layer = str_to_layer(val),
         "free_pos" => {
             if let Some((xs, ys)) = val.split_once(',') {
                 if let (Ok(x), Ok(y)) = (xs.trim().parse::<i32>(), ys.trim().parse::<i32>()) {
@@ -262,6 +266,22 @@ fn str_to_edge(val: &str) -> DockEdge {
     }
 }
 
+fn layer_to_str(layer: WidgetLayer) -> &'static str {
+    match layer {
+        WidgetLayer::Wallpaper => "wallpaper",
+        WidgetLayer::Normal => "normal",
+        WidgetLayer::Topmost => "topmost",
+    }
+}
+
+fn str_to_layer(val: &str) -> WidgetLayer {
+    match val {
+        "normal" => WidgetLayer::Normal,
+        "topmost" => WidgetLayer::Topmost,
+        _ => WidgetLayer::Wallpaper,
+    }
+}
+
 fn alignment_to_str(alignment: DockAlignment) -> String {
     match alignment {
         DockAlignment::Center => "center".to_owned(),
@@ -322,6 +342,7 @@ mod tests {
     fn roundtrip_preserves_new_fields_and_separators() -> Result<(), Box<dyn Error>> {
         let mut first = DockConfig::new(1, "Основная | Панель");
         first.locked = false;
+        first.layer = WidgetLayer::Normal;
         first.free_pos = Some((320, 48));
         first.opacity_percent = 65;
         first.icon_size_px = 54;

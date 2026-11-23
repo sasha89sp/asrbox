@@ -13,7 +13,10 @@ pub use telemetry::{
     CpuTelemetry, DriveTelemetry, GpuTelemetry, NetTelemetry, ProcUsage, RamTelemetry,
     SysTelemetry, WidgetSizeBounds,
 };
-pub use tools::{AboutUiCommand, DebugUiCommand, ProcessMetrics, SettingsUiEvent, ToolsPlatform};
+pub use tools::{
+    AboutUiCommand, DebugUiCommand, ProcessMetrics, SettingsInputRects, SettingsUiEvent,
+    ToolsPlatform, WebDavResult,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct PixelPoint {
@@ -222,6 +225,7 @@ pub enum PlatformEvent {
     DebugCommand(DebugUiCommand),
     AboutCommand(AboutUiCommand),
     SettingsEvent(SettingsUiEvent),
+    WebDavDone(WebDavResult),
     SupervisorTick,
 }
 
@@ -238,6 +242,7 @@ pub trait DockPlatform {
         rect: PixelRect,
     ) -> Result<(), String>;
     fn destroy_dock_window(&mut self, dock_id: u64) -> Result<(), String>;
+    fn set_dock_layer(&mut self, dock_id: u64, layer: WidgetLayer) -> Result<(), String>;
     fn present_dock_frame(
         &mut self,
         dock_id: u64,

@@ -200,6 +200,7 @@ impl CalendarWidget {
             layer: self.config.layer,
             opacity_percent: self.config.opacity_percent,
             refresh_ms: None,
+            sync_interval_sec: Some(self.config.refresh_interval_sec),
         };
         let Ok(Some(action)) = host.show_widget_menu(CALENDAR_WIDGET_ID, screen, &state) else {
             return String::new();
@@ -219,6 +220,12 @@ impl CalendarWidget {
                 self.persist();
                 self.redraw(host);
                 format!("opacity={}%", self.config.opacity_percent)
+            }
+            WidgetMenuAction::SetSyncIntervalSec(sec) => {
+                self.config.refresh_interval_sec = sec.clamp(300, 86_400);
+                self.persist();
+                self.sync_timers(host);
+                format!("sync_interval={}s", self.config.refresh_interval_sec)
             }
             WidgetMenuAction::HideWidget => {
                 self.config.visible = false;

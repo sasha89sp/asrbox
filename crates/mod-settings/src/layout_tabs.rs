@@ -1,5 +1,5 @@
 use asrbox_core::IsolationMode;
-use asrbox_platform_api::PixelRect;
+use asrbox_platform_api::{PixelRect, WidgetLayer};
 
 use crate::layout::{ButtonTone, CardRow, HitKind, LayoutBuilder};
 pub(crate) use crate::layout_cal::build_calendar_tab;
@@ -29,10 +29,14 @@ pub(crate) fn build_modules_tab(b: &mut LayoutBuilder, snap: &SettingsSnapshot) 
         "Отключённые модули не расходуют CPU/RAM; ошибка в одном модуле не роняет остальные",
     );
     let iso_sub = Some("Отдельный процесс для каждого модуля или общий");
+    let auto_sub = Some("Запускать asrbox при входе в систему (HKCU\\...\\Run)");
     let iso_y = b.add_card(
-        Some("РЕЖИМ ЗАПУСКА"),
+        Some("СИСТЕМА И ЗАПУСК"),
         false,
-        vec![row(0, 56, "Изоляция модулей", iso_sub, None, false)],
+        vec![
+            row(0, 56, "Изоляция модулей", iso_sub, None, true),
+            row(56, 54, "Автозагрузка с Windows", auto_sub, None, false),
+        ],
     );
     let is_proc = snap.isolation == IsolationMode::Process;
     b.add_segmented_row(
@@ -50,6 +54,13 @@ pub(crate) fn build_modules_tab(b: &mut LayoutBuilder, snap: &SettingsSnapshot) 
                 SettingsAction::SetIsolation(IsolationMode::InProc),
             ),
         ],
+    );
+    let auto_tx = b.content_x + b.content_w as i32 - 60;
+    b.push_toggle(
+        auto_tx,
+        iso_y + 71,
+        snap.autostart_enabled,
+        SettingsAction::SetAutostart(!snap.autostart_enabled),
     );
     let rows: Vec<CardRow> = snap
         .modules
@@ -126,8 +137,9 @@ pub(crate) fn build_dock_tab(b: &mut LayoutBuilder, snap: &SettingsSnapshot, sel
 fn add_dock_appearance_card(b: &mut LayoutBuilder, d: &DockSettingsView) {
     let rows = vec![
         row(0, 52, "Край экрана", None, None, true),
+        row(52, 52, "Слой отображения", None, None, true),
         row(
-            52,
+            104,
             56,
             "Размер иконок",
             Some("Произвольный размер 24–128 px"),
@@ -135,10 +147,10 @@ fn add_dock_appearance_card(b: &mut LayoutBuilder, d: &DockSettingsView) {
             true,
         ),
         row(
-            108,
+            160,
             56,
             "Прозрачность панели",
-            Some("Видимость стеклянного фона"),
+            Some("Видимость фона панели"),
             Some(format!("{}%", d.opacity_percent)),
             false,
         ),
@@ -158,11 +170,36 @@ fn add_dock_appearance_card(b: &mut LayoutBuilder, d: &DockSettingsView) {
             ("Право", d.edge_index == 3, mk(3)),
         ],
     );
+    let mkl = |layer| SettingsAction::SetDockLayer {
+        dock_id: d.id.clone(),
+        layer,
+    };
+    b.add_segmented_row(
+        cy + 52,
+        52,
+        vec![
+            (
+                "Обои",
+                d.layer == WidgetLayer::Wallpaper,
+                mkl(WidgetLayer::Wallpaper),
+            ),
+            (
+                "Обычный",
+                d.layer == WidgetLayer::Normal,
+                mkl(WidgetLayer::Normal),
+            ),
+            (
+                "Поверх",
+                d.layer == WidgetLayer::Topmost,
+                mkl(WidgetLayer::Topmost),
+            ),
+        ],
+    );
     let sx = b.content_x + b.content_w as i32 - 220;
-    b.push_slider(sx, cy + 68, SliderKind::DockIconSize, d.icon_size_px);
+    b.push_slider(sx, cy + 120, SliderKind::DockIconSize, d.icon_size_px);
     b.push_slider(
         sx,
-        cy + 124,
+        cy + 176,
         SliderKind::DockOpacity,
         u32::from(d.opacity_percent),
     );

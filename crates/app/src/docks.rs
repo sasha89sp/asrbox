@@ -92,6 +92,7 @@ impl<I: IconProvider> DockManager<I> {
                     host.create_dock_window(id, &dock.instance.config().name, rect)?;
                     dock.window_open = true;
                 }
+                let _ = host.set_dock_layer(id, dock.instance.config().layer);
                 present_dock(host, dock, self.drag.overlay_for(dock))?;
             } else if dock.window_open {
                 let _ = host.destroy_dock_window(id);

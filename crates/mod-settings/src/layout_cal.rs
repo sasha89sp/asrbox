@@ -36,7 +36,7 @@ pub(crate) fn build_calendar_tab(b: &mut LayoutBuilder, snap: &SettingsSnapshot)
         vec![row(0, 54, "", None, None, false)],
     );
     let url_w = b.content_w.saturating_sub(156);
-    b.out.url_input_rect = Some(PixelRect {
+    b.out.input_rects.primary = Some(PixelRect {
         x: b.content_x + 12,
         y: b.sy(add_y + 12),
         width: url_w,
@@ -92,8 +92,9 @@ fn add_calendar_display_card(b: &mut LayoutBuilder, c: &CalendarSettingsView) {
         ),
         row(102, 52, "Слой окна", None, None, true),
         row(154, 52, "Период событий", None, None, true),
+        row(206, 52, "Синхронизация", None, None, true),
         row(
-            206,
+            258,
             52,
             "Ширина окна",
             Some("Можно тянуть края виджета на рабочем столе"),
@@ -101,7 +102,7 @@ fn add_calendar_display_card(b: &mut LayoutBuilder, c: &CalendarSettingsView) {
             true,
         ),
         row(
-            258,
+            310,
             52,
             "Видимых строк (высота)",
             None,
@@ -171,10 +172,38 @@ fn add_calendar_display_card(b: &mut LayoutBuilder, c: &CalendarSettingsView) {
             ),
         ],
     );
-    b.push_slider(sx, cy + 220, SliderKind::CalendarWidth, c.width);
+    let s = c.refresh_interval_sec;
+    b.add_segmented_row(
+        cy + 206,
+        52,
+        vec![
+            ("5м", s == 300, SettingsAction::SetCalendarSyncInterval(300)),
+            (
+                "15м",
+                s == 900,
+                SettingsAction::SetCalendarSyncInterval(900),
+            ),
+            (
+                "30м",
+                s == 1800,
+                SettingsAction::SetCalendarSyncInterval(1800),
+            ),
+            (
+                "1ч",
+                s == 3600,
+                SettingsAction::SetCalendarSyncInterval(3600),
+            ),
+            (
+                "3ч",
+                s == 10800,
+                SettingsAction::SetCalendarSyncInterval(10800),
+            ),
+        ],
+    );
+    b.push_slider(sx, cy + 272, SliderKind::CalendarWidth, c.width);
     b.push_slider(
         sx,
-        cy + 272,
+        cy + 324,
         SliderKind::CalendarRows,
         u32::from(c.visible_rows),
     );

@@ -10,6 +10,9 @@ pub struct AppPaths {
     pub docks_cfg: PathBuf,
     pub widgets_cfg: PathBuf,
     pub sysmon_cfg: PathBuf,
+    pub backup_cfg: PathBuf,
+    pub webdav_cfg: PathBuf,
+    pub backups_dir: PathBuf,
     pub cache_dir: PathBuf,
     pub logs_dir: PathBuf,
 }
@@ -27,6 +30,9 @@ impl AppPaths {
             docks_cfg: config_dir.join("docks.cfg"),
             widgets_cfg: config_dir.join("widgets.cfg"),
             sysmon_cfg: config_dir.join("sysmon.cfg"),
+            backup_cfg: config_dir.join("backup.cfg"),
+            webdav_cfg: config_dir.join("webdav.cfg"),
+            backups_dir: data_dir.join("backups"),
             cache_dir: data_dir.join("cache"),
             logs_dir: data_dir.join("logs"),
             data_dir,
@@ -40,9 +46,11 @@ pub fn build_about_text(version: &str, paths: &AppPaths) -> String {
     out.push_str("============================================================\r\n");
     out.push_str("Режим работы: ПОРТАТИВНАЯ СБОРКА (Portable)\r\n");
     out.push_str(
-        "Все настройки, кэш календарей и логи хранятся в папке data рядом с asrbox.exe.\r\n",
+        "Все настройки, кэш, резервные копии и логи хранятся в папке data рядом с asrbox.exe.\r\n",
     );
-    out.push_str("Реестр Windows и системная папка AppData не используются.\r\n");
+    out.push_str(
+        "Автозагрузка (по желанию) пишет 1 ключ HKCU\\...\\Run; пароли WebDAV — в Диспетчере учётных данных Windows.\r\n",
+    );
     out.push_str("При обновлении программы достаточно закрыть asrbox.exe и заменить файл\r\n");
     out.push_str("новой версией в той же папке — все настройки сохраняются автоматически.\r\n\r\n");
 
@@ -66,6 +74,9 @@ pub fn build_paths_clipboard(paths: &AppPaths) -> String {
          Настройки доков  : {}\r\n\
          Настройки календ.: {}\r\n\
          Системн. монитор : {}\r\n\
+         Настройки бэкапа : {}\r\n\
+         Настройки WebDAV : {}\r\n\
+         Папка бэкапов    : {}\r\n\
          Кэш календарей   : {}\r\n\
          Логи и отчёты    : {}\r\n",
         paths.exe_path.display(),
@@ -74,6 +85,9 @@ pub fn build_paths_clipboard(paths: &AppPaths) -> String {
         paths.docks_cfg.display(),
         paths.widgets_cfg.display(),
         paths.sysmon_cfg.display(),
+        paths.backup_cfg.display(),
+        paths.webdav_cfg.display(),
+        paths.backups_dir.display(),
         paths.cache_dir.display(),
         paths.logs_dir.display(),
     )
@@ -89,11 +103,13 @@ mod tests {
             PathBuf::from("D:\\Tools\\asrbox\\asrbox.exe"),
             PathBuf::from("D:\\Tools\\asrbox\\data"),
         );
-        let text = build_about_text("0.0.1", &paths);
-        assert!(text.contains("asrbox v0.0.1"));
+        let text = build_about_text("0.0.2", &paths);
+        assert!(text.contains("asrbox v0.0.2"));
         assert!(text.contains("ПОРТАТИВНАЯ СБОРКА"));
         assert!(text.contains("widgets.cfg"));
         assert!(text.contains("docks.cfg"));
+        assert!(text.contains("backup.cfg"));
+        assert!(text.contains("webdav.cfg"));
         assert!(text.contains("CHANGELOG"));
     }
 }

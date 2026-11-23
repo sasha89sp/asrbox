@@ -12,13 +12,13 @@ use crate::sys_sections::{
 
 pub const SYSMON_HEADER_H: i32 = 34;
 
-pub(crate) const TEXT_BRIGHT: [u8; 4] = [243, 247, 252, 255];
-pub(crate) const TEXT_MAIN: [u8; 4] = [226, 234, 242, 255];
-pub(crate) const TEXT_MUTED: [u8; 4] = [152, 166, 182, 255];
-pub(crate) const TEXT_TAG: [u8; 4] = [148, 164, 180, 210];
-pub(crate) const TEXT_CYAN: [u8; 4] = [122, 212, 255, 255];
-pub(crate) const TEXT_GREEN: [u8; 4] = [110, 224, 152, 255];
-pub(crate) const TEXT_AMBER: [u8; 4] = [248, 188, 92, 255];
+pub(crate) const TEXT_BRIGHT: [u8; 4] = [238, 240, 244, 255];
+pub(crate) const TEXT_MAIN: [u8; 4] = [218, 222, 230, 255];
+pub(crate) const TEXT_MUTED: [u8; 4] = [148, 155, 168, 255];
+pub(crate) const TEXT_TAG: [u8; 4] = [140, 147, 160, 220];
+pub(crate) const TEXT_CYAN: [u8; 4] = [242, 146, 100, 255];
+pub(crate) const TEXT_GREEN: [u8; 4] = [104, 199, 148, 255];
+pub(crate) const TEXT_AMBER: [u8; 4] = [234, 179, 84, 255];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SysHitTarget {

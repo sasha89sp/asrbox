@@ -104,14 +104,14 @@ pub fn stroke_rounded_rect(frame: &mut BgraFrame, rect: PixelRect, radius: i32, 
 pub fn draw_toggle(frame: &mut BgraFrame, rect: PixelRect, on: bool, hovered: bool) {
     let track = if on {
         if hovered {
-            [56, 224, 98, 255]
+            [244, 140, 90, 255]
         } else {
-            [48, 209, 88, 255]
+            [232, 122, 72, 255]
         }
     } else if hovered {
-        [96, 96, 102, 255]
+        [78, 82, 96, 255]
     } else {
-        [72, 72, 78, 255]
+        [56, 59, 70, 255]
     };
     let radius = (rect.height / 2) as i32;
     fill_rounded_rect(frame, rect, radius, track);
@@ -140,7 +140,7 @@ pub fn draw_slider(frame: &mut BgraFrame, rect: PixelRect, ratio: f32, hovered: 
         width: rect.width,
         height: track_h,
     };
-    fill_rounded_rect(frame, track, 2, [68, 68, 74, 255]);
+    fill_rounded_rect(frame, track, 2, [52, 55, 66, 255]);
     let fill_w = ((rect.width as f32) * clamped).round() as u32;
     if fill_w > 0 {
         let filled = PixelRect {
@@ -149,7 +149,7 @@ pub fn draw_slider(frame: &mut BgraFrame, rect: PixelRect, ratio: f32, hovered: 
             width: fill_w.min(rect.width),
             height: track_h,
         };
-        fill_rounded_rect(frame, filled, 2, [10, 132, 255, 255]);
+        fill_rounded_rect(frame, filled, 2, [232, 122, 72, 255]);
     }
     let knob = if hovered { 18u32 } else { 16u32 };
     let travel = rect.width.saturating_sub(knob) as f32;

@@ -7,11 +7,12 @@ use windows::Win32::UI::Shell::{
     Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    AppendMenuW, CreatePopupMenu, DestroyMenu, LoadIconW, PostMessageW, SetForegroundWindow,
-    TrackPopupMenuEx, HMENU, IDI_APPLICATION, MF_CHECKED, MF_GRAYED, MF_POPUP, MF_SEPARATOR,
-    MF_STRING, TPM_NONOTIFY, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_APP, WM_NULL,
+    AppendMenuW, CreatePopupMenu, DestroyMenu, PostMessageW, SetForegroundWindow, TrackPopupMenuEx,
+    HMENU, MF_CHECKED, MF_GRAYED, MF_POPUP, MF_SEPARATOR, MF_STRING, TPM_NONOTIFY, TPM_RETURNCMD,
+    TPM_RIGHTBUTTON, WM_APP, WM_NULL,
 };
 
+use crate::app_icon::small_app_icon;
 use crate::shell::encode_wide_str;
 
 pub(crate) const WM_TRAYICON: u32 = WM_APP + 10;
@@ -30,6 +31,10 @@ const TRAY_REFRESH_CALENDAR: u32 = 1010;
 const TRAY_TOGGLE_SYSMON: u32 = 1011;
 const TRAY_REFRESH_SYSMON: u32 = 1012;
 const TRAY_OPEN_SYSMON_CFG: u32 = 1013;
+const TRAY_TOGGLE_AUTOSTART: u32 = 1014;
+const TRAY_BACKUP_SETTINGS: u32 = 1015;
+const TRAY_BACKUP_FULL: u32 = 1016;
+const TRAY_OPEN_BACKUP_TAB: u32 = 1017;
 const TRAY_TOGGLE_BASE: u32 = 2000;
 const TRAY_REMOVE_BASE: u32 = 3000;
 
@@ -53,9 +58,10 @@ impl TrayIconHandle {
         for (dst, src) in nid.szTip.iter_mut().take(max_len).zip(tip_wide.iter()) {
             *dst = *src;
         }
-        // SAFETY: `hwnd` is a valid UI-thread window; IDI_APPLICATION is a system icon.
+        // SAFETY: `hwnd` is a valid UI-thread window; `small_app_icon()` returns a cached HICON.
         unsafe {
-            if let Ok(icon) = LoadIconW(None, IDI_APPLICATION) {
+            let icon = small_app_icon();
+            if !icon.is_invalid() {
                 nid.hIcon = icon;
             }
             if !Shell_NotifyIconW(NIM_ADD, &nid).as_bool() {
@@ -202,7 +208,40 @@ pub(crate) fn show_tray_context_menu(
             add_submenu(menu, cal_sub, "Модуль: Виджеты");
         }
 
+        if let Ok(bk_sub) = CreatePopupMenu() {
+            add_item(
+                bk_sub,
+                TRAY_BACKUP_SETTINGS,
+                "Бэкап настроек (.zip)",
+                false,
+                true,
+            );
+            add_item(
+                bk_sub,
+                TRAY_BACKUP_FULL,
+                "Бэкап программы + настроек (.zip)",
+                false,
+                true,
+            );
+            add_sep(bk_sub);
+            add_item(
+                bk_sub,
+                TRAY_OPEN_BACKUP_TAB,
+                "Настройки бэкапа и WebDAV...",
+                false,
+                true,
+            );
+            add_submenu(menu, bk_sub, "Модуль: Бэкап и Облако");
+        }
+
         add_sep(menu);
+        add_item(
+            menu,
+            TRAY_TOGGLE_AUTOSTART,
+            "Автозагрузка с Windows",
+            flags.autostart_enabled,
+            true,
+        );
         add_item(
             menu,
             TRAY_OPEN_DEBUG,
@@ -236,6 +275,10 @@ fn decode_tray_command(cmd: u32, docks: &[TrayMenuEntry]) -> Option<TrayAction> 
         TRAY_TOGGLE_SYSMON => Some(TrayAction::ToggleSysMonitorWidget),
         TRAY_REFRESH_SYSMON => Some(TrayAction::RefreshSysMonitorWidget),
         TRAY_OPEN_SYSMON_CFG => Some(TrayAction::OpenSysMonitorConfig),
+        TRAY_BACKUP_SETTINGS => Some(TrayAction::BackupSettingsNow),
+        TRAY_BACKUP_FULL => Some(TrayAction::BackupFullNow),
+        TRAY_OPEN_BACKUP_TAB => Some(TrayAction::OpenBackupTab),
+        TRAY_TOGGLE_AUTOSTART => Some(TrayAction::ToggleAutostart),
         TRAY_OPEN_DEBUG => Some(TrayAction::OpenDebugWindow),
         TRAY_OPEN_ABOUT => Some(TrayAction::OpenAboutWindow),
         TRAY_EXIT => Some(TrayAction::Exit),

@@ -1,7 +1,9 @@
 use std::cell::RefCell;
 use std::ffi::c_void;
 
-use asrbox_platform_api::{BgraFrame, PixelRect, PlatformEvent, SettingsUiEvent, WidgetFrame};
+use asrbox_platform_api::{
+    BgraFrame, PixelRect, PlatformEvent, SettingsInputRects, SettingsUiEvent, WidgetFrame,
+};
 use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
@@ -12,24 +14,28 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture};
 use windows::Win32::UI::WindowsAndMessaging::{
     AdjustWindowRectEx, CreateWindowExW, DefWindowProcW, DestroyWindow, GetClientRect,
     GetWindowTextLengthW, GetWindowTextW, MoveWindow, SendMessageW, ShowWindow, ES_AUTOHSCROLL,
-    MINMAXINFO, SW_HIDE, SW_SHOW, WINDOW_EX_STYLE, WINDOW_STYLE, WM_CLOSE, WM_CTLCOLOREDIT,
-    WM_ERASEBKGND, WM_GETMINMAXINFO, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL,
-    WM_PAINT, WM_SETFONT, WM_SIZE, WS_BORDER, WS_CHILD, WS_OVERLAPPEDWINDOW,
+    ES_PASSWORD, MINMAXINFO, SW_HIDE, SW_SHOW, WINDOW_EX_STYLE, WINDOW_STYLE, WM_CLOSE,
+    WM_CTLCOLOREDIT, WM_ERASEBKGND, WM_GETMINMAXINFO, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
+    WM_MOUSEWHEEL, WM_PAINT, WM_SETFONT, WM_SIZE, WS_BORDER, WS_CHILD, WS_OVERLAPPEDWINDOW,
 };
 
+use crate::app_icon::apply_window_icon;
 use crate::icons::make_top_down_bmi;
 use crate::shell::encode_wide_str;
-use crate::tools_proc::{focus_window, set_window_text};
+use crate::tools_win::{focus_window, set_window_text};
 use crate::widget_text::composite_widget_frame;
 use crate::window::{lparam_point, push_event};
 
 const MIN_CLIENT_W: i32 = 680;
 const MIN_CLIENT_H: i32 = 480;
+// NotePlan dark input surface (#18191E BGR) and crisp light text (#ECEEF2 BGR)
+const EDIT_BG_COLOR: COLORREF = COLORREF(0x001E_1918);
+const EDIT_TEXT_COLOR: COLORREF = COLORREF(0x00F2_EEEC);
 
 #[derive(Default)]
 pub(crate) struct SettingsWinHandle {
     pub hwnd: Option<HWND>,
-    pub url_edit: Option<HWND>,
+    pub edits: [Option<HWND>; 3],
     pub edit_brush: Option<HBRUSH>,
     pub frame: Option<BgraFrame>,
 }
@@ -58,7 +64,7 @@ pub(crate) fn open_or_focus_settings_window(
         right: i32::try_from(width).unwrap_or(840),
         bottom: i32::try_from(height).unwrap_or(580),
     };
-    // SAFETY: Creating resizable top-level settings window and hidden child EDIT control on UI thread.
+    // SAFETY: Creating resizable top-level settings window and hidden child EDIT controls on UI thread.
     unsafe {
         let _ = AdjustWindowRectEx(&mut wr, style, false, WINDOW_EX_STYLE(0));
         let hwnd = CreateWindowExW(
@@ -77,36 +83,15 @@ pub(crate) fn open_or_focus_settings_window(
         )
         .map_err(|e| format!("CreateWindowExW(settings) failed: {e}"))?;
 
-        let edit_style = WS_CHILD | WS_BORDER | WINDOW_STYLE(ES_AUTOHSCROLL as u32);
-        let edit = CreateWindowExW(
-            WINDOW_EX_STYLE(0),
-            w!("EDIT"),
-            w!(""),
-            edit_style,
-            0,
-            0,
-            100,
-            26,
-            Some(hwnd),
-            None,
-            Some(hinstance),
-            None,
-        )
-        .ok();
-        if let Some(eh) = edit {
-            let _ = SendMessageW(
-                eh,
-                WM_SETFONT,
-                Some(WPARAM(ui_font.0 as usize)),
-                Some(LPARAM(1)),
-            );
-            let _ = ShowWindow(eh, SW_HIDE);
-        }
-        let brush = CreateSolidBrush(COLORREF(0x001E_1C1C));
+        apply_window_icon(hwnd);
+        let e0 = make_child_edit(hwnd, hinstance, ui_font, false);
+        let e1 = make_child_edit(hwnd, hinstance, ui_font, true);
+        let e2 = make_child_edit(hwnd, hinstance, ui_font, false);
+        let brush = CreateSolidBrush(EDIT_BG_COLOR);
         SETTINGS_UI.with(|ui| {
             let mut st = ui.borrow_mut();
             st.hwnd = Some(hwnd);
-            st.url_edit = edit;
+            st.edits = [e0, e1, e2];
             st.edit_brush = Some(brush);
             st.frame = None;
         });
@@ -116,24 +101,54 @@ pub(crate) fn open_or_focus_settings_window(
     Ok(())
 }
 
-pub(crate) fn present_settings(frame: &WidgetFrame, url_box_rect: Option<PixelRect>) {
+unsafe fn make_child_edit(
+    parent: HWND,
+    hinstance: HINSTANCE,
+    ui_font: HFONT,
+    password: bool,
+) -> Option<HWND> {
+    let mut raw = (WS_CHILD | WS_BORDER).0 | (ES_AUTOHSCROLL as u32);
+    if password {
+        raw |= ES_PASSWORD as u32;
+    }
+    let eh = CreateWindowExW(
+        WINDOW_EX_STYLE(0),
+        w!("EDIT"),
+        w!(""),
+        WINDOW_STYLE(raw),
+        0,
+        0,
+        100,
+        26,
+        Some(parent),
+        None,
+        Some(hinstance),
+        None,
+    )
+    .ok()?;
+    let _ = SendMessageW(
+        eh,
+        WM_SETFONT,
+        Some(WPARAM(ui_font.0 as usize)),
+        Some(LPARAM(1)),
+    );
+    let _ = ShowWindow(eh, SW_HIDE);
+    Some(eh)
+}
+
+pub(crate) fn present_settings(frame: &WidgetFrame, inputs: SettingsInputRects) {
     let Ok(composited) = composite_widget_frame(frame) else {
         return;
     };
-    let (hwnd, edit) = SETTINGS_UI.with(|ui| {
+    let (hwnd, edits) = SETTINGS_UI.with(|ui| {
         let mut st = ui.borrow_mut();
         st.frame = Some(composited);
-        (st.hwnd, st.url_edit)
+        (st.hwnd, st.edits)
     });
-    if let Some(eh) = edit {
-        // SAFETY: Positioning or hiding child EDIT control owned by the settings window.
-        unsafe {
-            if let Some(r) = url_box_rect {
-                let _ = MoveWindow(eh, r.x, r.y, r.width as i32, r.height as i32, true);
-                let _ = ShowWindow(eh, SW_SHOW);
-            } else {
-                let _ = ShowWindow(eh, SW_HIDE);
-            }
+    let rects = [inputs.primary, inputs.secret, inputs.extra];
+    for (edit_opt, rect_opt) in edits.into_iter().zip(rects) {
+        if let Some(eh) = edit_opt {
+            position_child_edit(eh, rect_opt);
         }
     }
     if let Some(h) = hwnd {
@@ -144,8 +159,20 @@ pub(crate) fn present_settings(frame: &WidgetFrame, url_box_rect: Option<PixelRe
     }
 }
 
-pub(crate) fn read_settings_url_text() -> String {
-    let edit = SETTINGS_UI.with(|ui| ui.borrow().url_edit);
+fn position_child_edit(eh: HWND, rect_opt: Option<PixelRect>) {
+    // SAFETY: Positioning or hiding child EDIT control owned by the settings window.
+    unsafe {
+        if let Some(r) = rect_opt {
+            let _ = MoveWindow(eh, r.x, r.y, r.width as i32, r.height as i32, true);
+            let _ = ShowWindow(eh, SW_SHOW);
+        } else {
+            let _ = ShowWindow(eh, SW_HIDE);
+        }
+    }
+}
+
+pub(crate) fn read_settings_input_text(slot: u8) -> String {
+    let edit = SETTINGS_UI.with(|ui| ui.borrow().edits.get(usize::from(slot)).copied().flatten());
     let Some(eh) = edit else {
         return String::new();
     };
@@ -161,8 +188,8 @@ pub(crate) fn read_settings_url_text() -> String {
     }
 }
 
-pub(crate) fn write_settings_url_text(text: &str) {
-    let edit = SETTINGS_UI.with(|ui| ui.borrow().url_edit);
+pub(crate) fn write_settings_input_text(slot: u8, text: &str) {
+    let edit = SETTINGS_UI.with(|ui| ui.borrow().edits.get(usize::from(slot)).copied().flatten());
     if let Some(eh) = edit {
         set_window_text(eh, text);
     }
@@ -184,7 +211,7 @@ pub(crate) fn cleanup_settings_window() {
                 let _ = DeleteObject(br.into());
             }
         }
-        st.url_edit = None;
+        st.edits = [None, None, None];
         st.frame = None;
     });
 }
@@ -252,8 +279,8 @@ pub(crate) unsafe extern "system" fn settings_wnd_proc(
         }
         WM_CTLCOLOREDIT => {
             let hdc = HDC(wparam.0 as *mut c_void);
-            SetTextColor(hdc, COLORREF(0x00F7_F5F5));
-            SetBkColor(hdc, COLORREF(0x001E_1C1C));
+            SetTextColor(hdc, EDIT_TEXT_COLOR);
+            SetBkColor(hdc, EDIT_BG_COLOR);
             let br = SETTINGS_UI.with(|ui| ui.borrow().edit_brush.unwrap_or_default());
             LRESULT(br.0 as isize)
         }

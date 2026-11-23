@@ -1,4 +1,8 @@
 #[cfg(windows)]
+mod app_icon;
+#[cfg(windows)]
+mod autostart;
+#[cfg(windows)]
 mod dock_menu;
 #[cfg(windows)]
 mod dock_proc;
@@ -32,6 +36,8 @@ mod tools_proc;
 mod tools_win;
 #[cfg(windows)]
 mod tray;
+#[cfg(windows)]
+mod webdav_http;
 #[cfg(windows)]
 mod widget_menu;
 #[cfg(windows)]

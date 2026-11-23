@@ -1,5 +1,6 @@
-use asrbox_platform_api::PixelRect;
+use asrbox_platform_api::{PixelRect, SettingsInputRects};
 
+use crate::layout_backup::build_backup_tab;
 use crate::layout_sys::build_sysmon_tab;
 use crate::layout_tabs::{
     build_about_tab, build_calendar_tab, build_debug_tab, build_dock_tab, build_modules_tab,
@@ -77,7 +78,7 @@ pub struct SettingsLayout {
     pub header_subtitle: String,
     pub cards: Vec<CardBlock>,
     pub controls: Vec<ControlItem>,
-    pub url_input_rect: Option<PixelRect>,
+    pub input_rects: SettingsInputRects,
     pub content_height: u32,
 }
 
@@ -98,6 +99,7 @@ pub fn build_layout(
         SettingsTab::Dock => build_dock_tab(&mut b, snap, selected_dock),
         SettingsTab::Calendar => build_calendar_tab(&mut b, snap),
         SettingsTab::SysMonitor => build_sysmon_tab(&mut b, snap),
+        SettingsTab::Backup => build_backup_tab(&mut b, snap),
         SettingsTab::Debug => build_debug_tab(&mut b, snap),
         SettingsTab::About => build_about_tab(&mut b, snap),
     }

@@ -3,22 +3,29 @@ use std::ffi::c_void;
 
 use asrbox_platform_api::{AboutUiCommand, DebugUiCommand, PlatformEvent};
 use windows::core::{w, PCWSTR};
-use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, RECT, WPARAM};
-use windows::Win32::Graphics::Gdi::HFONT;
+use windows::Win32::Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, RECT, WPARAM};
+use windows::Win32::Graphics::Gdi::{
+    CreateSolidBrush, DeleteObject, FillRect, SetBkColor, SetTextColor, HBRUSH, HDC, HFONT,
+};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, GetClientRect, KillTimer, MoveWindow,
-    SendMessageW, SetForegroundWindow, SetTimer, SetWindowTextW, ShowWindow, BS_PUSHBUTTON,
-    ES_AUTOHSCROLL, ES_AUTOVSCROLL, ES_MULTILINE, ES_READONLY, HMENU, SW_RESTORE, SW_SHOW,
-    WINDOW_STYLE, WM_CLOSE, WM_COMMAND, WM_SETFONT, WM_SIZE, WM_TIMER, WS_BORDER, WS_CHILD,
-    WS_HSCROLL, WS_OVERLAPPEDWINDOW, WS_VISIBLE, WS_VSCROLL,
+    SendMessageW, SetForegroundWindow, SetTimer, ShowWindow, BS_PUSHBUTTON, ES_AUTOHSCROLL,
+    ES_AUTOVSCROLL, ES_MULTILINE, ES_READONLY, HMENU, SW_SHOW, WINDOW_STYLE, WM_CLOSE, WM_COMMAND,
+    WM_CTLCOLOREDIT, WM_CTLCOLORSTATIC, WM_ERASEBKGND, WM_SETFONT, WM_SIZE, WM_TIMER, WS_BORDER,
+    WS_CHILD, WS_HSCROLL, WS_OVERLAPPEDWINDOW, WS_VISIBLE, WS_VSCROLL,
 };
 
+use crate::app_icon::apply_window_icon;
 use crate::shell::encode_wide_str;
+use crate::tools_win::set_window_text;
 use crate::window::push_event;
 
 pub(crate) const DEBUG_TICK_TIMER_ID: usize = 201;
-const EM_SETSEL: u32 = 0x00B1;
-const EM_SCROLLCARET: u32 = 0x00B7;
+
+// NotePlan dark theme BGR COLORREFs: canvas #1C1D22, card/edit #23252C, text #EAECEF
+const NP_CANVAS_COLOR: COLORREF = COLORREF(0x0022_1D1C);
+const NP_CARD_COLOR: COLORREF = COLORREF(0x002C_2523);
+const NP_TEXT_COLOR: COLORREF = COLORREF(0x00EF_ECEA);
 
 const ID_BTN_VERBOSE: usize = 501;
 const ID_BTN_FILELOG: usize = 502;
@@ -48,6 +55,49 @@ pub(crate) struct AboutControls {
 thread_local! {
     pub(crate) static DEBUG_UI: RefCell<DebugControls> = RefCell::new(DebugControls::default());
     pub(crate) static ABOUT_UI: RefCell<AboutControls> = RefCell::new(AboutControls::default());
+    static TOOL_BRUSHES: RefCell<[Option<HBRUSH>; 2]> = const { RefCell::new([None, None]) };
+}
+
+fn ensure_brushes() -> (HBRUSH, HBRUSH) {
+    TOOL_BRUSHES.with(|cell| {
+        let mut b = cell.borrow_mut();
+        // SAFETY: Creating solid GDI brushes freed once in cleanup_tool_brushes.
+        unsafe {
+            let c = *b[0].get_or_insert_with(|| CreateSolidBrush(NP_CANVAS_COLOR));
+            let k = *b[1].get_or_insert_with(|| CreateSolidBrush(NP_CARD_COLOR));
+            (c, k)
+        }
+    })
+}
+
+pub(crate) fn cleanup_tool_brushes() {
+    TOOL_BRUSHES.with(|cell| {
+        let mut b = cell.borrow_mut();
+        // SAFETY: Freeing cached GDI brushes once during teardown.
+        unsafe {
+            for slot in &mut *b {
+                if let Some(h) = slot.take() {
+                    let _ = DeleteObject(h.into());
+                }
+            }
+        }
+    });
+}
+
+unsafe fn paint_dark_bg(hwnd: HWND, wparam: WPARAM) -> LRESULT {
+    let hdc = HDC(wparam.0 as *mut c_void);
+    let mut rc = RECT::default();
+    if GetClientRect(hwnd, &mut rc).is_ok() {
+        let _ = FillRect(hdc, &rc, ensure_brushes().0);
+    }
+    LRESULT(1)
+}
+
+unsafe fn style_dark_edit(wparam: WPARAM) -> LRESULT {
+    let hdc = HDC(wparam.0 as *mut c_void);
+    SetTextColor(hdc, NP_TEXT_COLOR);
+    SetBkColor(hdc, NP_CARD_COLOR);
+    LRESULT(ensure_brushes().1 .0 as isize)
 }
 
 pub(crate) unsafe extern "system" fn debug_wnd_proc(
@@ -57,6 +107,8 @@ pub(crate) unsafe extern "system" fn debug_wnd_proc(
     lparam: LPARAM,
 ) -> LRESULT {
     match msg {
+        WM_ERASEBKGND => paint_dark_bg(hwnd, wparam),
+        WM_CTLCOLOREDIT | WM_CTLCOLORSTATIC => style_dark_edit(wparam),
         WM_COMMAND => {
             let cmd = match wparam.0 & 0xFFFF {
                 ID_BTN_VERBOSE => Some(DebugUiCommand::ToggleVerbose),
@@ -98,6 +150,8 @@ pub(crate) unsafe extern "system" fn about_wnd_proc(
     lparam: LPARAM,
 ) -> LRESULT {
     match msg {
+        WM_ERASEBKGND => paint_dark_bg(hwnd, wparam),
+        WM_CTLCOLOREDIT | WM_CTLCOLORSTATIC => style_dark_edit(wparam),
         WM_COMMAND => {
             match wparam.0 & 0xFFFF {
                 ID_BTN_OPEN_DATA => {
@@ -124,54 +178,69 @@ pub(crate) unsafe extern "system" fn about_wnd_proc(
     }
 }
 
+unsafe fn create_tool_window(
+    hinst: HINSTANCE,
+    class: PCWSTR,
+    title: &str,
+    r: (i32, i32, i32, i32),
+) -> Result<HWND, String> {
+    let w_title = encode_wide_str(title);
+    let hwnd = CreateWindowExW(
+        Default::default(),
+        class,
+        PCWSTR(w_title.as_ptr()),
+        WS_OVERLAPPEDWINDOW,
+        r.0,
+        r.1,
+        r.2,
+        r.3,
+        None,
+        None,
+        Some(hinst),
+        None,
+    )
+    .map_err(|e| format!("CreateWindowExW failed: {e}"))?;
+    apply_window_icon(hwnd);
+    Ok(hwnd)
+}
+
 pub(crate) fn create_debug_window(
     hinst: HINSTANCE,
     title: &str,
     ui_font: HFONT,
     mono_font: HFONT,
 ) -> Result<(), String> {
-    let title_w = encode_wide_str(title);
     // SAFETY: Creating standard Win32 diagnostics window and child controls on UI thread.
     unsafe {
-        let hwnd = CreateWindowExW(
-            Default::default(),
-            w!("AsrboxDebugWindow"),
-            PCWSTR(title_w.as_ptr()),
-            WS_OVERLAPPEDWINDOW,
-            120,
-            80,
-            880,
-            600,
-            None,
-            None,
-            Some(hinst),
-            None,
-        )
-        .map_err(|e| format!("CreateWindowExW(debug) failed: {e}"))?;
-
-        let b1 = make_btn(hwnd, hinst, ID_BTN_VERBOSE, "TRACE: ВЫКЛ", 8, 118, ui_font);
-        let b2 = make_btn(hwnd, hinst, ID_BTN_FILELOG, "Файл: ВЫКЛ", 132, 112, ui_font);
-        let b3 = make_btn(hwnd, hinst, ID_BTN_FILTER, "Модуль: Все", 250, 130, ui_font);
-        let _ = make_btn(
+        let hwnd = create_tool_window(hinst, w!("AsrboxDebugWindow"), title, (120, 80, 880, 600))?;
+        let b1 = make_btn(
             hwnd,
             hinst,
-            ID_BTN_COPY_REPORT,
-            "Копировать отчёт",
-            386,
-            140,
+            (ID_BTN_VERBOSE, 8, 118),
+            "TRACE: ВЫКЛ",
             ui_font,
         );
-        let _ = make_btn(
+        let b2 = make_btn(
             hwnd,
             hinst,
-            ID_BTN_SAVE_REPORT,
-            "Сохранить отчёт",
-            532,
-            136,
+            (ID_BTN_FILELOG, 132, 112),
+            "Файл: ВЫКЛ",
             ui_font,
         );
-        let _ = make_btn(hwnd, hinst, ID_BTN_CLEAR, "Очистить", 674, 92, ui_font);
-
+        let b3 = make_btn(
+            hwnd,
+            hinst,
+            (ID_BTN_FILTER, 250, 130),
+            "Модуль: Все",
+            ui_font,
+        );
+        for (spec, label) in [
+            ((ID_BTN_COPY_REPORT, 386, 140), "Копировать отчёт"),
+            ((ID_BTN_SAVE_REPORT, 532, 136), "Сохранить отчёт"),
+            ((ID_BTN_CLEAR, 674, 92), "Очистить"),
+        ] {
+            let _ = make_btn(hwnd, hinst, spec, label, ui_font);
+        }
         let summary_edit = make_edit(hwnd, hinst, false, mono_font);
         let logs_edit = make_edit(hwnd, hinst, true, mono_font);
         DEBUG_UI.with(|ui| {
@@ -199,43 +268,15 @@ pub(crate) fn create_about_window(
     ui_font: HFONT,
     mono_font: HFONT,
 ) -> Result<(), String> {
-    let title_w = encode_wide_str(title);
     // SAFETY: Creating standard Win32 About window and child controls on UI thread.
     unsafe {
-        let hwnd = CreateWindowExW(
-            Default::default(),
-            w!("AsrboxAboutWindow"),
-            PCWSTR(title_w.as_ptr()),
-            WS_OVERLAPPEDWINDOW,
-            160,
-            110,
-            740,
-            560,
-            None,
-            None,
-            Some(hinst),
-            None,
-        )
-        .map_err(|e| format!("CreateWindowExW(about) failed: {e}"))?;
-
-        let _ = make_btn(
-            hwnd,
-            hinst,
-            ID_BTN_OPEN_DATA,
-            "Открыть папку данных",
-            8,
-            175,
-            ui_font,
-        );
-        let _ = make_btn(
-            hwnd,
-            hinst,
-            ID_BTN_COPY_PATHS,
-            "Копировать пути",
-            190,
-            145,
-            ui_font,
-        );
+        let hwnd = create_tool_window(hinst, w!("AsrboxAboutWindow"), title, (160, 110, 740, 560))?;
+        for (spec, label) in [
+            ((ID_BTN_OPEN_DATA, 8, 175), "Открыть папку данных"),
+            ((ID_BTN_COPY_PATHS, 190, 145), "Копировать пути"),
+        ] {
+            let _ = make_btn(hwnd, hinst, spec, label, ui_font);
+        }
         let text_edit = make_edit(hwnd, hinst, false, mono_font);
         if let Some(h) = text_edit {
             set_window_text(h, content);
@@ -253,37 +294,20 @@ pub(crate) fn create_about_window(
     Ok(())
 }
 
-pub(crate) fn focus_window(hwnd: HWND) {
-    // SAFETY: Restoring and focusing an owned tool window on UI thread.
-    unsafe {
-        let _ = ShowWindow(hwnd, SW_RESTORE);
-        let _ = SetForegroundWindow(hwnd);
-    }
-}
-
-pub(crate) fn set_window_text(hwnd: HWND, text: &str) {
-    let w = encode_wide_str(text);
-    // SAFETY: `w` is NUL-terminated UTF-16 valid during synchronous SetWindowTextW.
-    unsafe {
-        let _ = SetWindowTextW(hwnd, PCWSTR(w.as_ptr()));
-    }
-}
-
-pub(crate) fn scroll_edit_to_end(hwnd: HWND) {
-    // SAFETY: Standard Win32 EDIT scroll-to-end messages on an owned control.
-    unsafe {
-        let _ = SendMessageW(hwnd, EM_SETSEL, Some(WPARAM(usize::MAX)), Some(LPARAM(-1)));
-        let _ = SendMessageW(hwnd, EM_SCROLLCARET, Some(WPARAM(0)), Some(LPARAM(0)));
-    }
+unsafe fn set_ctrl_font(hwnd: HWND, font: HFONT) {
+    let _ = SendMessageW(
+        hwnd,
+        WM_SETFONT,
+        Some(WPARAM(font.0 as usize)),
+        Some(LPARAM(1)),
+    );
 }
 
 unsafe fn make_btn(
     parent: HWND,
     hinst: HINSTANCE,
-    id: usize,
+    (id, x, w_px): (usize, i32, i32),
     label: &str,
-    x: i32,
-    w_px: i32,
     font: HFONT,
 ) -> Option<HWND> {
     let text_w = encode_wide_str(label);
@@ -303,12 +327,7 @@ unsafe fn make_btn(
         None,
     )
     .ok()?;
-    let _ = SendMessageW(
-        hwnd,
-        WM_SETFONT,
-        Some(WPARAM(font.0 as usize)),
-        Some(LPARAM(1)),
-    );
+    set_ctrl_font(hwnd, font);
     Some(hwnd)
 }
 
@@ -335,12 +354,7 @@ unsafe fn make_edit(parent: HWND, hinst: HINSTANCE, hscroll: bool, font: HFONT) 
         None,
     )
     .ok()?;
-    let _ = SendMessageW(
-        hwnd,
-        WM_SETFONT,
-        Some(WPARAM(font.0 as usize)),
-        Some(LPARAM(1)),
-    );
+    set_ctrl_font(hwnd, font);
     Some(hwnd)
 }
 

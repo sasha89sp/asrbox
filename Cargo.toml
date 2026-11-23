@@ -16,11 +16,12 @@ members = [
     "crates/mod-debug",
     "crates/mod-about",
     "crates/mod-settings",
+    "crates/mod-backup",
     "crates/app",
 ]
 
 [workspace.package]
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 publish = false
 

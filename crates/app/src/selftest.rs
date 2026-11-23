@@ -7,14 +7,20 @@ use asrbox_core::{
     SupervisorCmd, WorkerMsg,
 };
 use asrbox_mod_about::{build_about_text, AppPaths};
+use asrbox_mod_backup::{parse_backup_config, serialize_backup_config, BackupConfig};
 use asrbox_mod_debug::{DebugHub, LogLevel};
 use asrbox_mod_dock::{
     parse_docks, render_dock_frame, serialize_docks, DockConfig, DockInstance, DockItem,
     DockRenderOverlay, Rect,
 };
 use asrbox_mod_settings::{
-    AboutSettingsView, CalendarSettingsView, DebugSettingsView, DockSettingsView, ModuleStatusView,
-    SettingsSnapshot, SettingsTab, SettingsUiState, SysMonitorSettingsView,
+    AboutSettingsView, BackupSettingsView, CalendarSettingsView, DebugSettingsView,
+    DockSettingsView, ModuleStatusView, SettingsSnapshot, SettingsTab, SettingsUiState,
+    SysMonitorSettingsView, WebDavSettingsView,
+};
+use asrbox_mod_webdav::{
+    base64_encode, parse_webdav_config, serialize_webdav_config, validate_https_url, WebDavConfig,
+    WebDavProvider,
 };
 use asrbox_mod_widgets::{
     parse_ics_bytes, parse_sysmon_config, parse_widget_config, render_calendar_widget,
@@ -29,6 +35,7 @@ pub fn run_selftest(app_version: &str) -> Result<(), String> {
     selftest_dock(app_version)?;
     selftest_widgets()?;
     selftest_settings(app_version)?;
+    selftest_backup_and_webdav()?;
     selftest_debug_and_about(app_version)?;
     Ok(())
 }
@@ -60,6 +67,7 @@ fn selftest_dock(app_version: &str) -> Result<(), String> {
     cfg.locked = false;
     cfg.opacity_percent = 65;
     cfg.icon_size_px = 54;
+    cfg.layer = WidgetLayer::Wallpaper;
     cfg.items.push(DockItem::separator(1));
     let area = Rect {
         x: 0,
@@ -84,7 +92,11 @@ fn selftest_dock(app_version: &str) -> Result<(), String> {
         return Err("rendered dock frame is empty".to_owned());
     }
     let parsed = parse_docks(&serialize_docks(&[cfg], app_version))?;
-    if parsed.len() != 1 || parsed[0].opacity_percent != 65 || parsed[0].locked {
+    if parsed.len() != 1
+        || parsed[0].opacity_percent != 65
+        || parsed[0].locked
+        || parsed[0].layer != WidgetLayer::Wallpaper
+    {
         return Err("dock config roundtrip mismatch".to_owned());
     }
     Ok(())
@@ -115,8 +127,9 @@ fn selftest_widgets() -> Result<(), String> {
     let rows = vec![DisplayRow {
         title: cal.events[0].summary.clone(),
         subtitle: "Сегодня · 10:00".to_owned(),
-        bar_rgb: [52, 211, 153],
+        bar_rgb: [232, 122, 72],
         tooltip: "Тест".to_owned(),
+        is_past: false,
     }];
     let view = RenderView {
         width: 336,
@@ -172,6 +185,7 @@ fn selftest_widgets() -> Result<(), String> {
 fn selftest_settings(app_version: &str) -> Result<(), String> {
     let snap = SettingsSnapshot {
         isolation: IsolationMode::Process,
+        autostart_enabled: false,
         modules: vec![ModuleStatusView {
             id: ModuleId::Dock,
             enabled: true,
@@ -183,6 +197,7 @@ fn selftest_settings(app_version: &str) -> Result<(), String> {
         docks: vec![DockSettingsView {
             id: "1".to_owned(),
             edge_index: 0,
+            layer: WidgetLayer::Wallpaper,
             icon_size_px: 48,
             opacity_percent: 85,
             locked: true,
@@ -195,6 +210,7 @@ fn selftest_settings(app_version: &str) -> Result<(), String> {
             opacity_percent: 88,
             layer: WidgetLayer::Wallpaper,
             period_index: 2,
+            refresh_interval_sec: 3600,
             width: 336,
             visible_rows: 8,
             commented_calendar_hint: true,
@@ -207,6 +223,21 @@ fn selftest_settings(app_version: &str) -> Result<(), String> {
             refresh_interval_ms: 2000,
             width: 560,
             height: 492,
+        },
+        backup: BackupSettingsView {
+            auto_upload_cloud: false,
+            last_backup_file: String::new(),
+            last_backup_time: String::new(),
+            cloud_status: String::new(),
+            busy: false,
+        },
+        webdav: WebDavSettingsView {
+            provider_index: 0,
+            effective_url: "https://webdav.yandex.ru".to_owned(),
+            username: String::new(),
+            remote_dir: "/asrbox-backups".to_owned(),
+            has_saved_password: false,
+            status_text: String::new(),
         },
         debug: DebugSettingsView {
             verbose: false,
@@ -227,6 +258,35 @@ fn selftest_settings(app_version: &str) -> Result<(), String> {
         if frame.bgra.pixels.is_empty() || frame.texts.is_empty() {
             return Err(format!("settings render failed on {tab:?}"));
         }
+    }
+    Ok(())
+}
+
+fn selftest_backup_and_webdav() -> Result<(), String> {
+    let bcfg = BackupConfig {
+        auto_upload_cloud: true,
+        last_backup_file: "asrbox-settings-20261123-120000.zip".to_owned(),
+        last_backup_time: "23.11.2026 12:00".to_owned(),
+        last_cloud_status: "OK".to_owned(),
+    };
+    if parse_backup_config(&serialize_backup_config(&bcfg)) != bcfg {
+        return Err("backup config roundtrip mismatch".to_owned());
+    }
+    let wcfg = WebDavConfig {
+        provider: WebDavProvider::MailRu,
+        custom_url: String::new(),
+        username: "test@mail.ru".to_owned(),
+        remote_dir: "/asrbox-backups".to_owned(),
+    };
+    if parse_webdav_config(&serialize_webdav_config(&wcfg)) != wcfg {
+        return Err("webdav config roundtrip mismatch".to_owned());
+    }
+    validate_https_url(&wcfg.effective_url())?;
+    if validate_https_url("http://insecure.local").is_ok() {
+        return Err("webdav http rejection failed".to_owned());
+    }
+    if base64_encode(b"asrbox:ok") != "YXNyYm94Om9r" {
+        return Err("webdav base64 selftest failed".to_owned());
     }
     Ok(())
 }

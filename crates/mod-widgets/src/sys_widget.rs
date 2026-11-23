@@ -155,6 +155,7 @@ impl SysMonitorWidget {
             layer: self.config.layer,
             opacity_percent: self.config.opacity_percent,
             refresh_ms: Some(self.config.refresh_interval_ms),
+            sync_interval_sec: None,
         };
         let Ok(Some(action)) = host.show_widget_menu(SYS_WIDGET_ID, screen, &state) else {
             return String::new();
@@ -196,6 +197,7 @@ impl SysMonitorWidget {
                 let _ = self.sync_window(host, false);
                 "sysmon hidden".to_owned()
             }
+            WidgetMenuAction::SetSyncIntervalSec(_) => String::new(),
         }
     }
 

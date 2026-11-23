@@ -243,6 +243,7 @@ pub fn build_display_rows(
         return setup_hint_rows();
     }
     let filtered = filter_events(all, cfg, now);
+    let now_min = local_now_as_ics(now).to_epoch_min();
     let max_rows = usize::from(cfg.visible_rows);
     let off = scroll_offset.min(filtered.len().saturating_sub(max_rows));
     filtered
@@ -254,6 +255,7 @@ pub fn build_display_rows(
             subtitle: format_event_subtitle(ev, now, cfg.date_format),
             bar_rgb: pick_bar_color(ev, now),
             tooltip: format_event_tooltip(ev, now),
+            is_past: ev.end.to_epoch_min() <= now_min,
         })
         .collect()
 }
@@ -312,14 +314,16 @@ fn setup_hint_rows() -> Vec<DisplayRow> {
         DisplayRow {
             title: "Нажмите ⚙ для настройки .ics".to_owned(),
             subtitle: "Вставьте секретную ссылку Google Календаря".to_owned(),
-            bar_rgb: [78, 161, 255],
-            tooltip: "Откройте widgets.cfg и добавьте строку calendar=main|auto|URL".to_owned(),
+            bar_rgb: [232, 122, 72],
+            tooltip: "Откройте Настройки → Календарь и добавьте URL .ics".to_owned(),
+            is_past: false,
         },
         DisplayRow {
             title: "После сохранения нажмите ↻".to_owned(),
             subtitle: "Кэш сохранится локально в data/cache".to_owned(),
-            bar_rgb: [52, 211, 153],
+            bar_rgb: [104, 199, 148],
             tooltip: "Расписание подгрузится в фоне без блокировки UI".to_owned(),
+            is_past: false,
         },
     ]
 }

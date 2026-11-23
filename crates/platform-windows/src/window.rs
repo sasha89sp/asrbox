@@ -15,6 +15,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WS_EX_TOOLWINDOW, WS_POPUP,
 };
 
+use crate::app_icon::{cleanup_app_icons, large_app_icon, small_app_icon};
 use crate::dock_proc::dock_wnd_proc;
 use crate::http::{drain_http_results, WM_HTTP_DONE};
 use crate::metrics::ProcessMetricsSampler;
@@ -24,6 +25,7 @@ use crate::sys_telemetry::{drain_telemetry_results, WM_TELEMETRY_DONE};
 use crate::tools_proc::{about_wnd_proc, debug_wnd_proc};
 use crate::tools_win::ToolsWinState;
 use crate::tray::{TrayIconHandle, WM_TRAYICON};
+use crate::webdav_http::{drain_webdav_results, WM_WEBDAV_DONE};
 use crate::widget_proc::widget_wnd_proc;
 
 pub(crate) const ANIMATION_TIMER_ID: usize = 1;
@@ -205,6 +207,7 @@ impl Drop for WindowsDockHost {
             }
             let _ = DestroyWindow(self.host_hwnd);
         }
+        cleanup_app_icons();
         HOST_HWND_RAW.with(|cell| cell.set(0));
         WAKE_POSTED.with(|cell| cell.set(false));
     }
@@ -221,6 +224,8 @@ unsafe fn register_class(
         cbSize: u32::try_from(mem::size_of::<WNDCLASSEXW>()).unwrap_or(0),
         lpfnWndProc: wnd_proc,
         hInstance: hinstance,
+        hIcon: large_app_icon(),
+        hIconSm: small_app_icon(),
         hCursor: cursor,
         hbrBackground: hbr_background,
         lpszClassName: class_name,
@@ -274,6 +279,12 @@ unsafe extern "system" fn host_wnd_proc(
                 push_event(PlatformEvent::SysTelemetryReady {
                     snapshot: Box::new(snap),
                 });
+            }
+            LRESULT(0)
+        }
+        WM_WEBDAV_DONE => {
+            for res in drain_webdav_results() {
+                push_event(PlatformEvent::WebDavDone(res));
             }
             LRESULT(0)
         }

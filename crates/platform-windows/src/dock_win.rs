@@ -3,22 +3,24 @@ use std::path::{Path, PathBuf};
 
 use asrbox_platform_api::{
     BgraFrame, DockMenuAction, DockMenuState, DockPlatform, PixelPoint, PixelRect, TrayAction,
-    TrayMenuEntry, TrayModuleFlags,
+    TrayMenuEntry, TrayModuleFlags, WidgetLayer,
 };
 use windows::core::{w, PCWSTR};
 use windows::Win32::UI::Shell::DragAcceptFiles;
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DestroyWindow, KillTimer, PostQuitMessage, SetTimer, SetWindowLongPtrW,
-    ShowWindow, GWLP_USERDATA, SW_SHOWNOACTIVATE, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
-    WS_POPUP,
+    ShowWindow, GWLP_USERDATA, SW_SHOWNOACTIVATE, WS_EX_LAYERED, WS_EX_NOACTIVATE,
+    WS_EX_TOOLWINDOW, WS_POPUP,
 };
 
 use crate::dock_menu::show_dock_context_menu;
+use crate::dock_proc::{remove_dock_layer_meta, set_dock_layer_meta};
 use crate::present_layered_bgra;
 use crate::query_primary_work_area;
 use crate::running::{activate_or_launch_target, query_running_exe_names, resolve_target_exe_name};
 use crate::shell::{open_in_notepad, pick_icon_dialog};
 use crate::tray::show_tray_context_menu;
+use crate::widget_proc::apply_widget_layer;
 use crate::window::{
     WindowsDockHost, ANIMATION_TICK_MS, ANIMATION_TIMER_ID, RUNNING_POLL_MS, RUNNING_POLL_TIMER_ID,
 };
@@ -38,8 +40,8 @@ impl DockPlatform for WindowsDockHost {
             return Ok(());
         }
         let title_wide: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
-        let ex_style = WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW;
-        // SAFETY: Creating a top-level layered window with a registered class on UI thread.
+        let ex_style = WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
+        // SAFETY: Creating a layered popup dock window with a registered class on UI thread.
         unsafe {
             let hwnd = CreateWindowExW(
                 ex_style,
@@ -58,6 +60,8 @@ impl DockPlatform for WindowsDockHost {
             .map_err(|err| format!("CreateWindowExW(dock) failed: {err}"))?;
 
             SetWindowLongPtrW(hwnd, GWLP_USERDATA, dock_id as isize);
+            set_dock_layer_meta(dock_id, WidgetLayer::Wallpaper);
+            apply_widget_layer(hwnd, WidgetLayer::Wallpaper);
             DragAcceptFiles(hwnd, true);
             let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
             self.windows.insert(dock_id, hwnd);
@@ -66,12 +70,21 @@ impl DockPlatform for WindowsDockHost {
     }
 
     fn destroy_dock_window(&mut self, dock_id: u64) -> Result<(), String> {
+        remove_dock_layer_meta(dock_id);
         if let Some(hwnd) = self.windows.remove(&dock_id) {
             // SAFETY: `hwnd` belongs to this thread and is removed from the map.
             unsafe {
                 let _ = KillTimer(Some(hwnd), ANIMATION_TIMER_ID);
                 let _ = DestroyWindow(hwnd);
             }
+        }
+        Ok(())
+    }
+
+    fn set_dock_layer(&mut self, dock_id: u64, layer: WidgetLayer) -> Result<(), String> {
+        set_dock_layer_meta(dock_id, layer);
+        if let Some(&hwnd) = self.windows.get(&dock_id) {
+            apply_widget_layer(hwnd, layer);
         }
         Ok(())
     }

@@ -1,4 +1,4 @@
-use asrbox_platform_api::{DockMenuAction, DockMenuState, PixelPoint};
+use asrbox_platform_api::{DockMenuAction, DockMenuState, PixelPoint, WidgetLayer};
 use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreatePopupMenu, DestroyMenu, PostMessageW, SetForegroundWindow, TrackPopupMenuEx, HMENU,
@@ -12,6 +12,9 @@ const CMD_EDGE_RIGHT: u32 = 102;
 const CMD_EDGE_TOP: u32 = 103;
 const CMD_EDGE_BOTTOM: u32 = 104;
 const CMD_ALIGN_CENTER: u32 = 110;
+const CMD_LAYER_WALLPAPER: u32 = 111;
+const CMD_LAYER_NORMAL: u32 = 112;
+const CMD_LAYER_TOPMOST: u32 = 119;
 const CMD_TOGGLE_LOCK: u32 = 113;
 const CMD_OPACITY_100: u32 = 114;
 const CMD_OPACITY_85: u32 = 115;
@@ -123,6 +126,30 @@ unsafe fn populate_dock_submenus(menu: HMENU, state: &DockMenuState) {
         );
         add_submenu(menu, edge_sub, "Положение на экране");
     }
+    if let Ok(layer_sub) = CreatePopupMenu() {
+        add_item(
+            layer_sub,
+            CMD_LAYER_WALLPAPER,
+            "На рабочем столе (обои)",
+            state.layer == WidgetLayer::Wallpaper,
+            true,
+        );
+        add_item(
+            layer_sub,
+            CMD_LAYER_NORMAL,
+            "Обычное окно",
+            state.layer == WidgetLayer::Normal,
+            true,
+        );
+        add_item(
+            layer_sub,
+            CMD_LAYER_TOPMOST,
+            "Поверх всех окон",
+            state.layer == WidgetLayer::Topmost,
+            true,
+        );
+        add_submenu(menu, layer_sub, "Слой отображения");
+    }
     if let Ok(op_sub) = CreatePopupMenu() {
         let p = closest_opacity(state.opacity_percent);
         add_item(op_sub, CMD_OPACITY_100, "100% (плотный)", p == 100, true);
@@ -189,6 +216,9 @@ fn decode_dock_command(cmd: u32, hovered: Option<u64>) -> Option<DockMenuAction>
         CMD_EDGE_TOP => Some(DockMenuAction::SetEdgeTop),
         CMD_EDGE_BOTTOM => Some(DockMenuAction::SetEdgeBottom),
         CMD_ALIGN_CENTER => Some(DockMenuAction::AlignCenter),
+        CMD_LAYER_WALLPAPER => Some(DockMenuAction::SetLayerWallpaper),
+        CMD_LAYER_NORMAL => Some(DockMenuAction::SetLayerNormal),
+        CMD_LAYER_TOPMOST => Some(DockMenuAction::SetLayerTopmost),
         CMD_TOGGLE_LOCK => Some(DockMenuAction::ToggleLock),
         CMD_OPACITY_100 => Some(DockMenuAction::SetOpacity(100)),
         CMD_OPACITY_85 => Some(DockMenuAction::SetOpacity(85)),

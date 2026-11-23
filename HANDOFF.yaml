@@ -1,40 +1,39 @@
-version: 0.0.1
+version: 0.0.2
 updated: 2026-11-23
-spec_ids: [NF-001, NF-002, NF-005, NF-006, NF-007, NF-008, WG-014, WG-015, WG-016, WG-017, WG-018]
+spec_ids: [NF-001, NF-002, NF-005, NF-006, NF-007, NF-008, DK-018, WG-019, WG-020, ST-001..ST-007]
 atlas_updated: true
 last_session:
-  goal: "Добавить виджет Системный монитор в стиле macOS Dark-Glass, унифицировать стиль с Календарём, добавить изменение размеров обоих виджетов и настройку частоты обновления"
+  goal: "Версия 0.0.2: док-панель на рабочем столе, все события дня и частота синхронизации в Календаре, единый дизайн и иконка NotePlan, автозагрузка, модули бэкапа и WebDAV (Яндекс.Диск / Mail.ru)"
   done:
-    - "Системный монитор (mod-widgets/sys_config.rs, sys_render.rs, sys_widget.rs + platform-windows/sys_telemetry.rs, sys_procs.rs, sys_gpu.rs, sys_net.rs): реальная Windows-телеметрия в фоновом потоке (шапка, CPU, GPU NVML+DXGI, RAM+диски, сеть+VPN+ICMP пинг+таймер ОС, Топ-5 CPU/RAM)"
-    - "Единый стиль macOS Dark-Glass (mod-widgets/draw.rs, render.rs, sys_render.rs): общая подложка стекла, тонкая рамка, пилюли, бирюзовые бары и ручка ресайза для Календаря и Системного монитора"
-    - "Ресайз обоих виджетов (platform-windows/widget_proc.rs + mod-widgets + mod-settings): перетаскивание за 8 краёв/углов с системными курсорами + ползунки размеров и кнопки «Выровнять с Монитором / Календарём» в Настройках"
-    - "Частота обновления (sysmon.cfg, widget_menu.rs, mod-settings/layout_sys.rs): пресеты 1с/2с/3с/5с/10с (по умолчанию 2с), 0% CPU при скрытии или отключении модуля"
-    - "Трей, IPC и воркер (core/ipc.rs, platform-windows/tray.rs, app/worker_widgets.rs, settings_widgets.rs): оба виджета в --worker widgets и inproc"
+    - "Версия workspace поднята до 0.0.2 (Cargo.toml + CHANGELOG.md + встроенная история в mod-about)"
+    - "Док-панель на рабочем столе (DK-018): layer=wallpaper|normal|topmost в docks.cfg, ПКМ-меню дока, mod-settings и dock_proc.rs (WM_WINDOWPOSCHANGING)"
+    - "Календарь (WG-019, WG-020): показ всех событий на сегодня включая прошедшие (приглушённо + «завершено · HH:MM»); настройка частоты синхронизации 5м/15м/30м/1ч/3ч в ПКМ-меню и Настройках"
+    - "Единая концепция дизайна macOS NotePlan Dark (#1C1D22/#16171B/#23252C/#E87A48) в виджетах, доке, настройках, диагностике и «О программе» + программная иконка NotePlan HICON (16x16 трей + 32x32 панель задач)"
+    - "Автозагрузка с Windows (HKCU\\...\\Run\\asrbox): переключатель в Настройках («Модули») и меню трея"
+    - "Новый модуль mod-backup (STORE ZIP + CRC-32 без внешних крейтов): бэкап настроек и полный бэкап (asrbox.exe + настройки) в data/backups/"
+    - "Модуль mod-webdav + WinHTTP + Windows Credential Manager: Яндекс.Диск, Mail.ru и Свой HTTPS; пароли только в Credential Manager; тест подключения, ручная и автовыгрузка после бэкапа"
   not_done:
     - "Прогон GitHub Actions (.github/workflows/ci.yml) на windows-latest"
-    - "Ручная проверка на Windows 10/11 (телеметрия Системного монитора, NVML/DXGI, ресайз краёв обоих виджетов, выравнивание размеров, интервал 1с..10с)"
+    - "Ручная проверка asrbox.exe на Windows 10/11 (иконка NotePlan в трее/панели задач, док на обоях, автозагрузка, бэкап и WebDAV на Яндекс.Диск/Mail.ru)"
   verified:
     ci_build: false
-    tests: false
+    tests: true
     manual_run: false
 open_bugs: [BUG-003, BUG-004, BUG-005]
-next_step: "Запустить GitHub Actions (windows-latest), скачать asrbox.exe и проверить Системный монитор, единый стиль с Календарём, ресайз и выравнивание размеров"
+next_step: "Запустить GitHub Actions (windows-latest), скачать asrbox.exe v0.0.2 и проверить иконку NotePlan, слой дока на рабочем столе, календарь, автозагрузку, локальный бэкап и выгрузку по WebDAV"
 touched_files:
-  - ATLAS.md
-  - ARCHITECTURE.md
-  - DECISIONS.md
-  - CHANGELOG.md
-  - HANDOFF.yaml
-  - specs/mod-widgets.md
-  - crates/core/src/ipc.rs
-  - crates/platform-api/ (lib.rs, menu.rs, telemetry.rs, MAP.md)
-  - crates/platform-windows/ (Cargo.toml, lib.rs, window.rs, tray.rs, widget_win.rs, widget_proc.rs, widget_menu.rs, sys_telemetry.rs, sys_procs.rs, sys_gpu.rs, sys_net.rs, MAP.md)
+  - Cargo.toml, CHANGELOG.md, ATLAS.md, ARCHITECTURE.md, DECISIONS.md, HANDOFF.yaml
+  - specs/ (README.md, mod-dock.md, mod-widgets.md, mod-settings.md)
+  - crates/platform-api/ (lib.rs, menu.rs, tools.rs)
+  - crates/mod-backup/ (Cargo.toml, MAP.md, src/lib.rs, src/zip.rs)
+  - crates/mod-webdav/ (MAP.md, src/lib.rs)
+  - crates/mod-dock/ (lib.rs, config.rs, storage.rs, render.rs)
+  - crates/mod-widgets/ (format.rs, render.rs, calendar_view.rs, calendar.rs, sys_widget.rs, draw.rs, sys_render.rs)
+  - crates/mod-settings/ (lib.rs, types.rs, draw.rs, render.rs, layout.rs, layout_tabs.rs, layout_cal.rs, layout_backup.rs, MAP.md)
   - crates/mod-about/src/lib.rs
-  - crates/mod-widgets/ (lib.rs, draw.rs, storage.rs, render.rs, calendar.rs, sys_config.rs, sys_render.rs, sys_widget.rs, MAP.md)
-  - crates/mod-settings/ (lib.rs, types.rs, layout.rs, layout_cal.rs, layout_sys.rs, MAP.md)
-  - crates/app/ (main.rs, worker.rs, worker_widgets.rs, worker_bus.rs, settings_ctl.rs, settings_widgets.rs, tools.rs, selftest.rs, MAP.md)
+  - crates/platform-windows/ (Cargo.toml, app_icon.rs, autostart.rs, webdav_http.rs, dock_proc.rs, dock_win.rs, dock_menu.rs, widget_menu.rs, settings_proc.rs, tools_proc.rs, tools_win.rs, tray.rs, window.rs, lib.rs, MAP.md)
+  - crates/app/ (Cargo.toml, main.rs, backup_ctl.rs, docks.rs, dock_ops.rs, settings_ctl.rs, settings_widgets.rs, tools.rs, selftest.rs, MAP.md)
 warnings:
-  - "Ожидает сборки и проверки на GitHub Actions (windows-latest); температура CPU и RPM вентилятора на Windows без ring0-драйвера отображаются как «—»"
+  - "Ожидает сборки и проверки на GitHub Actions (windows-latest); для Яндекс.Диска и Mail.ru нужен пароль приложения WebDAV (обычный пароль аккаунта не подходит)"
 ideas:
   - "Этап 2: OAuth2 Google Calendar API для создания/редактирования событий прямо из виджета"
-

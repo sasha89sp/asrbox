@@ -1,8 +1,8 @@
 use asrbox_platform_api::{BgraFrame, PixelPoint, TextAlign, WidgetFrame, WidgetTextCmd};
 
 use crate::draw::{
-    draw_calendar_badge, draw_hline, draw_resize_grip, draw_triangle_down, draw_triangle_up,
-    fill_macos_glass_card, fill_pill_badge, fill_rounded_rect,
+    arrow_color, draw_calendar_badge, draw_hline, draw_resize_grip, draw_triangle_down,
+    draw_triangle_up, fill_macos_glass_card, fill_pill_badge, fill_rounded_rect, push_txt,
 };
 use crate::storage::{DateFormatMode, PeriodFilter};
 
@@ -32,6 +32,7 @@ pub struct DisplayRow {
     pub subtitle: String,
     pub bar_rgb: [u8; 3],
     pub tooltip: String,
+    pub is_past: bool,
 }
 
 pub struct RenderView<'a> {
@@ -99,35 +100,29 @@ pub fn hit_test_widget(
 }
 
 fn hit_test_header(pt: PixelPoint, w: i32) -> WidgetHitTarget {
-    if pt.x >= w - 34 && pt.x < w - 8 {
-        return WidgetHitTarget::RefreshBtn;
+    if (w - 34..w - 8).contains(&pt.x) {
+        WidgetHitTarget::RefreshBtn
+    } else if (w - 64..w - 38).contains(&pt.x) {
+        WidgetHitTarget::SettingsBtn
+    } else if (w - 94..w - 68).contains(&pt.x) {
+        WidgetHitTarget::AddEventBtn
+    } else if (12..190).contains(&pt.x) {
+        WidgetHitTarget::TitleLink
+    } else {
+        WidgetHitTarget::HeaderDrag
     }
-    if pt.x >= w - 64 && pt.x < w - 38 {
-        return WidgetHitTarget::SettingsBtn;
-    }
-    if pt.x >= w - 94 && pt.x < w - 68 {
-        return WidgetHitTarget::AddEventBtn;
-    }
-    if pt.x >= 12 && pt.x < 190 {
-        return WidgetHitTarget::TitleLink;
-    }
-    WidgetHitTarget::HeaderDrag
 }
 
 fn hit_test_filter_bar(pt: PixelPoint, w: i32) -> WidgetHitTarget {
     if pt.x >= w - 98 {
         return WidgetHitTarget::FormatCycleBtn;
     }
-    if pt.x >= 10 && pt.x < 68 {
-        WidgetHitTarget::FilterTab(PeriodFilter::Today)
-    } else if pt.x >= 68 && pt.x < 98 {
-        WidgetHitTarget::FilterTab(PeriodFilter::Days7)
-    } else if pt.x >= 98 && pt.x < 134 {
-        WidgetHitTarget::FilterTab(PeriodFilter::Days30)
-    } else if pt.x >= 134 && pt.x < 170 {
-        WidgetHitTarget::FilterTab(PeriodFilter::All)
-    } else {
-        WidgetHitTarget::None
+    match pt.x {
+        10..68 => WidgetHitTarget::FilterTab(PeriodFilter::Today),
+        68..98 => WidgetHitTarget::FilterTab(PeriodFilter::Days7),
+        98..134 => WidgetHitTarget::FilterTab(PeriodFilter::Days30),
+        134..170 => WidgetHitTarget::FilterTab(PeriodFilter::All),
+        _ => WidgetHitTarget::None,
     }
 }
 
@@ -164,48 +159,53 @@ fn draw_header(
     w: i32,
 ) {
     draw_calendar_badge(frame, 14, 14);
-    texts.push(WidgetTextCmd {
-        x: 44,
-        y: 12,
-        width: w - 144,
-        height: 26,
-        text: view.title.to_owned(),
-        font_size_px: 15,
-        bold: true,
-        color_rgba: [243, 244, 246, 255],
-        align: TextAlign::Left,
-    });
-
+    let fg = [243, 244, 246, 255];
+    push_txt(
+        texts,
+        (44, 12, w - 144, 26),
+        view.title,
+        (15, true),
+        fg,
+        TextAlign::Left,
+    );
     let refresh_glyph = if view.is_loading { "…" } else { "↻" };
-    let green = [52, 211, 153, 255];
-    let muted = [156, 163, 175, 255];
+    let accent = [232, 122, 72, 255];
+    let muted = [148, 155, 168, 255];
     let buttons = [
-        (WidgetHitTarget::AddEventBtn, w - 94, "+", green, 19, true),
-        (WidgetHitTarget::SettingsBtn, w - 64, "⚙", muted, 16, false),
+        (
+            WidgetHitTarget::AddEventBtn,
+            w - 94,
+            "+",
+            accent,
+            (19, true),
+        ),
+        (
+            WidgetHitTarget::SettingsBtn,
+            w - 64,
+            "⚙",
+            muted,
+            (16, false),
+        ),
         (
             WidgetHitTarget::RefreshBtn,
             w - 34,
             refresh_glyph,
             muted,
-            16,
-            false,
+            (16, false),
         ),
     ];
-    for (target, bx, glyph, color, size, bold) in buttons {
+    for (target, bx, glyph, color, font) in buttons {
         if view.hovered == target {
             fill_rounded_rect(frame, bx, 12, 26, 26, 6.0, [255, 255, 255, 24]);
         }
-        texts.push(WidgetTextCmd {
-            x: bx,
-            y: 11,
-            width: 26,
-            height: 28,
-            text: glyph.to_owned(),
-            font_size_px: size,
-            bold,
-            color_rgba: color,
-            align: TextAlign::Center,
-        });
+        push_txt(
+            texts,
+            (bx, 11, 26, 28),
+            glyph,
+            font,
+            color,
+            TextAlign::Center,
+        );
     }
 }
 
@@ -231,44 +231,39 @@ fn draw_filter_bar(
             fill_rounded_rect(frame, tx - 4, y + 2, tw + 8, 24, 6.0, [255, 255, 255, 18]);
         }
         let color = if active {
-            [114, 214, 255, 255]
+            [244, 152, 108, 255]
         } else if hovered {
-            [236, 242, 248, 255]
+            [236, 238, 242, 255]
         } else {
-            [156, 168, 182, 255]
+            [148, 155, 168, 255]
         };
-        texts.push(WidgetTextCmd {
-            x: tx,
-            y,
-            width: tw,
-            height: 28,
-            text: label.to_owned(),
-            font_size_px: 12,
-            bold: active,
-            color_rgba: color,
-            align: TextAlign::Center,
-        });
+        push_txt(
+            texts,
+            (tx, y, tw, 28),
+            label,
+            (12, active),
+            color,
+            TextAlign::Center,
+        );
     }
 
     let fmt_hovered = view.hovered == WidgetHitTarget::FormatCycleBtn;
     if fmt_hovered {
         fill_rounded_rect(frame, w - 98, y + 2, 88, 24, 5.0, [255, 255, 255, 16]);
     }
-    texts.push(WidgetTextCmd {
-        x: w - 96,
-        y,
-        width: 84,
-        height: 28,
-        text: view.date_format.label().to_owned(),
-        font_size_px: 12,
-        bold: false,
-        color_rgba: if fmt_hovered {
-            [229, 231, 235, 255]
-        } else {
-            [148, 155, 168, 255]
-        },
-        align: TextAlign::Right,
-    });
+    let fmt_col = if fmt_hovered {
+        [229, 231, 235, 255]
+    } else {
+        [148, 155, 168, 255]
+    };
+    push_txt(
+        texts,
+        (w - 96, y, 84, 28),
+        view.date_format.label(),
+        (12, false),
+        fmt_col,
+        TextAlign::Right,
+    );
 }
 
 fn draw_event_rows(
@@ -282,34 +277,41 @@ fn draw_event_rows(
     for (idx, row) in view.rows.iter().take(max_rows).enumerate() {
         let ry = base_y + (idx as i32) * ROW_HEIGHT;
         if view.hovered == WidgetHitTarget::EventRow(idx) {
-            let tint = [255, 255, 255, 15];
-            fill_rounded_rect(frame, 6, ry + 3, w - 12, ROW_HEIGHT - 6, 8.0, tint);
+            fill_rounded_rect(
+                frame,
+                6,
+                ry + 3,
+                w - 12,
+                ROW_HEIGHT - 6,
+                8.0,
+                [255, 255, 255, 15],
+            );
         }
-        let bar = [row.bar_rgb[0], row.bar_rgb[1], row.bar_rgb[2], 255];
+        let bar_a = if row.is_past { 118 } else { 255 };
+        let bar = [row.bar_rgb[0], row.bar_rgb[1], row.bar_rgb[2], bar_a];
         fill_rounded_rect(frame, 14, ry + 10, 4, 32, 2.0, bar);
-
-        texts.push(WidgetTextCmd {
-            x: 28,
-            y: ry + 7,
-            width: w - 42,
-            height: 22,
-            text: row.title.clone(),
-            font_size_px: 14,
-            bold: true,
-            color_rgba: [243, 244, 246, 255],
-            align: TextAlign::Left,
-        });
-        texts.push(WidgetTextCmd {
-            x: 28,
-            y: ry + 28,
-            width: w - 42,
-            height: 18,
-            text: row.subtitle.clone(),
-            font_size_px: 12,
-            bold: false,
-            color_rgba: [152, 160, 173, 255],
-            align: TextAlign::Left,
-        });
+        let (title_col, sub_col) = if row.is_past {
+            ([152, 158, 170, 255], [112, 118, 130, 255])
+        } else {
+            ([238, 240, 244, 255], [148, 155, 168, 255])
+        };
+        let l = TextAlign::Left;
+        push_txt(
+            texts,
+            (28, ry + 7, w - 42, 22),
+            &row.title,
+            (14, !row.is_past),
+            title_col,
+            l,
+        );
+        push_txt(
+            texts,
+            (28, ry + 28, w - 42, 18),
+            &row.subtitle,
+            (12, false),
+            sub_col,
+            l,
+        );
     }
 }
 
@@ -325,18 +327,14 @@ fn draw_footer(
     } else {
         [136, 144, 158, 255]
     };
-    texts.push(WidgetTextCmd {
-        x: 14,
-        y: footer_y + 8,
-        width: w - 76,
-        height: 22,
-        text: view.footer_text.to_owned(),
-        font_size_px: 11,
-        bold: false,
-        color_rgba: color,
-        align: TextAlign::Left,
-    });
-
+    push_txt(
+        texts,
+        (14, footer_y + 8, w - 76, 22),
+        view.footer_text,
+        (11, false),
+        color,
+        TextAlign::Left,
+    );
     let up_color = arrow_color(
         view.can_scroll_up,
         view.hovered == WidgetHitTarget::ScrollUpBtn,
@@ -349,14 +347,6 @@ fn draw_footer(
     draw_triangle_down(frame, w - 20, footer_y + 15, dn_color);
 }
 
-fn arrow_color(enabled: bool, hovered: bool) -> [u8; 4] {
-    match (enabled, hovered) {
-        (false, _) => [86, 92, 104, 140],
-        (true, true) => [243, 244, 246, 255],
-        (true, false) => [156, 163, 175, 255],
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -366,8 +356,9 @@ mod tests {
         let rows = vec![DisplayRow {
             title: "ОЗОН: карта".to_owned(),
             subtitle: "Сегодня · весь день".to_owned(),
-            bar_rgb: [52, 211, 153],
+            bar_rgb: [232, 122, 72],
             tooltip: "ОЗОН: карта".to_owned(),
+            is_past: false,
         }];
         let view = RenderView {
             width: 336,

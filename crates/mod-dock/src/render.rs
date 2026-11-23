@@ -105,8 +105,8 @@ fn draw_glass_capsule(frame: &mut BgraFrame, bar: Rect, radius: f32, opacity: f3
 
     for py in y0..y1 {
         let t = ((py - bar.y) as f32 / h).clamp(0.0, 1.0);
-        let boost = ((1.0 - t) * 18.0).round() as u8;
-        let (r, g, b) = (26 + boost, 29 + boost, 36 + boost);
+        let boost = ((1.0 - t) * 12.0).round() as u8;
+        let (r, g, b) = (26 + boost, 27 + boost, 32 + boost);
         for px in x0..x1 {
             let dist = rounded_rect_sdf(px as f32 + 0.5, py as f32 + 0.5, bar, radius);
             if dist <= 0.75 {
@@ -116,7 +116,7 @@ fn draw_glass_capsule(frame: &mut BgraFrame, bar: Rect, radius: f32, opacity: f3
                 if dist > -1.35 {
                     let rim = (1.0 - ((dist + 0.35).abs() / 1.0)).clamp(0.0, 1.0);
                     let rim_a = (max_rim * rim * cov).round() as u8;
-                    blend_pixel(frame, px, py, [255, 255, 255, rim_a]);
+                    blend_pixel(frame, px, py, [238, 232, 226, rim_a]);
                 }
             }
         }
@@ -209,8 +209,8 @@ fn draw_running_dot(frame: &mut BgraFrame, base: Rect, edge: DockEdge) {
             let d = ((dx * dx + dy * dy) as f32).sqrt();
             if d <= 2.4 {
                 let cov = (2.4 - d).clamp(0.0, 1.0);
-                let a = (240.0 * cov).round() as u8;
-                blend_pixel(frame, cx + dx, cy + dy, [225, 240, 255, a]);
+                let a = (242.0 * cov).round() as u8;
+                blend_pixel(frame, cx + dx, cy + dy, [236, 134, 86, a]);
             }
         }
     }
@@ -223,7 +223,7 @@ fn draw_insert_marker(frame: &mut BgraFrame, layout: &DockLayout, edge: DockEdge
         .copied()
         .filter(|s| matches!(s.kind, SlotKind::Shortcut | SlotKind::Separator))
         .collect();
-    let accent = [10, 132, 255, 235];
+    let accent = [232, 122, 72, 240];
     if edge.is_horizontal() {
         let x = match items.get(idx) {
             Some(s) => s.base_rect.x - 4,
@@ -297,19 +297,19 @@ fn draw_settings_button(frame: &mut BgraFrame, rect: Rect) {
 
     for py in y0..y1 {
         let t = ((py - rect.y) as f32 / (rect.height.max(1) as f32)).clamp(0.0, 1.0);
-        let bg = (74.0 - 24.0 * t).round() as u8;
+        let bg = (56.0 - 16.0 * t).round() as u8;
         for px in x0..x1 {
             let (fx, fy) = (px as f32 + 0.5, py as f32 + 0.5);
             let dist = rounded_rect_sdf(fx, fy, rect, radius);
             if dist <= 0.6 {
                 let cov = (0.6 - dist).clamp(0.0, 1.0);
-                blend_pixel(frame, px, py, [bg, bg + 4, bg + 12, (238.0 * cov) as u8]);
+                blend_pixel(frame, px, py, [bg, bg + 2, bg + 7, (240.0 * cov) as u8]);
                 if dist > -1.3 {
-                    blend_pixel(frame, px, py, [255, 255, 255, (68.0 * cov) as u8]);
+                    blend_pixel(frame, px, py, [232, 122, 72, (92.0 * cov) as u8]);
                 }
                 let gear_a = sample_gear_alpha(fx - cx, fy - cy, unit);
                 if gear_a > 0 {
-                    blend_pixel(frame, px, py, [232, 238, 248, gear_a]);
+                    blend_pixel(frame, px, py, [242, 238, 234, gear_a]);
                 }
             }
         }

@@ -24,6 +24,11 @@ const CMD_RATE_2S: u32 = 431;
 const CMD_RATE_3S: u32 = 432;
 const CMD_RATE_5S: u32 = 433;
 const CMD_RATE_10S: u32 = 434;
+const CMD_SYNC_5M: u32 = 440;
+const CMD_SYNC_15M: u32 = 441;
+const CMD_SYNC_30M: u32 = 442;
+const CMD_SYNC_1H: u32 = 443;
+const CMD_SYNC_3H: u32 = 444;
 
 pub(crate) fn show_widget_context_menu(
     hwnd: HWND,
@@ -69,6 +74,23 @@ pub(crate) fn show_widget_context_menu(
                     add_item(rate_sub, cmd, label, active_ms == val, true);
                 }
                 add_submenu(menu, rate_sub, "Частота обновления");
+            }
+        }
+        if let Some(sec) = state.sync_interval_sec {
+            add_sep(menu);
+            if let Ok(sync_sub) = CreatePopupMenu() {
+                let presets = [
+                    (CMD_SYNC_5M, 300u32, "Каждые 5 мин"),
+                    (CMD_SYNC_15M, 900, "Каждые 15 мин"),
+                    (CMD_SYNC_30M, 1800, "Каждые 30 мин"),
+                    (CMD_SYNC_1H, 3600, "Каждый час"),
+                    (CMD_SYNC_3H, 10_800, "Каждые 3 часа"),
+                ];
+                let active_s = closest_sync_preset(sec);
+                for (cmd, val, label) in presets {
+                    add_item(sync_sub, cmd, label, active_s == val, true);
+                }
+                add_submenu(menu, sync_sub, "Синхронизация календаря");
             }
         }
 
@@ -138,6 +160,11 @@ fn decode_widget_cmd(cmd: u32) -> Option<WidgetMenuAction> {
         CMD_RATE_3S => Some(WidgetMenuAction::SetRefreshMs(3000)),
         CMD_RATE_5S => Some(WidgetMenuAction::SetRefreshMs(5000)),
         CMD_RATE_10S => Some(WidgetMenuAction::SetRefreshMs(10_000)),
+        CMD_SYNC_5M => Some(WidgetMenuAction::SetSyncIntervalSec(300)),
+        CMD_SYNC_15M => Some(WidgetMenuAction::SetSyncIntervalSec(900)),
+        CMD_SYNC_30M => Some(WidgetMenuAction::SetSyncIntervalSec(1800)),
+        CMD_SYNC_1H => Some(WidgetMenuAction::SetSyncIntervalSec(3600)),
+        CMD_SYNC_3H => Some(WidgetMenuAction::SetSyncIntervalSec(10_800)),
         CMD_HIDE => Some(WidgetMenuAction::HideWidget),
         _ => None,
     }
@@ -160,5 +187,15 @@ fn closest_rate_preset(ms: u32) -> u32 {
         2501..=4000 => 3000,
         4001..=7500 => 5000,
         _ => 10_000,
+    }
+}
+
+fn closest_sync_preset(sec: u32) -> u32 {
+    match sec {
+        0..=600 => 300,
+        601..=1350 => 900,
+        1351..=2700 => 1800,
+        2701..=7200 => 3600,
+        _ => 10_800,
     }
 }

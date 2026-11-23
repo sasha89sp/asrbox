@@ -8,7 +8,9 @@ pub mod storage;
 
 use std::path::PathBuf;
 
-use asrbox_platform_api::{DockMenuAction, DockMenuState, IconRequest, PixelPoint, PixelRect};
+use asrbox_platform_api::{
+    DockMenuAction, DockMenuState, IconRequest, PixelPoint, PixelRect, WidgetLayer,
+};
 
 pub use config::{
     DockAlignment, DockConfig, DockConfigError, DockEdge, DockId, DockItem, DockItemKind,
@@ -49,6 +51,7 @@ pub fn build_menu_state(dock: &DockInstance, pt: Point, can_remove: bool) -> Doc
     };
     DockMenuState {
         edge_code,
+        layer: cfg.layer,
         is_centered: matches!(cfg.alignment, DockAlignment::Center) && cfg.free_pos.is_none(),
         icon_size_px: cfg.icon_size_px,
         opacity_percent: cfg.opacity_percent,
@@ -85,6 +88,9 @@ pub fn apply_menu_action(
             cfg.edge = DockEdge::Bottom;
             cfg.free_pos = None;
         }
+        DockMenuAction::SetLayerWallpaper => cfg.layer = WidgetLayer::Wallpaper,
+        DockMenuAction::SetLayerNormal => cfg.layer = WidgetLayer::Normal,
+        DockMenuAction::SetLayerTopmost => cfg.layer = WidgetLayer::Topmost,
         DockMenuAction::AlignCenter => {
             cfg.alignment = DockAlignment::Center;
             cfg.free_pos = None;

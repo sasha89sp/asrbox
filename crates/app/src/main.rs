@@ -1,6 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 #[cfg(windows)]
+mod backup_ctl;
+#[cfg(windows)]
 mod dock_drag;
 #[cfg(windows)]
 mod dock_ops;
@@ -45,6 +47,8 @@ use asrbox_platform_api::{
     DockPlatform, IconProvider, PlatformEvent, ToolsPlatform, WidgetPlatform,
 };
 
+#[cfg(windows)]
+use crate::backup_ctl::BackupController;
 #[cfg(windows)]
 use crate::docks::DockManager;
 #[cfg(windows)]
@@ -123,11 +127,13 @@ fn run_app(safe_mode: bool, force_inproc: bool) -> Result<(), String> {
     }
     let hwnd_raw = host.host_hwnd_raw();
     host.set_supervisor_timer(true);
+    let backup = BackupController::load(&paths, &host);
     let mut ctrl = AppController::new(
         paths,
         work_area,
         WindowsIconProvider::new,
         modules_cfg,
+        backup,
         hwnd_raw,
         safe_mode,
     );
@@ -148,7 +154,9 @@ pub(crate) struct AppController<I: IconProvider> {
     pub(crate) docks: Option<DockManager<I>>,
     pub(crate) calendar: Option<CalendarWidget>,
     pub(crate) sysmon: Option<SysMonitorWidget>,
+    pub(crate) backup: BackupController,
     pub(crate) settings_ui: SettingsUiState,
+    pub(crate) last_settings_tab: Option<SettingsTab>,
     pub(crate) debug: DebugHub,
     pub(crate) safe_mode: bool,
 }
@@ -160,6 +168,7 @@ impl<I: IconProvider> AppController<I> {
         work_area: Rect,
         make_icons: fn() -> I,
         modules_cfg: ModulesConfig,
+        backup: BackupController,
         host_hwnd_raw: usize,
         safe_mode: bool,
     ) -> Self {
@@ -174,7 +183,9 @@ impl<I: IconProvider> AppController<I> {
             docks: None,
             calendar: None,
             sysmon: None,
+            backup,
             settings_ui: SettingsUiState::default(),
+            last_settings_tab: None,
             debug,
             safe_mode,
         }
@@ -250,6 +261,13 @@ impl<I: IconProvider> AppController<I> {
             PlatformEvent::DebugWindowTick => self.refresh_debug_ui(host),
             PlatformEvent::DebugCommand(cmd) => self.on_debug_cmd(host, cmd),
             PlatformEvent::AboutCommand(cmd) => self.on_about_cmd(host, cmd),
+            PlatformEvent::WebDavDone(res) => {
+                let ok = res.ok;
+                let msg = self.backup.on_webdav_done(res);
+                let lvl = if ok { LogLevel::Info } else { LogLevel::Error };
+                self.debug.log(host.local_time_now(), lvl, "webdav", msg);
+                self.render_settings_ui(host);
+            }
             PlatformEvent::DisplayChanged { work_area } => {
                 self.work_area = to_dock_rect(work_area);
                 if let Some(docks) = self.docks.as_mut() {

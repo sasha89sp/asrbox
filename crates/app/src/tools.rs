@@ -56,6 +56,7 @@ impl<I: IconProvider> AppController<I> {
             widgets_module_enabled: self.modules_cfg.widgets_enabled,
             calendar_visible: cal_vis,
             sys_monitor_visible: sys_vis,
+            autostart_enabled: host.is_autostart_enabled(),
         };
         let Ok(Some(action)) = host.show_tray_menu(screen, &entries, flags) else {
             return;
@@ -83,9 +84,21 @@ impl<I: IconProvider> AppController<I> {
         host: &mut H,
         action: TrayAction,
     ) {
+        use asrbox_mod_backup::BackupMode;
         let now = host.local_time_now();
         match action {
             TrayAction::OpenSettings => self.open_settings_tab(host, SettingsTab::Modules),
+            TrayAction::ToggleAutostart => {
+                let next = !host.is_autostart_enabled();
+                let res = host.set_autostart_enabled(next);
+                let msg = if next {
+                    "Трей: автозагрузка включена"
+                } else {
+                    "Трей: автозагрузка отключена"
+                };
+                self.log_io_result(now, "app", msg, res);
+                self.render_settings_ui(host);
+            }
             TrayAction::ToggleDockModule => {
                 self.modules_cfg.dock_enabled = !self.modules_cfg.dock_enabled;
                 self.persist_modules_cfg();
@@ -143,6 +156,24 @@ impl<I: IconProvider> AppController<I> {
                 let res = ToolsPlatform::open_text_file(host, &self.paths.sysmon_cfg);
                 self.log_io_result(now, "widgets", "Трей: открыт sysmon.cfg", res);
             }
+            TrayAction::BackupSettingsNow => {
+                match self.backup.run_backup(host, BackupMode::SettingsOnly, now) {
+                    Ok(m) => self.debug.log(now, LogLevel::Info, "backup", m),
+                    Err(e) => self.debug.log(now, LogLevel::Error, "backup", e),
+                }
+                self.render_settings_ui(host);
+            }
+            TrayAction::BackupFullNow => {
+                match self
+                    .backup
+                    .run_backup(host, BackupMode::FullAppAndSettings, now)
+                {
+                    Ok(m) => self.debug.log(now, LogLevel::Info, "backup", m),
+                    Err(e) => self.debug.log(now, LogLevel::Error, "backup", e),
+                }
+                self.render_settings_ui(host);
+            }
+            TrayAction::OpenBackupTab => self.open_settings_tab(host, SettingsTab::Backup),
             TrayAction::OpenDebugWindow => self.open_debug_window(host),
             TrayAction::OpenAboutWindow => self.open_about_window(host),
             TrayAction::Exit => {

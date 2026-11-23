@@ -3,6 +3,8 @@ use std::ffi::OsStr;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
+use asrbox_platform_api::WidgetLayer;
+
 pub type DockId = u64;
 pub const SETTINGS_SLOT_ID: u64 = u64::MAX;
 pub const DRAG_HANDLE_SLOT_ID: u64 = u64::MAX - 1;
@@ -140,6 +142,7 @@ pub struct DockConfig {
     pub name: String,
     pub enabled: bool,
     pub locked: bool,
+    pub layer: WidgetLayer,
     pub free_pos: Option<(i32, i32)>,
     pub monitor_index: usize,
     pub edge: DockEdge,
@@ -164,6 +167,7 @@ impl DockConfig {
             name: name.into(),
             enabled: true,
             locked: true,
+            layer: WidgetLayer::Wallpaper,
             free_pos: None,
             monitor_index: 0,
             edge: DockEdge::Bottom,

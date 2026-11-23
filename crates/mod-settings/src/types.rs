@@ -8,16 +8,18 @@ pub enum SettingsTab {
     Dock,
     Calendar,
     SysMonitor,
+    Backup,
     Debug,
     About,
 }
 
 impl SettingsTab {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::Modules,
         Self::Dock,
         Self::Calendar,
         Self::SysMonitor,
+        Self::Backup,
         Self::Debug,
         Self::About,
     ];
@@ -28,6 +30,7 @@ impl SettingsTab {
             Self::Dock => "Док-панели",
             Self::Calendar => "Google Календарь",
             Self::SysMonitor => "Системный монитор",
+            Self::Backup => "Бэкап и Облако",
             Self::Debug => "Диагностика",
             Self::About => "О программе",
         }
@@ -39,6 +42,7 @@ impl SettingsTab {
             Self::Dock => "▭",
             Self::Calendar => "▦",
             Self::SysMonitor => "▤",
+            Self::Backup => "☁",
             Self::Debug => "◉",
             Self::About => "ⓘ",
         }
@@ -59,6 +63,7 @@ pub struct ModuleStatusView {
 pub struct DockSettingsView {
     pub id: String,
     pub edge_index: u8,
+    pub layer: WidgetLayer,
     pub icon_size_px: u32,
     pub opacity_percent: u8,
     pub locked: bool,
@@ -79,6 +84,7 @@ pub struct CalendarSettingsView {
     pub opacity_percent: u8,
     pub layer: WidgetLayer,
     pub period_index: u8,
+    pub refresh_interval_sec: u32,
     pub width: u32,
     pub visible_rows: u8,
     pub commented_calendar_hint: bool,
@@ -93,6 +99,25 @@ pub struct SysMonitorSettingsView {
     pub refresh_interval_ms: u32,
     pub width: u32,
     pub height: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BackupSettingsView {
+    pub auto_upload_cloud: bool,
+    pub last_backup_file: String,
+    pub last_backup_time: String,
+    pub cloud_status: String,
+    pub busy: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WebDavSettingsView {
+    pub provider_index: u8,
+    pub effective_url: String,
+    pub username: String,
+    pub remote_dir: String,
+    pub has_saved_password: bool,
+    pub status_text: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -113,10 +138,13 @@ pub struct AboutSettingsView {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SettingsSnapshot {
     pub isolation: IsolationMode,
+    pub autostart_enabled: bool,
     pub modules: Vec<ModuleStatusView>,
     pub docks: Vec<DockSettingsView>,
     pub calendar: CalendarSettingsView,
     pub sysmon: SysMonitorSettingsView,
+    pub backup: BackupSettingsView,
+    pub webdav: WebDavSettingsView,
     pub debug: DebugSettingsView,
     pub about: AboutSettingsView,
 }
@@ -124,12 +152,14 @@ pub struct SettingsSnapshot {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SettingsAction {
     SetIsolation(IsolationMode),
+    SetAutostart(bool),
     SetModuleEnabled { id: ModuleId, enabled: bool },
     RestartModule(ModuleId),
     AddDock,
     RemoveDock(String),
     AddDockSeparator(String),
     SetDockEdge { dock_id: String, edge_index: u8 },
+    SetDockLayer { dock_id: String, layer: WidgetLayer },
     SetDockIconSize { dock_id: String, size_px: u32 },
     SetDockOpacity { dock_id: String, opacity: u8 },
     SetDockLocked { dock_id: String, locked: bool },
@@ -140,6 +170,7 @@ pub enum SettingsAction {
     SetCalendarOpacity(u8),
     SetCalendarLayer(WidgetLayer),
     SetCalendarPeriod(u8),
+    SetCalendarSyncInterval(u32),
     SetCalendarWidth(u32),
     SetCalendarRows(u8),
     MatchCalendarToSysMonitor,
@@ -157,6 +188,15 @@ pub enum SettingsAction {
     MatchSysMonitorToCalendar,
     RefreshSysMonitorNow,
     OpenSysMonitorConfig,
+    BackupSettingsNow,
+    BackupFullNow,
+    UploadLatestBackupNow,
+    OpenBackupsFolder,
+    SetAutoUploadBackup(bool),
+    SetWebDavProvider(u8),
+    SaveWebDavSettings,
+    TestWebDavConnection,
+    DeleteWebDavPassword,
     SetDebugVerbose(bool),
     SetDebugFileLog(bool),
     OpenDebugWindow,

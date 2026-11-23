@@ -1,4 +1,4 @@
-use asrbox_platform_api::BgraFrame;
+use asrbox_platform_api::{BgraFrame, TextAlign, WidgetTextCmd};
 
 pub const CARD_RADIUS: f32 = 16.0;
 
@@ -17,9 +17,9 @@ pub fn fill_macos_glass_card(frame: &mut BgraFrame, opacity_percent: u8) {
     let hf = h as f32;
     for y in 0..h {
         let t = (y as f32) / hf.max(1.0);
-        let r = (19.0 + t * 8.0) as u8;
-        let g = (25.0 + t * 9.0) as u8;
-        let b = (32.0 + t * 10.0) as u8;
+        let r = (28.0 - t * 6.0) as u8;
+        let g = (29.0 - t * 6.0) as u8;
+        let b = (34.0 - t * 6.0) as u8;
         for x in 0..w {
             let d = rounded_rect_sdf(x as f32 + 0.5, y as f32 + 0.5, wf, hf, CARD_RADIUS);
             let cov = (0.5 - d).clamp(0.0, 1.0);
@@ -31,7 +31,7 @@ pub fn fill_macos_glass_card(frame: &mut BgraFrame, opacity_percent: u8) {
             if d > -1.35 && d < 0.45 {
                 let extra = if y < 22 { top_glow / 2 } else { 0 };
                 let ba = (f32::from(rim_alpha.saturating_add(extra)) * cov).round() as u8;
-                blend_pixel(frame, x, y, [255, 255, 255, ba]);
+                blend_pixel(frame, x, y, [242, 236, 230, ba]);
             }
         }
     }
@@ -47,7 +47,7 @@ pub fn fill_glow_bar(frame: &mut BgraFrame, rx: i32, ry: i32, rw: i32, rh: i32, 
     if fill_w <= 0 {
         return;
     }
-    // Soft cyan-blue outer halo
+    // Soft NotePlan coral-amber outer halo
     fill_rounded_rect(
         frame,
         rx - 1,
@@ -55,9 +55,9 @@ pub fn fill_glow_bar(frame: &mut BgraFrame, rx: i32, ry: i32, rw: i32, rh: i32, 
         fill_w + 2,
         rh + 2,
         rad + 1.0,
-        [88, 206, 255, 58],
+        [232, 122, 72, 54],
     );
-    // Crisp horizontal gradient pill fill
+    // Crisp horizontal NotePlan coral-to-amber gradient pill fill
     let fw = fill_w as f32;
     let fh = rh as f32;
     for dy in 0..rh {
@@ -68,9 +68,9 @@ pub fn fill_glow_bar(frame: &mut BgraFrame, rx: i32, ry: i32, rw: i32, rh: i32, 
                 continue;
             }
             let t = (dx as f32) / fw.max(1.0);
-            let cr = (70.0 + t * 82.0) as u8;
-            let cg = (186.0 + t * 48.0) as u8;
-            let cb = 255u8;
+            let cr = (224.0 + t * 24.0) as u8;
+            let cg = (112.0 + t * 62.0) as u8;
+            let cb = (68.0 + t * 26.0) as u8;
             let ca = (245.0 * cov).round() as u8;
             blend_pixel(frame, rx + dx, ry + dy, [cr, cg, cb, ca]);
         }
@@ -91,11 +91,11 @@ pub fn fill_pill_badge(frame: &mut BgraFrame, rx: i32, ry: i32, rw: i32, rh: i32
             if cov <= 0.0 {
                 continue;
             }
-            let bg_a = (30.0 * cov).round() as u8;
-            blend_pixel(frame, rx + dx, ry + dy, [220, 236, 252, bg_a]);
+            let bg_a = (42.0 * cov).round() as u8;
+            blend_pixel(frame, rx + dx, ry + dy, [232, 122, 72, bg_a]);
             if d > -1.2 && d < 0.4 {
-                let rim_a = (48.0 * cov).round() as u8;
-                blend_pixel(frame, rx + dx, ry + dy, [255, 255, 255, rim_a]);
+                let rim_a = (86.0 * cov).round() as u8;
+                blend_pixel(frame, rx + dx, ry + dy, [240, 146, 98, rim_a]);
             }
         }
     }
@@ -116,10 +116,10 @@ pub fn draw_resize_grip(frame: &mut BgraFrame) {
 }
 
 pub fn draw_calendar_badge(frame: &mut BgraFrame, x: i32, y: i32) {
-    fill_rounded_rect(frame, x, y, 22, 22, 6.0, [232, 238, 246, 250]);
-    fill_rounded_rect(frame, x, y, 22, 7, 4.0, [78, 178, 255, 255]);
-    fill_rect(frame, x, y + 4, 22, 4, [78, 178, 255, 255]);
-    let dot = [45, 58, 74, 255];
+    fill_rounded_rect(frame, x, y, 22, 22, 6.0, [242, 238, 234, 250]);
+    fill_rounded_rect(frame, x, y, 22, 7, 4.0, [232, 122, 72, 255]);
+    fill_rect(frame, x, y + 4, 22, 4, [232, 122, 72, 255]);
+    let dot = [54, 57, 68, 255];
     fill_rect(frame, x + 5, y + 11, 4, 3, dot);
     fill_rect(frame, x + 13, y + 11, 4, 3, dot);
     fill_rect(frame, x + 5, y + 16, 4, 3, dot);
@@ -206,4 +206,33 @@ fn blend_pixel(frame: &mut BgraFrame, x: i32, y: i32, rgba: [u8; 4]) {
     frame.pixels[idx + 1] = (sg + dg * inv).round().clamp(0.0, 255.0) as u8;
     frame.pixels[idx + 2] = (sr + dr * inv).round().clamp(0.0, 255.0) as u8;
     frame.pixels[idx + 3] = (sa * 255.0 + da * inv).round().clamp(0.0, 255.0) as u8;
+}
+
+pub fn push_txt(
+    texts: &mut Vec<WidgetTextCmd>,
+    r: (i32, i32, i32, i32),
+    text: &str,
+    font: (i32, bool),
+    color_rgba: [u8; 4],
+    align: TextAlign,
+) {
+    texts.push(WidgetTextCmd {
+        x: r.0,
+        y: r.1,
+        width: r.2,
+        height: r.3,
+        text: text.to_owned(),
+        font_size_px: font.0,
+        bold: font.1,
+        color_rgba,
+        align,
+    });
+}
+
+pub fn arrow_color(enabled: bool, hovered: bool) -> [u8; 4] {
+    match (enabled, hovered) {
+        (false, _) => [86, 92, 104, 140],
+        (true, true) => [243, 244, 246, 255],
+        (true, false) => [156, 163, 175, 255],
+    }
 }

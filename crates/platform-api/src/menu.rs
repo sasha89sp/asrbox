@@ -11,6 +11,7 @@ pub struct WidgetMenuState {
     pub layer: WidgetLayer,
     pub opacity_percent: u8,
     pub refresh_ms: Option<u32>,
+    pub sync_interval_sec: Option<u32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -23,12 +24,14 @@ pub enum WidgetMenuAction {
     SetLayerTopmost,
     SetOpacity(u8),
     SetRefreshMs(u32),
+    SetSyncIntervalSec(u32),
     HideWidget,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DockMenuState {
     pub edge_code: u8,
+    pub layer: WidgetLayer,
     pub is_centered: bool,
     pub icon_size_px: u16,
     pub opacity_percent: u8,
@@ -48,6 +51,9 @@ pub enum DockMenuAction {
     SetEdgeRight,
     SetEdgeTop,
     SetEdgeBottom,
+    SetLayerWallpaper,
+    SetLayerNormal,
+    SetLayerTopmost,
     AlignCenter,
     ToggleLock,
     SetOpacity(u8),
@@ -82,11 +88,13 @@ pub struct TrayModuleFlags {
     pub widgets_module_enabled: bool,
     pub calendar_visible: bool,
     pub sys_monitor_visible: bool,
+    pub autostart_enabled: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrayAction {
     OpenSettings,
+    ToggleAutostart,
     ToggleDockModule,
     AddDock,
     ToggleDock(u64),
@@ -99,6 +107,9 @@ pub enum TrayAction {
     ToggleSysMonitorWidget,
     RefreshSysMonitorWidget,
     OpenSysMonitorConfig,
+    BackupSettingsNow,
+    BackupFullNow,
+    OpenBackupTab,
     OpenDebugWindow,
     OpenAboutWindow,
     Exit,

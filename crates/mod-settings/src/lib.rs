@@ -1,19 +1,20 @@
 pub mod draw;
 pub mod layout;
+pub mod layout_backup;
 pub mod layout_cal;
 pub mod layout_sys;
 pub mod layout_tabs;
 pub mod render;
 pub mod types;
 
-use asrbox_platform_api::{PixelRect, SettingsUiEvent, WidgetFrame};
+use asrbox_platform_api::{PixelRect, SettingsInputRects, SettingsUiEvent, WidgetFrame};
 
 pub use layout::{build_layout, MIN_SETTINGS_HEIGHT, MIN_SETTINGS_WIDTH};
 pub use render::render_settings_frame;
 pub use types::{
-    AboutSettingsView, CalendarSettingsView, CalendarSourceView, DebugSettingsView,
-    DockSettingsView, ModuleStatusView, SettingsAction, SettingsSnapshot, SettingsTab, SliderKind,
-    SysMonitorSettingsView,
+    AboutSettingsView, BackupSettingsView, CalendarSettingsView, CalendarSourceView,
+    DebugSettingsView, DockSettingsView, ModuleStatusView, SettingsAction, SettingsSnapshot,
+    SettingsTab, SliderKind, SysMonitorSettingsView, WebDavSettingsView,
 };
 
 use layout::{rect_contains, HitKind, SettingsLayout};
@@ -45,7 +46,7 @@ impl Default for SettingsUiState {
 }
 
 impl SettingsUiState {
-    pub fn render(&mut self, snap: &SettingsSnapshot) -> (WidgetFrame, Option<PixelRect>) {
+    pub fn render(&mut self, snap: &SettingsSnapshot) -> (WidgetFrame, SettingsInputRects) {
         if !snap.docks.is_empty() && self.selected_dock >= snap.docks.len() {
             self.selected_dock = snap.docks.len() - 1;
         }
@@ -214,6 +215,7 @@ mod tests {
     fn sample_snapshot() -> SettingsSnapshot {
         SettingsSnapshot {
             isolation: IsolationMode::Process,
+            autostart_enabled: false,
             modules: vec![ModuleStatusView {
                 id: ModuleId::Dock,
                 enabled: true,
@@ -225,6 +227,7 @@ mod tests {
             docks: vec![DockSettingsView {
                 id: "dock-1".to_owned(),
                 edge_index: 0,
+                layer: WidgetLayer::Wallpaper,
                 icon_size_px: 48,
                 opacity_percent: 85,
                 locked: true,
@@ -237,6 +240,7 @@ mod tests {
                 opacity_percent: 88,
                 layer: WidgetLayer::Wallpaper,
                 period_index: 2,
+                refresh_interval_sec: 1800,
                 width: 336,
                 visible_rows: 8,
                 commented_calendar_hint: true,
@@ -250,13 +254,28 @@ mod tests {
                 width: 560,
                 height: 492,
             },
+            backup: BackupSettingsView {
+                auto_upload_cloud: false,
+                last_backup_file: String::new(),
+                last_backup_time: String::new(),
+                cloud_status: String::new(),
+                busy: false,
+            },
+            webdav: WebDavSettingsView {
+                provider_index: 0,
+                effective_url: "https://webdav.yandex.ru".to_owned(),
+                username: String::new(),
+                remote_dir: "asrbox-backups".to_owned(),
+                has_saved_password: false,
+                status_text: String::new(),
+            },
             debug: DebugSettingsView {
                 verbose: false,
                 file_log: false,
                 summary_line: "RAM 20 MB".to_owned(),
             },
             about: AboutSettingsView {
-                version: "0.0.1".to_owned(),
+                version: "0.0.2".to_owned(),
                 exe_path: "asrbox.exe".to_owned(),
                 data_dir: "data".to_owned(),
                 config_dir: "data/config".to_owned(),
@@ -265,19 +284,28 @@ mod tests {
     }
 
     #[test]
-    fn renders_all_tabs_and_calendar_url_rect() {
+    fn renders_all_tabs_and_input_rects() {
         let snap = sample_snapshot();
         let mut ui = SettingsUiState::default();
         for tab in SettingsTab::ALL {
             ui.active_tab = tab;
-            let (frame, url_rect) = ui.render(&snap);
+            let (frame, inputs) = ui.render(&snap);
             assert_eq!(frame.bgra.width, 840);
             assert_eq!(frame.bgra.height, 580);
             assert!(!frame.texts.is_empty());
-            if tab == SettingsTab::Calendar {
-                assert!(url_rect.is_some());
-            } else {
-                assert!(url_rect.is_none());
+            match tab {
+                SettingsTab::Calendar => {
+                    assert!(inputs.primary.is_some());
+                    assert!(inputs.secret.is_none());
+                }
+                SettingsTab::Backup => {
+                    assert!(inputs.primary.is_some());
+                    assert!(inputs.secret.is_some());
+                }
+                _ => {
+                    assert!(inputs.primary.is_none());
+                    assert!(inputs.secret.is_none());
+                }
             }
         }
     }

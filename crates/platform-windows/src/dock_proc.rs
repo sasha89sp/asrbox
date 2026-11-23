@@ -1,10 +1,11 @@
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::ffi::{c_void, OsString};
 use std::mem;
 use std::os::windows::ffi::OsStringExt;
 use std::path::PathBuf;
 
-use asrbox_platform_api::{PixelPoint, PlatformEvent};
+use asrbox_platform_api::{PixelPoint, PlatformEvent, WidgetLayer};
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::Graphics::Gdi::ClientToScreen;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
@@ -12,8 +13,9 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows::Win32::UI::Shell::{DragFinish, DragQueryFileW, DragQueryPoint, HDROP};
 use windows::Win32::UI::WindowsAndMessaging::{
-    DefWindowProcW, GetCursorPos, GetWindowLongPtrW, GWLP_USERDATA, WM_CAPTURECHANGED,
-    WM_DROPFILES, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_RBUTTONUP, WM_TIMER,
+    DefWindowProcW, GetCursorPos, GetWindowLongPtrW, GWLP_USERDATA, HWND_BOTTOM, WINDOWPOS,
+    WM_CAPTURECHANGED, WM_DROPFILES, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_RBUTTONUP,
+    WM_TIMER, WM_WINDOWPOSCHANGING,
 };
 
 use crate::window::{
@@ -22,6 +24,19 @@ use crate::window::{
 
 thread_local! {
     static CAPTURED_DOCK: Cell<Option<u64>> = const { Cell::new(None) };
+    static DOCK_LAYERS: RefCell<HashMap<u64, WidgetLayer>> = RefCell::new(HashMap::new());
+}
+
+pub(crate) fn set_dock_layer_meta(dock_id: u64, layer: WidgetLayer) {
+    DOCK_LAYERS.with(|m| {
+        m.borrow_mut().insert(dock_id, layer);
+    });
+}
+
+pub(crate) fn remove_dock_layer_meta(dock_id: u64) {
+    DOCK_LAYERS.with(|m| {
+        m.borrow_mut().remove(&dock_id);
+    });
 }
 
 pub(crate) unsafe extern "system" fn dock_wnd_proc(
@@ -64,6 +79,17 @@ pub(crate) unsafe extern "system" fn dock_wnd_proc(
         WM_DROPFILES => {
             handle_drop_files(dock_id, HDROP(wparam.0 as *mut c_void));
             LRESULT(0)
+        }
+        WM_WINDOWPOSCHANGING => {
+            let is_wall = DOCK_LAYERS
+                .with(|m| m.borrow().get(&dock_id).copied())
+                .unwrap_or(WidgetLayer::Wallpaper)
+                == WidgetLayer::Wallpaper;
+            if is_wall && lparam.0 != 0 {
+                let pos = lparam.0 as *mut WINDOWPOS;
+                (*pos).hwndInsertAfter = HWND_BOTTOM;
+            }
+            DefWindowProcW(hwnd, msg, wparam, lparam)
         }
         _ => DefWindowProcW(hwnd, msg, wparam, lparam),
     }

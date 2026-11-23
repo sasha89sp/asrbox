@@ -1,9 +1,9 @@
 # MAP: `crates/mod-webdav`
 
-WebDAV и синхронизация папок (отдельный процесс для изоляции сетевых таймаутов и долгих операций; секреты только в Windows Credential Manager). Зависит только от `core` и `platform-api`. Лимит: <= 100 строк.
+Модуль WebDAV (`WD-001..WD-004`): пресеты Яндекс.Диск и Облако Mail.ru (+ свой HTTPS WebDAV), хранение несекретных настроек в `data/config/webdav.cfg` (пароли приложения — только в Windows Credential Manager), валидация HTTPS и Base64 Basic Auth. Без `unsafe`, без внешних крейтов. Лимит: <= 100 строк.
 
 ## Файлы
 
 | Путь | Назначение |
 | --- | --- |
-| `src/lib.rs` | Корневой модуль крейта `asrbox-mod-webdav` (каркас v0.0.1). |
+| `src/lib.rs` | `WebDavProvider` (Яндекс.Диск / Mail.ru / Свой), `WebDavConfig`, `webdav.cfg`, `validate_https_url`, `base64_encode`. |

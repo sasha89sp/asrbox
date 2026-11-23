@@ -22,6 +22,7 @@ impl<I: IconProvider> AppController<I> {
     ) {
         self.settings_ui.active_tab = tab;
         self.settings_ui.scroll_y = 0;
+        self.last_settings_tab = None;
         let title = format!("Настройки — asrbox v{APP_VERSION}");
         let w = self.settings_ui.width;
         let h = self.settings_ui.height;
@@ -37,9 +38,29 @@ impl<I: IconProvider> AppController<I> {
         if !host.is_settings_window_open() {
             return;
         }
-        let snap = self.build_settings_snapshot();
-        let (frame, url_rect) = self.settings_ui.render(&snap);
-        host.present_settings_frame(&frame, url_rect);
+        self.sync_settings_tab_inputs(host);
+        let snap = self.build_settings_snapshot(host);
+        let (frame, inputs) = self.settings_ui.render(&snap);
+        host.present_settings_frame(&frame, inputs);
+    }
+
+    fn sync_settings_tab_inputs<H: ToolsPlatform>(&mut self, host: &H) {
+        let cur = self.settings_ui.active_tab;
+        if self.last_settings_tab == Some(cur) {
+            return;
+        }
+        self.last_settings_tab = Some(cur);
+        match cur {
+            SettingsTab::Backup => {
+                host.set_settings_input_text(0, self.backup.webdav_username());
+                host.set_settings_input_text(1, "");
+                host.set_settings_input_text(2, self.backup.webdav_custom_url());
+            }
+            SettingsTab::Calendar => {
+                host.set_settings_input_text(0, "");
+            }
+            _ => {}
+        }
     }
 
     pub(crate) fn on_settings_event<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
@@ -47,7 +68,10 @@ impl<I: IconProvider> AppController<I> {
         host: &mut H,
         ev: SettingsUiEvent,
     ) {
-        let snap = self.build_settings_snapshot();
+        if matches!(ev, SettingsUiEvent::Closed) {
+            self.last_settings_tab = None;
+        }
+        let snap = self.build_settings_snapshot(host);
         let (redraw, action) = self.settings_ui.handle_event(ev, &snap);
         if let Some(act) = action {
             self.apply_settings_action(host, act);
@@ -57,7 +81,7 @@ impl<I: IconProvider> AppController<I> {
         }
     }
 
-    pub(crate) fn build_settings_snapshot(&self) -> SettingsSnapshot {
+    pub(crate) fn build_settings_snapshot(&self, host: &dyn ToolsPlatform) -> SettingsSnapshot {
         let docks_cfg = load_docks_from_file(&self.paths.docks_cfg).unwrap_or_default();
         let docks = docks_cfg
             .iter()
@@ -69,6 +93,7 @@ impl<I: IconProvider> AppController<I> {
                     DockEdge::Left => 2,
                     DockEdge::Right => 3,
                 },
+                layer: d.layer,
                 icon_size_px: u32::from(d.icon_size_px),
                 opacity_percent: d.opacity_percent,
                 locked: d.locked,
@@ -89,6 +114,7 @@ impl<I: IconProvider> AppController<I> {
                 PeriodFilter::Days30 => 2,
                 PeriodFilter::All => 3,
             },
+            refresh_interval_sec: cal_cfg.refresh_interval_sec,
             width: cal_cfg.width,
             visible_rows: cal_cfg.visible_rows,
             commented_calendar_hint: cal_cfg.commented_calendar_hint,
@@ -114,10 +140,13 @@ impl<I: IconProvider> AppController<I> {
 
         SettingsSnapshot {
             isolation: self.modules_cfg.isolation,
+            autostart_enabled: host.is_autostart_enabled(),
             modules: self.supervisor.status_views(&self.modules_cfg),
             docks,
             calendar,
             sysmon,
+            backup: self.backup.backup_view(),
+            webdav: self.backup.webdav_view(),
             debug: DebugSettingsView {
                 verbose: self.debug.verbose_trace(),
                 file_log: self.debug.file_logging(),
@@ -155,6 +184,15 @@ impl<I: IconProvider> AppController<I> {
                         format!("Режим изоляции -> {}", mode.as_str()),
                     );
                 }
+            }
+            SettingsAction::SetAutostart(enabled) => {
+                let res = host.set_autostart_enabled(enabled);
+                let msg = if enabled {
+                    "Автозагрузка с Windows включена"
+                } else {
+                    "Автозагрузка с Windows отключена"
+                };
+                self.log_io_result(now, "app", msg, res);
             }
             SettingsAction::SetModuleEnabled { id, enabled } => {
                 self.modules_cfg.set_enabled(id, enabled);
@@ -209,7 +247,9 @@ impl<I: IconProvider> AppController<I> {
                 let _ = host.open_folder(&self.paths.data_dir);
             }
             other => {
-                if !self.apply_dock_setting(host, &other) {
+                if !self.apply_dock_setting(host, &other)
+                    && !self.apply_backup_setting(host, &other)
+                {
                     self.apply_widget_setting(host, &other);
                 }
             }
@@ -260,6 +300,9 @@ impl<I: IconProvider> AppController<I> {
                 };
                 c.free_pos = None;
             }),
+            SettingsAction::SetDockLayer { dock_id, layer } => {
+                edit_dock(&mut cfgs, dock_id, |c| c.layer = *layer)
+            }
             SettingsAction::SetDockIconSize { dock_id, size_px } => {
                 edit_dock(&mut cfgs, dock_id, |c| {
                     c.icon_size_px = (*size_px).clamp(24, 128) as u16;
