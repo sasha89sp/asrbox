@@ -14,6 +14,17 @@ pub struct PixelRect {
     pub height: u32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LocalDateTime {
+    pub year: i32,
+    pub month: u8,
+    pub day: u8,
+    pub hour: u8,
+    pub minute: u8,
+    pub second: u8,
+    pub utc_offset_min: i32,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RgbaImage {
     pub width: u32,
@@ -59,6 +70,65 @@ impl BgraFrame {
             pixels: vec![0u8; byte_len],
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TextAlign {
+    #[default]
+    Left,
+    Center,
+    Right,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WidgetTextCmd {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+    pub text: String,
+    pub font_size_px: i32,
+    pub bold: bool,
+    pub color_rgba: [u8; 4],
+    pub align: TextAlign,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WidgetFrame {
+    pub bgra: BgraFrame,
+    pub texts: Vec<WidgetTextCmd>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WidgetLayer {
+    #[default]
+    Wallpaper,
+    Normal,
+    Topmost,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WidgetMenuState {
+    pub layer: WidgetLayer,
+    pub acrylic: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WidgetMenuAction {
+    Refresh,
+    OpenConfig,
+    SetLayerWallpaper,
+    SetLayerNormal,
+    SetLayerTopmost,
+    ToggleAcrylic,
+    HideWidget,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HttpFetchResult {
+    pub status_code: u16,
+    pub body: Vec<u8>,
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -113,6 +183,8 @@ pub enum TrayAction {
     AddDock,
     ToggleDock(u64),
     RemoveDock(u64),
+    ToggleCalendarWidget,
+    OpenWidgetConfig,
     Exit,
 }
 
@@ -148,6 +220,40 @@ pub enum PlatformEvent {
     },
     TrayContextMenu {
         screen_point: PixelPoint,
+    },
+    WidgetPointerMove {
+        widget_id: u64,
+        point: PixelPoint,
+    },
+    WidgetPointerLeave {
+        widget_id: u64,
+    },
+    WidgetLeftClick {
+        widget_id: u64,
+        point: PixelPoint,
+    },
+    WidgetRightClick {
+        widget_id: u64,
+        screen_point: PixelPoint,
+    },
+    WidgetWheel {
+        widget_id: u64,
+        delta: i16,
+    },
+    WidgetMoved {
+        widget_id: u64,
+        x: i32,
+        y: i32,
+    },
+    WidgetMinuteTick {
+        widget_id: u64,
+    },
+    WidgetRefreshTick {
+        widget_id: u64,
+    },
+    HttpFetchDone {
+        request_id: u64,
+        result: HttpFetchResult,
     },
 }
 
@@ -187,6 +293,7 @@ pub trait DockPlatform {
         &mut self,
         screen_point: PixelPoint,
         docks: &[TrayMenuEntry],
+        calendar_visible: bool,
     ) -> Result<Option<TrayAction>, String>;
 
     fn pick_icon_file(&mut self) -> Result<Option<PathBuf>, String>;
@@ -194,4 +301,54 @@ pub trait DockPlatform {
     fn launch_target(&self, path: &Path) -> Result<(), String>;
 
     fn request_quit(&mut self);
+}
+
+pub trait WidgetPlatform {
+    fn local_time_now(&self) -> LocalDateTime;
+
+    fn create_widget_window(
+        &mut self,
+        widget_id: u64,
+        title: &str,
+        rect: PixelRect,
+        layer: WidgetLayer,
+        acrylic: bool,
+        drag_header_h: i32,
+    ) -> Result<(), String>;
+
+    fn destroy_widget_window(&mut self, widget_id: u64) -> Result<(), String>;
+
+    fn set_widget_layer(
+        &mut self,
+        widget_id: u64,
+        layer: WidgetLayer,
+        acrylic: bool,
+    ) -> Result<(), String>;
+
+    fn present_widget_frame(
+        &mut self,
+        widget_id: u64,
+        rect: PixelRect,
+        frame: &WidgetFrame,
+    ) -> Result<(), String>;
+
+    fn set_widget_tooltip(&mut self, widget_id: u64, text: Option<&str>) -> Result<(), String>;
+
+    fn set_widget_timers(
+        &mut self,
+        widget_id: u64,
+        refresh_sec: u32,
+        minute_tick: bool,
+    ) -> Result<(), String>;
+
+    fn show_widget_menu(
+        &mut self,
+        widget_id: u64,
+        screen_point: PixelPoint,
+        state: &WidgetMenuState,
+    ) -> Result<Option<WidgetMenuAction>, String>;
+
+    fn start_http_get(&mut self, request_id: u64, url: &str) -> Result<(), String>;
+
+    fn open_url(&self, url: &str) -> Result<(), String>;
 }

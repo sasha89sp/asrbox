@@ -1,47 +1,67 @@
 version: 0.0.1
 updated: 2026-11-22
-spec_ids: [NF-001, NF-002, NF-005, NF-006, NF-007, NF-008, NF-010, DK-001, DK-002, DK-003, DK-004, DK-005, DK-006, DK-007, DK-008, DK-009, DK-010]
+spec_ids: [NF-001, NF-002, NF-005, NF-007, DK-001, DK-010, WG-001, WG-002, WG-003, WG-004, WG-005, WG-006, WG-007, WG-008, WG-009, WG-010, WG-011, WG-012]
 atlas_updated: true
 last_session:
-  goal: "Закрыть BUG-001 и реализовать полноценную macOS-док-панель на Windows (трей, layered-окна, drag-and-drop, чёткие иконки, выбор иконки, неограниченные панели, автосохранение)"
+  goal: "Добавить модуль crates/mod-widgets и реализовать рабочий виджет Google Календарь (.ics, macOS Dark) на Windows"
   done:
-    - "Закрыт BUG-001 после зелёного CI (перенесён в docs/archive/bugs-closed.md)"
-    - "Оформлены контракты DockPlatform/IconProvider в crates/platform-api"
-    - "Добавлены рендерер macOS-капсулы (render.rs), хранение docks.cfg (storage.rs) и обработчики меню в crates/mod-dock"
-    - "Реализован crates/platform-windows на windows 0.61 (ADR-008): UpdateLayeredWindow, DragAcceptFiles, IShellItemImageFactory + WIC + ExtractIconExW, трей, ПКМ-меню, GetOpenFileNameW, ShellExecuteW"
-    - "Реализован crates/app/src/main.rs (без консоли, трей, --selftest, --version, --safe-mode, цикл неограниченных док-панелей)"
-    - "Обновлены MAP.md, DECISIONS.md, docs/LICENSES.md, ARCHITECTURE.md, CHANGELOG.md, BUGS.md"
+    - "Оформлена спецификация specs/mod-widgets.md (WG-001..WG-012), обновлены ATLAS.md, specs/README.md, DECISIONS.md (ADR-009), ARCHITECTURE.md, CHANGELOG.md"
+    - "Расширен crates/platform-api контрактом WidgetPlatform, WidgetFrame, HttpFetchResult и событиями виджетов"
+    - "Реализован crates/mod-widgets (date, rrule, ics_time, ics, format, storage, draw, render, calendar_view, calendar): потоковый RFC 5545, RRULE, кэш, widgets.cfg, рендер macOS Dark и тесты (вкл. 7 000+ событий)"
+    - "Реализован Windows-слой в crates/platform-windows (http, widget_text, widget_proc, widget_win, dock_proc, window, tray): WinHTTP GET, GDI Segoe UI текст, слои, перетаскивание, DWM Acrylic, tooltip и меню трея"
+    - "Подключён CalendarWidget, выделены docks.rs и selftest.rs в crates/app"
   not_done:
-    - "Сборка и проверка нового Windows-кода на GitHub Actions (windows-latest)"
-    - "Ручная проверка живых док-панелей, drag-and-drop, иконок и трея на Windows 10/11"
+    - "Сборка, fmt/clippy/atlas-check и прогон тестов на GitHub Actions (windows-latest)"
+    - "Ручная проверка живого виджета календаря и док-панели на Windows 10/11 с реальной .ics ссылкой"
+    - "Этап 2 (отложен по плану): двустороннее редактирование через Google Calendar OAuth2 API"
   verified:
     ci_build: false
     tests: false
     manual_run: false
 open_bugs: []
-next_step: "Прогнать GitHub Actions (.github/workflows/ci.yml) на windows-latest, скачать asrbox.exe и проверить док-панели на Windows 10/11"
+next_step: "Прогнать GitHub Actions (.github/workflows/ci.yml) на windows-latest, скачать asrbox.exe и проверить виджет Календарь и док-панели на Windows 10/11"
 touched_files:
+  - Cargo.toml
+  - ATLAS.md
+  - specs/README.md
+  - specs/mod-widgets.md
   - crates/platform-api/src/lib.rs
-  - crates/mod-dock/Cargo.toml
-  - crates/mod-dock/src/lib.rs
-  - crates/mod-dock/src/render.rs
-  - crates/mod-dock/src/storage.rs
+  - crates/platform-api/MAP.md
+  - crates/mod-widgets/Cargo.toml
+  - crates/mod-widgets/MAP.md
+  - crates/mod-widgets/src/lib.rs
+  - crates/mod-widgets/src/date.rs
+  - crates/mod-widgets/src/rrule.rs
+  - crates/mod-widgets/src/rrule_parse.rs
+  - crates/mod-widgets/src/ics_time.rs
+  - crates/mod-widgets/src/ics.rs
+  - crates/mod-widgets/src/format.rs
+  - crates/mod-widgets/src/storage.rs
+  - crates/mod-widgets/src/draw.rs
+  - crates/mod-widgets/src/render.rs
+  - crates/mod-widgets/src/calendar_view.rs
+  - crates/mod-widgets/src/calendar.rs
   - crates/platform-windows/Cargo.toml
+  - crates/platform-windows/MAP.md
   - crates/platform-windows/src/lib.rs
-  - crates/platform-windows/src/icons.rs
+  - crates/platform-windows/src/http.rs
+  - crates/platform-windows/src/dock_proc.rs
+  - crates/platform-windows/src/widget_text.rs
+  - crates/platform-windows/src/widget_proc.rs
+  - crates/platform-windows/src/widget_win.rs
   - crates/platform-windows/src/tray.rs
   - crates/platform-windows/src/window.rs
   - crates/app/Cargo.toml
+  - crates/app/MAP.md
   - crates/app/src/main.rs
+  - crates/app/src/docks.rs
+  - crates/app/src/selftest.rs
   - DECISIONS.md
-  - docs/LICENSES.md
-  - BUGS.md
-  - docs/archive/bugs-closed.md
   - ARCHITECTURE.md
   - CHANGELOG.md
   - HANDOFF.yaml
 warnings:
-  - "Код windows 0.61 не компилировался локально — проверить по логу GitHub Actions (windows-latest)"
-  - "Всегда проверять ASCII-порядок use {...}, fn_call_width <= 60 и struct_lit_width <= 18 для cargo fmt --check"
+  - "Код windows 0.61 (WinHTTP, Dwmapi, DrawTextW, GetTimeZoneInformation) не компилировался локально — проверить по логу GitHub Actions"
+  - "Проверить cargo fmt --check на CI после локального Python-аудита"
 ideas:
-  - "Добавить кэш извлечённых иконок на диске (./data/cache/icons/) и выбор конкретного индекса ресурса .exe/.dll"
+  - "Этап 2: OAuth2-интеграция с Google Calendar API для создания/редактирования событий прямо внутри виджета"

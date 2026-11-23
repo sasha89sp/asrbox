@@ -12,6 +12,7 @@ members = [
     "crates/mod-monitor",
     "crates/mod-screenshot",
     "crates/mod-huawei",
+    "crates/mod-widgets",
     "crates/app",
 ]
 

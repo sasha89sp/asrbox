@@ -1,0 +1,11 @@
+[package]
+name = "asrbox-mod-widgets"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+asrbox-platform-api = { path = "../platform-api" }
+
+[lints]
+workspace = true

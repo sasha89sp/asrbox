@@ -1,8 +1,6 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
-use std::ffi::{OsString, c_void};
 use std::mem;
-use std::os::windows::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 
 use asrbox_platform_api::{
@@ -12,49 +10,51 @@ use asrbox_platform_api::{
 use windows::core::{PCWSTR, w};
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::UI::Input::KeyboardAndMouse::{TME_LEAVE, TRACKMOUSEEVENT, TrackMouseEvent};
-use windows::Win32::UI::Shell::{
-    DragAcceptFiles, DragFinish, DragQueryFileW, DragQueryPoint, HDROP,
-};
+use windows::Win32::UI::Shell::DragAcceptFiles;
 use windows::Win32::UI::WindowsAndMessaging::{
-    ClientToScreen, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW,
-    GWLP_USERDATA, GetCursorPos, GetMessageW, GetWindowLongPtrW, IDC_ARROW, KillTimer, LoadCursorW,
-    MSG, PostQuitMessage, RegisterClassExW, SW_SHOWNOACTIVATE, SetTimer, SetWindowLongPtrW,
-    ShowWindow, TranslateMessage, WM_CONTEXTMENU, WM_DISPLAYCHANGE, WM_DROPFILES, WM_LBUTTONUP,
-    WM_MOUSELEAVE, WM_MOUSEMOVE, WM_RBUTTONUP, WM_TIMER, WNDCLASSEXW, WS_EX_LAYERED,
-    WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GWLP_USERDATA, GetCursorPos,
+    GetMessageW, IDC_ARROW, KillTimer, LoadCursorW, MSG, PostQuitMessage, RegisterClassExW,
+    SW_SHOWNOACTIVATE, SetTimer, SetWindowLongPtrW, ShowWindow, TranslateMessage, WM_CONTEXTMENU,
+    WM_DISPLAYCHANGE, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_TOOLWINDOW,
+    WS_EX_TOPMOST, WS_POPUP,
 };
 
+use crate::dock_proc::dock_wnd_proc;
+use crate::http::{WM_HTTP_DONE, drain_http_results};
 use crate::present_layered_bgra;
 use crate::query_primary_work_area;
 use crate::tray::{
     TrayIconHandle, WM_TRAYICON, launch_path, pick_icon_dialog, show_dock_context_menu,
     show_tray_context_menu,
 };
+use crate::widget_proc::widget_wnd_proc;
 
-const ANIMATION_TIMER_ID: usize = 1;
-const ANIMATION_TICK_MS: u32 = 16;
+pub(crate) const ANIMATION_TIMER_ID: usize = 1;
+pub(crate) const ANIMATION_TICK_MS: u32 = 16;
 
 thread_local! {
     static EVENT_QUEUE: RefCell<VecDeque<PlatformEvent>> = const { RefCell::new(VecDeque::new()) };
 }
 
 pub struct WindowsDockHost {
-    hinstance: HINSTANCE,
-    host_hwnd: HWND,
+    pub(crate) hinstance: HINSTANCE,
+    pub(crate) host_hwnd: HWND,
     _tray: TrayIconHandle,
     windows: HashMap<u64, HWND>,
+    pub(crate) widget_windows: HashMap<u64, HWND>,
+    pub(crate) tooltip_hwnd: Option<HWND>,
 }
 
 impl WindowsDockHost {
     pub fn new(tooltip: &str) -> Result<Self, String> {
-        // SAFETY: Registering window classes and creating a hidden host window on UI thread.
+        // SAFETY: Registering window classes and creating hidden host window on UI thread.
         unsafe {
             let hmod = GetModuleHandleW(None)
                 .map_err(|err| format!("GetModuleHandleW failed: {err}"))?;
             let hinstance = HINSTANCE::from(hmod);
             register_class(hinstance, w!("AsrboxHostWindow"), Some(host_wnd_proc))?;
             register_class(hinstance, w!("AsrboxDockWindow"), Some(dock_wnd_proc))?;
+            register_class(hinstance, w!("AsrboxWidgetWindow"), Some(widget_wnd_proc))?;
 
             let host_hwnd = CreateWindowExW(
                 WS_EX_TOOLWINDOW,
@@ -78,6 +78,8 @@ impl WindowsDockHost {
                 host_hwnd,
                 _tray: tray,
                 windows: HashMap::new(),
+                widget_windows: HashMap::new(),
+                tooltip_hwnd: None,
             })
         }
     }
@@ -88,7 +90,7 @@ impl WindowsDockHost {
     {
         let mut msg = MSG::default();
         loop {
-            // SAFETY: Standard Win32 message loop on the thread that created the windows.
+            // SAFETY: Standard Win32 message loop on the UI thread.
             let status = unsafe { GetMessageW(&mut msg, None, 0, 0).0 };
             if status <= 0 {
                 break;
@@ -107,12 +109,17 @@ impl WindowsDockHost {
 
 impl Drop for WindowsDockHost {
     fn drop(&mut self) {
-        let hwnds: Vec<HWND> = self.windows.values().copied().collect();
+        let dock_hwnds: Vec<HWND> = self.windows.values().copied().collect();
+        let widget_hwnds: Vec<HWND> = self.widget_windows.values().copied().collect();
         self.windows.clear();
+        self.widget_windows.clear();
         // SAFETY: Destroying owned HWNDs on the UI thread during teardown.
         unsafe {
-            for hwnd in hwnds {
+            for hwnd in dock_hwnds.into_iter().chain(widget_hwnds) {
                 let _ = DestroyWindow(hwnd);
+            }
+            if let Some(tip) = self.tooltip_hwnd.take() {
+                let _ = DestroyWindow(tip);
             }
             let _ = DestroyWindow(self.host_hwnd);
         }
@@ -215,8 +222,9 @@ impl DockPlatform for WindowsDockHost {
         &mut self,
         screen_point: PixelPoint,
         docks: &[TrayMenuEntry],
+        calendar_visible: bool,
     ) -> Result<Option<TrayAction>, String> {
-        show_tray_context_menu(self.host_hwnd, screen_point, docks)
+        show_tray_context_menu(self.host_hwnd, screen_point, docks, calendar_visible)
     }
 
     fn pick_icon_file(&mut self) -> Result<Option<PathBuf>, String> {
@@ -273,6 +281,12 @@ unsafe extern "system" fn host_wnd_proc(
             }
             LRESULT(0)
         }
+        WM_HTTP_DONE => {
+            for (request_id, result) in drain_http_results() {
+                push_event(PlatformEvent::HttpFetchDone { request_id, result });
+            }
+            LRESULT(0)
+        }
         WM_DISPLAYCHANGE => {
             if let Ok(work_area) = query_primary_work_area() {
                 push_event(PlatformEvent::DisplayChanged { work_area });
@@ -283,112 +297,14 @@ unsafe extern "system" fn host_wnd_proc(
     }
 }
 
-unsafe extern "system" fn dock_wnd_proc(
-    hwnd: HWND,
-    msg: u32,
-    wparam: WPARAM,
-    lparam: LPARAM,
-) -> LRESULT {
-    let dock_id = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as u64;
-    match msg {
-        WM_MOUSEMOVE => on_dock_mouse_move(hwnd, dock_id, lparam),
-        WM_MOUSELEAVE => {
-            push_event(PlatformEvent::PointerLeave { dock_id });
-            LRESULT(0)
-        }
-        WM_LBUTTONUP => {
-            push_event(PlatformEvent::LeftClick {
-                dock_id,
-                point: lparam_point(lparam),
-            });
-            LRESULT(0)
-        }
-        WM_RBUTTONUP => on_dock_rbutton_up(hwnd, dock_id, lparam),
-        WM_TIMER if wparam.0 == ANIMATION_TIMER_ID => {
-            push_event(PlatformEvent::AnimationTick {
-                dock_id,
-                dt_ms: u16::try_from(ANIMATION_TICK_MS).unwrap_or(16),
-            });
-            LRESULT(0)
-        }
-        WM_DROPFILES => {
-            handle_drop_files(dock_id, HDROP(wparam.0 as *mut c_void));
-            LRESULT(0)
-        }
-        _ => DefWindowProcW(hwnd, msg, wparam, lparam),
-    }
-}
-
-unsafe fn on_dock_mouse_move(hwnd: HWND, dock_id: u64, lparam: LPARAM) -> LRESULT {
-    let mut tme = TRACKMOUSEEVENT {
-        cbSize: u32::try_from(mem::size_of::<TRACKMOUSEEVENT>()).unwrap_or(0),
-        dwFlags: TME_LEAVE,
-        hwndTrack: hwnd,
-        dwHoverTime: 0,
-    };
-    let _ = TrackMouseEvent(&mut tme);
-    push_event(PlatformEvent::PointerMove {
-        dock_id,
-        point: lparam_point(lparam),
-    });
-    LRESULT(0)
-}
-
-unsafe fn on_dock_rbutton_up(hwnd: HWND, dock_id: u64, lparam: LPARAM) -> LRESULT {
-    let point = lparam_point(lparam);
-    let mut screen = POINT {
-        x: point.x,
-        y: point.y,
-    };
-    let _ = ClientToScreen(hwnd, &mut screen);
-    push_event(PlatformEvent::RightClick {
-        dock_id,
-        point,
-        screen_point: PixelPoint {
-            x: screen.x,
-            y: screen.y,
-        },
-    });
-    LRESULT(0)
-}
-
-unsafe fn handle_drop_files(dock_id: u64, hdrop: HDROP) {
-    let mut pt = POINT::default();
-    let _ = DragQueryPoint(hdrop, &mut pt);
-    let count = DragQueryFileW(hdrop, u32::MAX, None);
-    let mut paths = Vec::with_capacity(count as usize);
-
-    for idx in 0..count {
-        let len = DragQueryFileW(hdrop, idx, None);
-        if len == 0 {
-            continue;
-        }
-        let mut buf = vec![0u16; (len as usize) + 1];
-        let copied = DragQueryFileW(hdrop, idx, Some(&mut buf));
-        if copied > 0 {
-            let text = OsString::from_wide(&buf[..copied as usize]);
-            paths.push(PathBuf::from(text));
-        }
-    }
-    DragFinish(hdrop);
-
-    if !paths.is_empty() {
-        push_event(PlatformEvent::DropFiles {
-            dock_id,
-            paths,
-            point: PixelPoint { x: pt.x, y: pt.y },
-        });
-    }
-}
-
-fn lparam_point(lparam: LPARAM) -> PixelPoint {
+pub(crate) fn lparam_point(lparam: LPARAM) -> PixelPoint {
     let raw = lparam.0 as usize;
     let x = i32::from((raw & 0xFFFF) as i16);
     let y = i32::from(((raw >> 16) & 0xFFFF) as i16);
     PixelPoint { x, y }
 }
 
-fn push_event(event: PlatformEvent) {
+pub(crate) fn push_event(event: PlatformEvent) {
     EVENT_QUEUE.with(|queue| queue.borrow_mut().push_back(event));
 }
 

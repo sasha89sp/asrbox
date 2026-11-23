@@ -40,6 +40,8 @@ const CMD_REMOVE_DOCK: u32 = 151;
 
 const TRAY_ADD_DOCK: u32 = 1001;
 const TRAY_EXIT: u32 = 1002;
+const TRAY_TOGGLE_CALENDAR: u32 = 1003;
+const TRAY_OPEN_WIDGET_CFG: u32 = 1004;
 const TRAY_TOGGLE_BASE: u32 = 2000;
 const TRAY_REMOVE_BASE: u32 = 3000;
 
@@ -173,11 +175,26 @@ pub(crate) fn show_tray_context_menu(
     hwnd: HWND,
     screen_pt: PixelPoint,
     docks: &[TrayMenuEntry],
+    calendar_visible: bool,
 ) -> Result<Option<TrayAction>, String> {
     // SAFETY: Creating, tracking, and destroying the tray popup menu on the UI thread.
     unsafe {
         let menu = CreatePopupMenu().map_err(|err| format!("CreatePopupMenu failed: {err}"))?;
         add_item(menu, TRAY_ADD_DOCK, "Добавить док-панель", false, true);
+        add_item(
+            menu,
+            TRAY_TOGGLE_CALENDAR,
+            "Виджет: Google Календарь",
+            calendar_visible,
+            true,
+        );
+        add_item(
+            menu,
+            TRAY_OPEN_WIDGET_CFG,
+            "Настройки виджетов (widgets.cfg)",
+            false,
+            true,
+        );
         if !docks.is_empty() {
             add_sep(menu);
         }
@@ -209,6 +226,12 @@ fn decode_tray_command(cmd: u32, docks: &[TrayMenuEntry]) -> Option<TrayAction> 
     if cmd == TRAY_ADD_DOCK {
         return Some(TrayAction::AddDock);
     }
+    if cmd == TRAY_TOGGLE_CALENDAR {
+        return Some(TrayAction::ToggleCalendarWidget);
+    }
+    if cmd == TRAY_OPEN_WIDGET_CFG {
+        return Some(TrayAction::OpenWidgetConfig);
+    }
     if cmd == TRAY_EXIT {
         return Some(TrayAction::Exit);
     }
@@ -223,7 +246,7 @@ fn decode_tray_command(cmd: u32, docks: &[TrayMenuEntry]) -> Option<TrayAction> 
     None
 }
 
-unsafe fn add_item(menu: HMENU, id: u32, text: &str, checked: bool, enabled: bool) {
+pub(crate) unsafe fn add_item(menu: HMENU, id: u32, text: &str, checked: bool, enabled: bool) {
     let mut flags = MF_STRING;
     if checked {
         flags |= MF_CHECKED;
@@ -236,7 +259,7 @@ unsafe fn add_item(menu: HMENU, id: u32, text: &str, checked: bool, enabled: boo
     let _ = AppendMenuW(menu, flags, id as usize, PCWSTR(wide.as_ptr()));
 }
 
-unsafe fn add_sep(menu: HMENU) {
+pub(crate) unsafe fn add_sep(menu: HMENU) {
     // SAFETY: Appending a separator does not dereference the string pointer.
     let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
 }
@@ -280,6 +303,16 @@ pub(crate) fn launch_path(path: &Path) -> Result<(), String> {
         .encode_wide()
         .chain(std::iter::once(0))
         .collect();
+    shell_open(&verb, &target)
+}
+
+pub(crate) fn open_url_str(url: &str) -> Result<(), String> {
+    let verb = encode_wide_str("open");
+    let target = encode_wide_str(url);
+    shell_open(&verb, &target)
+}
+
+fn shell_open(verb: &[u16], target: &[u16]) -> Result<(), String> {
     // SAFETY: `verb` and `target` are NUL-terminated UTF-16 strings valid for ShellExecuteW.
     let res = unsafe {
         ShellExecuteW(

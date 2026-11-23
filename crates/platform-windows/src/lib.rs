@@ -1,7 +1,17 @@
 #[cfg(windows)]
+mod dock_proc;
+#[cfg(windows)]
+mod http;
+#[cfg(windows)]
 mod icons;
 #[cfg(windows)]
 mod tray;
+#[cfg(windows)]
+mod widget_proc;
+#[cfg(windows)]
+mod widget_text;
+#[cfg(windows)]
+mod widget_win;
 #[cfg(windows)]
 mod window;
 

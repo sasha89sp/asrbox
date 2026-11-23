@@ -1,6 +1,6 @@
 # ARCHITECTURE.md — Архитектура `asrbox`
 
-Версия: `0.0.1` (каркас + рабочий прототип `mod-dock` / `platform-api` / `platform-windows` / `app`).
+Версия: `0.0.1` (каркас + рабочие модули `mod-dock` и `mod-widgets` / `platform-api` / `platform-windows` / `app`).
 
 ## 1. Правило зависимостей (строго вниз)
 
@@ -19,17 +19,17 @@
 ┌───────────────────┐     ┌──────────────────┐     ┌─────────────────────────┐
 │   crates/mod-*    │     │   crates/core    │     │ crates/platform-windows │
 │ keyboard, dock,   │     │ settings, bus,   │     │  windows-rs, WinAPI     │
-│ speech, webdav,   │     │ trait Module,    │     │  (ONLY crate w/ unsafe) │
-│ monitor, huawei,  │     │ tracing/profiler │     └────────────┬────────────┘
-│ screenshot        │     └────────▲─────────┘                  │
+│ widgets, speech,  │     │ trait Module,    │     │  (ONLY crate w/ unsafe) │
+│ webdav, monitor,  │     │ tracing/profiler │     └────────────┬────────────┘
+│ huawei, screenshot│     └────────▲─────────┘                  │
 └─────────┬─────────┘              │                            │
           └────────────┬───────────┴───────────────┐            │
                        ▼                           ▼            ▼
                ┌───────────────┐          ┌────────────────────────────┐
                │  crates/core  │          │    crates/platform-api     │
-               └───────────────┘          │ KeyboardHook, DockWindow,  │
-                                          │ ScreenCapture,             │
-                                          │ ProcessMonitor (no unsafe) │
+               └───────────────┘          │ DockPlatform, WidgetPlatform│
+                                          │ IconProvider, PlatformEvent│
+                                          │ (no unsafe)                │
                                           └────────────────────────────┘
 ```
 
@@ -51,6 +51,7 @@
 | `mod-huawei` | Отдельный процесс | Сбой COM-порта / драйвера модема не роняет программу (`NF-006`). |
 | `mod-webdav` | Отдельный процесс | Сетевые таймауты и долгие операции синхронизации не блокируют UI. |
 | `mod-dock` | Один процесс на весь док | Неограниченное число независимых панелей по единому шаблону без лишнего расхода ОЗУ. |
+| `mod-widgets` | Событийный UI + фоновый поток сети | Нулевой CPU в простое, мгновенный старт из локального кэша и неблокирующий WinHTTP. |
 | `mod-screenshot` | Процесс по запросу | Живёт секунды на время захвата и затем завершается. |
 | `mod-monitor` | Процесс при открытом окне | Не нагружает систему в фоне (`NF-001`, `NF-002`). |
 

@@ -73,3 +73,16 @@
   4. Извлечение иконок выполнять через `IShellItemImageFactory` (до 256×256) + WIC (`IWICImagingFactory`) для пользовательских `.ico`/`.png` + `ExtractIconExW` для `.exe`/`.dll`; выбор файла — через `GetOpenFileNameW`, запуск — через `ShellExecuteW`.
   5. Хранить неограниченное число док-панелей в портативном `./data/config/docks.cfg` (`settings_version=1`, `written_by`) без внешних крейтов сериализации.
 - **Причина**: Минимальный размер `.exe` (< 25 МБ), минимальный расход RAM (< 30 МБ), 0% CPU в покое за счёт событийного `UpdateLayeredWindow` и строгая изоляция `unsafe` в `crates/platform-windows`.
+
+---
+
+## ADR-009: Модуль `crates/mod-widgets`, потоковый `.ics`/RRULE, WinHTTP и GDI-рендер текста
+
+- **Статус**: Принято (v0.0.1, согласовано владельцем, `specs/mod-widgets.md`)
+- **Решение**:
+  1. Добавить в workspace крейт `crates/mod-widgets` (`asrbox-mod-widgets`) без `unsafe` и без внешних зависимостей (зависит только от `crates/platform-api`).
+  2. Реализовать потоковый построчный парсер RFC 5545 (`ics.rs`) и движок повторов `RRULE` (`rrule.rs`) на чистом `std` с быстрым пропуском архива, поддержкой `VTIMEZONE`/`UTC`, `EXDATE`, `RECURRENCE-ID`, `STATUS:CANCELLED` и многодневных `VALUE=DATE`.
+  3. Расширить `crates/platform-api` контрактом `WidgetPlatform`, `WidgetFrame`, `WidgetTextCmd`, `WidgetLayer`, `HttpFetchResult` и событиями `PlatformEvent::Widget*`/`HttpFetchDone`.
+  4. В `crates/platform-windows` активировать фичи `Win32_Networking_WinHttp`, `Win32_Graphics_Dwmapi`, `Win32_System_SystemInformation`, `Win32_System_Time` существующего крейта `windows = "0.61"` (новых крейтов не добавлено): фоновая загрузка `.ics` в потоке WinHTTP, рендер кириллического шрифта `Segoe UI` (`CreateFontIndirectW` + `DrawTextW`) с альфа-композитингом на 32-битный BGRA-буфер `UpdateLayeredWindow`, слои `Wallpaper`/`Normal`/`Topmost` и опциональный Windows 11 Acrylic (`DWMWA_SYSTEMBACKDROP_TYPE`).
+  5. Хранить настройки в `./data/config/widgets.cfg`, а кэш календарей — в `./data/cache/calendar_cache_<id>.ics`. Двустороннее редактирование через Google Calendar OAuth2 API вынесено в этап 2.
+- **Причина**: Нулевое раздувание `.exe` (без `reqwest`/`rustls`/`chrono`/`regex`), мгновенный офлайн-старт из кэша, 0% CPU в простое и строгое соблюдение границ `unsafe`.
