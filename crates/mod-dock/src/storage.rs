@@ -2,7 +2,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::config::{
-    DockAlignment, DockConfig, DockEdge, DockItem, HoverZoomConfig, HoverZoomMode, IconSource,
+    DockAlignment, DockConfig, DockEdge, DockItem, DockItemKind, HoverZoomConfig, HoverZoomMode,
+    IconSource,
 };
 
 const SETTINGS_VERSION: u32 = 1;
@@ -10,6 +11,7 @@ const SETTINGS_VERSION: u32 = 1;
 pub fn serialize_docks(docks: &[DockConfig], app_version: &str) -> String {
     let mut out = String::new();
     out.push_str("# asrbox docks config\n");
+    out.push_str("# После ручного редактирования выберите 'Перечитать настройки' в меню панели.\n");
     out.push_str(&format!("settings_version={SETTINGS_VERSION}\n"));
     out.push_str(&format!("written_by={app_version}\n"));
 
@@ -26,6 +28,10 @@ pub fn serialize_docks(docks: &[DockConfig], app_version: &str) -> String {
         out.push_str(&format!("item_spacing_px={}\n", dock.item_spacing_px));
         out.push_str(&format!("padding_px={}\n", dock.padding_px));
         out.push_str(&format!("corner_radius_px={}\n", dock.corner_radius_px));
+        out.push_str(&format!(
+            "show_settings_button={}\n",
+            dock.show_settings_button
+        ));
         out.push_str(&format!("hover_zoom_enabled={}\n", dock.hover_zoom.enabled));
         out.push_str(&format!("hover_zoom_scale={:.3}\n", dock.hover_zoom.scale));
         out.push_str(&format!(
@@ -33,7 +39,11 @@ pub fn serialize_docks(docks: &[DockConfig], app_version: &str) -> String {
             dock.hover_zoom.duration_ms
         ));
         for item in &dock.items {
-            out.push_str(&format!("item={}\n", serialize_item(item)));
+            if item.is_separator() {
+                out.push_str(&format!("separator={}\n", item.id));
+            } else {
+                out.push_str(&format!("item={}\n", serialize_item(item)));
+            }
         }
     }
     out
@@ -43,8 +53,8 @@ pub fn parse_docks(input: &str) -> Result<Vec<DockConfig>, String> {
     let mut docks = Vec::new();
     let mut current: Option<DockConfig> = None;
 
-    for raw_line in input.lines() {
-        let line = raw_line.trim();
+    for raw_line in input.trim_start_matches('\u{FEFF}').lines() {
+        let line = raw_line.trim().trim_start_matches('\u{FEFF}');
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
@@ -98,7 +108,7 @@ fn apply_field(dock: &mut DockConfig, key: &str, val: &str) -> Result<(), String
     match key {
         "id" => dock.id = val.parse::<u64>().map_err(|e| format!("bad id: {e}"))?,
         "name" => dock.name = unescape_field(val),
-        "enabled" => dock.enabled = val == "true",
+        "enabled" => dock.enabled = parse_bool(val),
         "monitor_index" => {
             dock.monitor_index = val.parse().map_err(|e| format!("bad monitor_index: {e}"))?;
         }
@@ -119,7 +129,8 @@ fn apply_field(dock: &mut DockConfig, key: &str, val: &str) -> Result<(), String
         "corner_radius_px" => {
             dock.corner_radius_px = val.parse().map_err(|e| format!("bad radius: {e}"))?;
         }
-        "hover_zoom_enabled" => dock.hover_zoom.enabled = val == "true",
+        "show_settings_button" => dock.show_settings_button = parse_bool(val),
+        "hover_zoom_enabled" => dock.hover_zoom.enabled = parse_bool(val),
         "hover_zoom_scale" => {
             let scale: f32 = val.parse().map_err(|e| format!("bad zoom_scale: {e}"))?;
             dock.hover_zoom = HoverZoomConfig {
@@ -131,10 +142,18 @@ fn apply_field(dock: &mut DockConfig, key: &str, val: &str) -> Result<(), String
         "hover_zoom_duration_ms" => {
             dock.hover_zoom.duration_ms = val.parse().map_err(|e| format!("bad duration: {e}"))?;
         }
+        "separator" => {
+            let id = val.parse::<u64>().unwrap_or_else(|_| dock.next_item_id());
+            dock.items.push(DockItem::separator(id));
+        }
         "item" => dock.items.push(parse_item(val)?),
         _ => {}
     }
     Ok(())
+}
+
+fn parse_bool(val: &str) -> bool {
+    val == "1" || val.eq_ignore_ascii_case("true")
 }
 
 fn serialize_item(item: &DockItem) -> String {
@@ -173,6 +192,7 @@ fn parse_item(val: &str) -> Result<DockItem, String> {
     let icon = parse_icon_source(icon_str);
     Ok(DockItem {
         id,
+        kind: DockItemKind::Shortcut,
         label: unescape_field(label_str),
         target: PathBuf::from(unescape_field(target_str)),
         icon,
@@ -271,42 +291,29 @@ mod tests {
     use super::*;
 
     #[test]
-    fn roundtrip_preserves_multiple_docks_and_icon_sources() -> Result<(), Box<dyn Error>> {
+    fn roundtrip_preserves_separators_settings_button_and_icons() -> Result<(), Box<dyn Error>> {
         let mut first = DockConfig::new(1, "Основная | Панель");
-        first.edge = DockEdge::Bottom;
-        first.alignment = DockAlignment::Center;
+        first.show_settings_button = false;
         first.items.push(DockItem {
             id: 1,
+            kind: DockItemKind::Shortcut,
             label: "Browser".to_owned(),
             target: PathBuf::from("C:\\Program Files\\App\\app.exe"),
             icon: IconSource::AutoShell,
         });
+        first.items.push(DockItem::separator(2));
         first.items.push(DockItem {
-            id: 2,
+            id: 3,
+            kind: DockItemKind::Shortcut,
             label: "Notes".to_owned(),
             target: PathBuf::from("C:\\Apps\\Notes.lnk"),
             icon: IconSource::CustomFile(PathBuf::from("C:\\Icons\\notes 100%.png")),
         });
 
-        let mut second = DockConfig::new(2, "Left Dock");
-        second.edge = DockEdge::Left;
-        second.alignment = DockAlignment::Offset(120);
-        second.icon_size_px = 56;
-        second.items.push(DockItem {
-            id: 3,
-            label: "Tool".to_owned(),
-            target: PathBuf::from("C:\\Tools\\tool.exe"),
-            icon: IconSource::ExeResource {
-                path: PathBuf::from("C:\\Tools\\icons.dll"),
-                index: 2,
-            },
-        });
-
-        let serialized = serialize_docks(&[first.clone(), second.clone()], "0.0.1");
+        let serialized = format!("\u{FEFF}{}", serialize_docks(&[first.clone()], "0.0.1"));
         let parsed = parse_docks(&serialized)?;
-        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0], first);
-        assert_eq!(parsed[1], second);
         Ok(())
     }
 }

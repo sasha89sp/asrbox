@@ -1,9 +1,10 @@
 use std::path::PathBuf;
 
 use crate::config::{DockConfig, DockConfigError, DockItem};
-use crate::layout::{DockLayout, HoverVisualState, Point, Rect};
-
-use crate::layout::{compute_layout, drop_insert_index, hit_test_item};
+use crate::layout::{
+    compute_layout, drop_insert_index, hit_test_slot, DockLayout, HoverVisualState, Point, Rect,
+    SlotKind,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DockEvent {
@@ -96,7 +97,9 @@ impl DockInstance {
     }
 
     fn on_pointer_move(&mut self, point: Point) -> DockStepEffect {
-        let hit = hit_test_item(&self.layout, point);
+        let hit = hit_test_slot(&self.layout, point)
+            .filter(|slot| slot.kind != SlotKind::Separator)
+            .map(|slot| slot.item_id);
         if hit == self.hovered_item {
             return DockStepEffect {
                 needs_redraw: false,

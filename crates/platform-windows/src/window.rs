@@ -10,6 +10,7 @@ use asrbox_platform_api::{
 };
 use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
+use windows::Win32::Graphics::Gdi::{COLOR_WINDOW, HBRUSH};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Shell::DragAcceptFiles;
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -22,12 +23,13 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 use crate::dock_proc::dock_wnd_proc;
 use crate::http::{drain_http_results, WM_HTTP_DONE};
+use crate::metrics::ProcessMetricsSampler;
 use crate::present_layered_bgra;
 use crate::query_primary_work_area;
-use crate::tray::{
-    launch_path, pick_icon_dialog, show_dock_context_menu, show_tray_context_menu, TrayIconHandle,
-    WM_TRAYICON,
-};
+use crate::shell::{launch_path, open_in_notepad, pick_icon_dialog};
+use crate::tools_proc::{about_wnd_proc, debug_wnd_proc};
+use crate::tools_win::ToolsWinState;
+use crate::tray::{show_dock_context_menu, show_tray_context_menu, TrayIconHandle, WM_TRAYICON};
 use crate::widget_proc::widget_wnd_proc;
 
 pub(crate) const ANIMATION_TIMER_ID: usize = 1;
@@ -48,6 +50,8 @@ pub struct WindowsDockHost {
     windows: HashMap<u64, HWND>,
     pub(crate) widget_windows: HashMap<u64, HWND>,
     pub(crate) tooltip_hwnd: Option<HWND>,
+    pub(crate) tools: ToolsWinState,
+    pub(crate) metrics: ProcessMetricsSampler,
 }
 
 impl WindowsDockHost {
@@ -57,9 +61,27 @@ impl WindowsDockHost {
             let hmod =
                 GetModuleHandleW(None).map_err(|err| format!("GetModuleHandleW failed: {err}"))?;
             let hinstance = HINSTANCE::from(hmod);
-            register_class(hinstance, w!("AsrboxHostWindow"), Some(host_wnd_proc))?;
-            register_class(hinstance, w!("AsrboxDockWindow"), Some(dock_wnd_proc))?;
-            register_class(hinstance, w!("AsrboxWidgetWindow"), Some(widget_wnd_proc))?;
+            let bg = HBRUSH((COLOR_WINDOW.0 + 1) as isize as *mut c_void);
+            register_class(
+                hinstance,
+                w!("AsrboxHostWindow"),
+                Some(host_wnd_proc),
+                HBRUSH::default(),
+            )?;
+            register_class(
+                hinstance,
+                w!("AsrboxDockWindow"),
+                Some(dock_wnd_proc),
+                HBRUSH::default(),
+            )?;
+            register_class(
+                hinstance,
+                w!("AsrboxWidgetWindow"),
+                Some(widget_wnd_proc),
+                HBRUSH::default(),
+            )?;
+            register_class(hinstance, w!("AsrboxDebugWindow"), Some(debug_wnd_proc), bg)?;
+            register_class(hinstance, w!("AsrboxAboutWindow"), Some(about_wnd_proc), bg)?;
 
             let host_hwnd = CreateWindowExW(
                 WS_EX_TOOLWINDOW,
@@ -87,6 +109,8 @@ impl WindowsDockHost {
                 windows: HashMap::new(),
                 widget_windows: HashMap::new(),
                 tooltip_hwnd: None,
+                tools: ToolsWinState::new(),
+                metrics: ProcessMetricsSampler::new(),
             })
         }
     }
@@ -117,6 +141,7 @@ impl WindowsDockHost {
 
 impl Drop for WindowsDockHost {
     fn drop(&mut self) {
+        self.tools.cleanup();
         let dock_hwnds: Vec<HWND> = self.windows.values().copied().collect();
         let widget_hwnds: Vec<HWND> = self.widget_windows.values().copied().collect();
         self.windows.clear();
@@ -249,6 +274,10 @@ impl DockPlatform for WindowsDockHost {
         launch_path(path)
     }
 
+    fn open_text_file(&self, path: &Path) -> Result<(), String> {
+        open_in_notepad(path)
+    }
+
     fn request_quit(&mut self) {
         // SAFETY: Posting WM_QUIT terminates the UI message loop cleanly.
         unsafe {
@@ -261,6 +290,7 @@ unsafe fn register_class(
     hinstance: HINSTANCE,
     class_name: PCWSTR,
     wnd_proc: Option<unsafe extern "system" fn(HWND, u32, WPARAM, LPARAM) -> LRESULT>,
+    hbr_background: HBRUSH,
 ) -> Result<(), String> {
     let cursor = LoadCursorW(None, IDC_ARROW).unwrap_or_default();
     let wc = WNDCLASSEXW {
@@ -268,6 +298,7 @@ unsafe fn register_class(
         lpfnWndProc: wnd_proc,
         hInstance: hinstance,
         hCursor: cursor,
+        hbrBackground: hbr_background,
         lpszClassName: class_name,
         ..Default::default()
     };

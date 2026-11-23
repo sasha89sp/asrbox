@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use asrbox_platform_api::{
     LocalDateTime, PixelPoint, PixelRect, WidgetFrame, WidgetLayer, WidgetMenuAction,
     WidgetMenuState, WidgetPlatform,
@@ -12,7 +14,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 use crate::http::spawn_http_get;
 use crate::present_layered_bgra;
-use crate::tray::open_url_str;
+use crate::shell::{open_in_notepad, open_url_str};
 use crate::widget_proc::{
     apply_widget_layer, register_widget_meta, remove_widget_meta, show_widget_context_menu,
     update_widget_layer_meta, WIDGET_MINUTE_TIMER_ID, WIDGET_REFRESH_TIMER_ID,
@@ -31,7 +33,6 @@ impl WidgetPlatform for WindowsDockHost {
         title: &str,
         rect: PixelRect,
         layer: WidgetLayer,
-        acrylic: bool,
         drag_header_h: i32,
     ) -> Result<(), String> {
         if self.widget_windows.contains_key(&widget_id) {
@@ -59,7 +60,7 @@ impl WidgetPlatform for WindowsDockHost {
 
             SetWindowLongPtrW(hwnd, GWLP_USERDATA, widget_id as isize);
             register_widget_meta(widget_id, layer, drag_header_h);
-            apply_widget_layer(hwnd, layer, acrylic);
+            apply_widget_layer(hwnd, layer);
             let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
             self.widget_windows.insert(widget_id, hwnd);
         }
@@ -85,15 +86,10 @@ impl WidgetPlatform for WindowsDockHost {
         Ok(())
     }
 
-    fn set_widget_layer(
-        &mut self,
-        widget_id: u64,
-        layer: WidgetLayer,
-        acrylic: bool,
-    ) -> Result<(), String> {
+    fn set_widget_layer(&mut self, widget_id: u64, layer: WidgetLayer) -> Result<(), String> {
         update_widget_layer_meta(widget_id, layer);
         if let Some(&hwnd) = self.widget_windows.get(&widget_id) {
-            apply_widget_layer(hwnd, layer, acrylic);
+            apply_widget_layer(hwnd, layer);
         }
         Ok(())
     }
@@ -187,6 +183,10 @@ impl WidgetPlatform for WindowsDockHost {
 
     fn open_url(&self, url: &str) -> Result<(), String> {
         open_url_str(url)
+    }
+
+    fn open_text_file(&self, path: &Path) -> Result<(), String> {
+        open_in_notepad(path)
     }
 }
 

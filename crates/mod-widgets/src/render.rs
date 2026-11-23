@@ -37,7 +37,7 @@ pub struct DisplayRow {
 pub struct RenderView<'a> {
     pub width: u32,
     pub visible_rows: u8,
-    pub acrylic: bool,
+    pub opacity_percent: u8,
     pub title: &'a str,
     pub period: PeriodFilter,
     pub date_format: DateFormatMode,
@@ -130,10 +130,18 @@ pub fn render_calendar_widget(view: &RenderView<'_>) -> WidgetFrame {
     let mut bgra = BgraFrame::transparent(w, h);
     let mut texts = Vec::with_capacity(32);
 
-    let bg_alpha = if view.acrylic { 226 } else { 244 };
-    fill_rounded_card(&mut bgra, [19, 20, 24, bg_alpha], [255, 255, 255, 26]);
+    let pct = u16::from(view.opacity_percent.clamp(20, 100));
+    let bg_alpha = ((pct * 255) / 100) as u8;
+    let border_alpha = ((u16::from(bg_alpha) * 32) / 255).clamp(16, 44) as u8;
+    let div_alpha = ((u16::from(bg_alpha) * 24) / 255).clamp(12, 32) as u8;
+
+    fill_rounded_card(
+        &mut bgra,
+        [19, 20, 24, bg_alpha],
+        [255, 255, 255, border_alpha],
+    );
     draw_header(&mut bgra, &mut texts, view, w as i32);
-    let div = [255, 255, 255, 18];
+    let div = [255, 255, 255, div_alpha];
     draw_hline(&mut bgra, HEADER_HEIGHT, div);
     draw_filter_bar(&mut bgra, &mut texts, view, w as i32);
     draw_hline(&mut bgra, HEADER_HEIGHT + FILTER_HEIGHT, div);
@@ -166,28 +174,16 @@ fn draw_header(
     });
 
     let refresh_glyph = if view.is_loading { "…" } else { "↻" };
+    let green = [52, 211, 153, 255];
+    let muted = [156, 163, 175, 255];
     let buttons = [
-        (
-            WidgetHitTarget::AddEventBtn,
-            w - 94,
-            "+",
-            [52, 211, 153, 255],
-            19,
-            true,
-        ),
-        (
-            WidgetHitTarget::SettingsBtn,
-            w - 64,
-            "⚙",
-            [156, 163, 175, 255],
-            16,
-            false,
-        ),
+        (WidgetHitTarget::AddEventBtn, w - 94, "+", green, 19, true),
+        (WidgetHitTarget::SettingsBtn, w - 64, "⚙", muted, 16, false),
         (
             WidgetHitTarget::RefreshBtn,
             w - 34,
             refresh_glyph,
-            [156, 163, 175, 255],
+            muted,
             16,
             false,
         ),
@@ -371,7 +367,7 @@ mod tests {
         let view = RenderView {
             width: 336,
             visible_rows: 8,
-            acrylic: true,
+            opacity_percent: 88,
             title: "Google Календарь",
             period: PeriodFilter::Days30,
             date_format: DateFormatMode::Normal,

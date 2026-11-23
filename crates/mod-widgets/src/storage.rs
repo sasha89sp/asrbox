@@ -3,6 +3,10 @@ use std::path::{Path, PathBuf};
 
 use asrbox_platform_api::WidgetLayer;
 
+pub const DEFAULT_OPACITY_PERCENT: u8 = 88;
+pub const MIN_OPACITY_PERCENT: u8 = 20;
+pub const MAX_OPACITY_PERCENT: u8 = 100;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PeriodFilter {
     Today,
@@ -89,7 +93,7 @@ pub struct CalendarWidgetConfig {
     pub width: u32,
     pub visible_rows: u8,
     pub layer: WidgetLayer,
-    pub acrylic: bool,
+    pub opacity_percent: u8,
     pub title: String,
     pub refresh_interval_sec: u32,
     pub lookahead_days: u16,
@@ -107,7 +111,7 @@ impl Default for CalendarWidgetConfig {
             width: 336,
             visible_rows: 8,
             layer: WidgetLayer::Wallpaper,
-            acrylic: true,
+            opacity_percent: DEFAULT_OPACITY_PERCENT,
             title: "Google Календарь".to_owned(),
             refresh_interval_sec: 3600,
             lookahead_days: 365,
@@ -141,20 +145,22 @@ pub fn save_widget_config(path: &Path, cfg: &CalendarWidgetConfig) -> Result<(),
 
 pub fn parse_widget_config(raw: &str) -> CalendarWidgetConfig {
     let mut cfg = CalendarWidgetConfig::default();
-    for line in raw.lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with('#') {
+    let cleaned = raw.trim_start_matches('\u{FEFF}');
+    for line in cleaned.lines() {
+        let trimmed = line.trim().trim_start_matches('\u{FEFF}');
+        if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with(';') {
             continue;
         }
         let Some((k, v)) = trimmed.split_once('=') else {
             continue;
         };
-        let key = k.trim();
-        let val = v.trim();
-        apply_kv(&mut cfg, key, val);
+        apply_kv(&mut cfg, k.trim(), v.trim());
     }
     cfg.visible_rows = cfg.visible_rows.clamp(3, 12);
     cfg.width = cfg.width.clamp(280, 560);
+    cfg.opacity_percent = cfg
+        .opacity_percent
+        .clamp(MIN_OPACITY_PERCENT, MAX_OPACITY_PERCENT);
     cfg.refresh_interval_sec = cfg.refresh_interval_sec.clamp(60, 86_400);
     cfg.lookahead_days = cfg.lookahead_days.clamp(7, 730);
     cfg
@@ -184,8 +190,12 @@ fn apply_kv(cfg: &mut CalendarWidgetConfig, key: &str, val: &str) {
             }
         }
         "layer" => cfg.layer = parse_layer(val),
-        "acrylic" => cfg.acrylic = val == "1" || val.eq_ignore_ascii_case("true"),
-        "title" if !val.is_empty() => cfg.title = val.to_owned(),
+        "opacity" => {
+            if let Ok(n) = val.trim_end_matches('%').trim().parse::<u8>() {
+                cfg.opacity_percent = n;
+            }
+        }
+        "title" if !val.is_empty() => cfg.title = strip_quotes(val).to_owned(),
         "refresh_interval_sec" => {
             if let Ok(n) = val.parse::<u32>() {
                 cfg.refresh_interval_sec = n;
@@ -198,8 +208,9 @@ fn apply_kv(cfg: &mut CalendarWidgetConfig, key: &str, val: &str) {
         }
         "period" => cfg.period = PeriodFilter::from_str_value(val),
         "date_format" => cfg.date_format = DateFormatMode::from_str_value(val),
-        "calendar" => {
-            if let Some(src) = parse_calendar_source(val) {
+        "calendar" | "url" => {
+            let idx = cfg.sources.len().saturating_add(1);
+            if let Some(src) = parse_calendar_source(val, idx) {
                 cfg.sources.push(src);
             }
         }
@@ -210,11 +221,12 @@ fn apply_kv(cfg: &mut CalendarWidgetConfig, key: &str, val: &str) {
 pub fn serialize_widget_config(cfg: &CalendarWidgetConfig) -> String {
     let mut out = String::from(concat!(
         "# Настройки виджета Google Календарь (asrbox)\n",
-        "# Сохраните файл и нажмите кнопку обновления на виджете.\n",
-        "# Формат: calendar=id|цвет_hex_или_auto|https://.../basic.ics\n",
-        "# Пример:\n",
-        "# calendar=main|auto|https://calendar.google.com/.../basic.ics\n",
-        "# calendar=work|#A855F7|https://calendar.google.com/.../basic.ics\n\n",
+        "# Сохраните файл и нажмите кнопку обновления (↻) на виджете.\n",
+        "# Прозрачность фона: opacity=20..100 (по умолчанию 88)\n",
+        "# Подключение календаря (подходит любой формат):\n",
+        "#   calendar=https://calendar.google.com/.../basic.ics\n",
+        "#   calendar=main|auto|https://calendar.google.com/.../basic.ics\n",
+        "#   calendar=work|#A855F7|https://calendar.google.com/.../basic.ics\n\n",
     ));
     out.push_str(&format!("visible={}\n", if cfg.visible { 1 } else { 0 }));
     out.push_str(&format!("x={}\n", cfg.x));
@@ -222,7 +234,7 @@ pub fn serialize_widget_config(cfg: &CalendarWidgetConfig) -> String {
     out.push_str(&format!("width={}\n", cfg.width));
     out.push_str(&format!("visible_rows={}\n", cfg.visible_rows));
     out.push_str(&format!("layer={}\n", layer_to_str(cfg.layer)));
-    out.push_str(&format!("acrylic={}\n", if cfg.acrylic { 1 } else { 0 }));
+    out.push_str(&format!("opacity={}\n", cfg.opacity_percent));
     out.push_str(&format!("title={}\n", cfg.title));
     out.push_str(&format!(
         "refresh_interval_sec={}\n",
@@ -262,36 +274,53 @@ pub fn save_cached_ics(cache_dir: &Path, source_id: &str, bytes: &[u8]) -> Resul
     Ok(())
 }
 
-fn parse_calendar_source(val: &str) -> Option<CalendarSource> {
+fn parse_calendar_source(val: &str, fallback_idx: usize) -> Option<CalendarSource> {
     let mut parts = val.splitn(3, '|');
-    let first = parts.next()?.trim();
-    let second = parts.next();
-    let third = parts.next();
+    let first = strip_quotes(parts.next()?.trim());
+    let second = parts.next().map(|s| strip_quotes(s.trim()));
+    let third = parts.next().map(|s| strip_quotes(s.trim()));
     match (second, third) {
-        (Some(color), Some(url)) => {
-            let u = url.trim();
-            if !u.starts_with("http://") && !u.starts_with("https://") {
-                return None;
-            }
-            Some(CalendarSource {
-                id: if first.is_empty() {
-                    "cal".to_owned()
-                } else {
-                    first.to_owned()
-                },
-                url: u.to_owned(),
-                color_rgb: parse_hex_rgb(color.trim()),
-            })
-        }
-        _ if first.starts_with("http://") || first.starts_with("https://") => {
-            Some(CalendarSource {
-                id: "main".to_owned(),
-                url: first.to_owned(),
-                color_rgb: None,
-            })
-        }
+        (Some(color), Some(url)) if is_http_url(url) => Some(CalendarSource {
+            id: normalize_id(first, fallback_idx),
+            url: url.to_owned(),
+            color_rgb: parse_hex_rgb(color),
+        }),
+        (Some(url), None) if is_http_url(url) => Some(CalendarSource {
+            id: normalize_id(first, fallback_idx),
+            url: url.to_owned(),
+            color_rgb: None,
+        }),
+        (None, None) if is_http_url(first) => Some(CalendarSource {
+            id: format!("cal_{fallback_idx}"),
+            url: first.to_owned(),
+            color_rgb: None,
+        }),
         _ => None,
     }
+}
+
+fn normalize_id(raw: &str, fallback_idx: usize) -> String {
+    if raw.is_empty() {
+        format!("cal_{fallback_idx}")
+    } else {
+        raw.to_owned()
+    }
+}
+
+fn is_http_url(s: &str) -> bool {
+    s.starts_with("https://") || s.starts_with("http://")
+}
+
+fn strip_quotes(s: &str) -> &str {
+    let trimmed = s.trim();
+    if trimmed.len() >= 2 {
+        let bytes = trimmed.as_bytes();
+        let q = bytes[0];
+        if (q == b'"' || q == b'\'') && bytes[bytes.len() - 1] == q {
+            return &trimmed[1..trimmed.len() - 1];
+        }
+    }
+    trimmed
 }
 
 fn parse_hex_rgb(s: &str) -> Option<[u8; 3]> {
@@ -336,6 +365,7 @@ mod tests {
             y: 85,
             visible_rows: 6,
             layer: WidgetLayer::Topmost,
+            opacity_percent: 70,
             period: PeriodFilter::Days7,
             date_format: DateFormatMode::Countdown,
             sources: vec![CalendarSource {
@@ -348,5 +378,21 @@ mod tests {
         let text = serialize_widget_config(&cfg);
         let parsed = parse_widget_config(&text);
         assert_eq!(parsed, cfg);
+    }
+
+    #[test]
+    fn parses_utf8_bom_quotes_and_short_calendar_formats() {
+        let raw = "\u{FEFF}opacity=50%\n\
+            acrylic=1\n\
+            calendar=\"https://example.com/a.ics\"\n\
+            calendar=personal|https://example.com/b.ics\n\
+            url=https://example.com/c.ics\n";
+        let cfg = parse_widget_config(raw);
+        assert_eq!(cfg.opacity_percent, 50);
+        assert_eq!(cfg.sources.len(), 3);
+        assert_eq!(cfg.sources[0].url, "https://example.com/a.ics");
+        assert_eq!(cfg.sources[1].id, "personal");
+        assert_eq!(cfg.sources[1].url, "https://example.com/b.ics");
+        assert_eq!(cfg.sources[2].url, "https://example.com/c.ics");
     }
 }

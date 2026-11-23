@@ -37,6 +37,16 @@
 - **Попытка 1**: добавлено немедленное пробуждение `GetMessageW` через `PostMessageW(host_hwnd, WM_WAKE_EVENTS)` в `push_event`, добавлен `PostMessageW(WM_NULL)` после всех `TrackPopupMenuEx`, убран дубль `WM_CONTEXTMENU`, кэширован `timer_active` в `DockRuntime` и `shown_row_count` в `CalendarWidget`.
 - **Статус**: правка готова, ожидает проверки CI (`windows-latest`) и ручной проверки на Windows.
 
+### BUG-005 — Не открывается `widgets.cfg` из меню и не обновляется календарь после ручного сохранения
+- **Версия**: `0.0.1`
+- **Крейты**: `crates/mod-widgets`, `crates/platform-windows`
+- **Локализация**:
+  1. `crates/mod-widgets/src/calendar.rs` (`open_config_file`): вызывал `ShellExecuteW("open", "...widgets.cfg")` (на Windows для `.cfg` нет ассоциации -> `SE_ERR_NOASSOC`) и предварительно перезаписывал существующий `widgets.cfg` на диске.
+  2. `crates/mod-widgets/src/storage.rs` (`parse_widget_config` / `parse_calendar_source`): не снимал UTF-8 BOM, кавычки и не принимал 2-частный формат `calendar=id|URL` или `url=URL`.
+  3. `crates/platform-windows/src/http.rs` (`winhttp_get`): использовал устаревший `WINHTTP_ACCESS_TYPE_DEFAULT_PROXY` без таймаутов и скрывал реальный Win32 код ошибки.
+- **Попытка 1**: открытие `.cfg` переведено на `notepad.exe` без перезаписи существующего файла; парсер `widgets.cfg` расширен и покрыт unit-тестами (BOM, кавычки, 1/2/3 части, `url=`); WinHTTP переведён на `WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY` + таймауты + реальные коды ошибок; добавлена очистка устаревшего кэша при `↻` и статус «Загрузка календаря...».
+- **Статус**: правка готова, ожидает проверки CI (`windows-latest`) и ручной проверки на Windows.
+
 (Закрытые `BUG-001`, `BUG-002` перенесены в `docs/archive/bugs-closed.md`.)
 
 ---

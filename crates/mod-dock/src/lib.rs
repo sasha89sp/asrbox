@@ -9,11 +9,11 @@ use std::path::PathBuf;
 use asrbox_platform_api::{DockMenuAction, DockMenuState, IconRequest, PixelPoint, PixelRect};
 
 pub use config::{
-    DockAlignment, DockConfig, DockConfigError, DockEdge, DockId, DockItem, DockRegistry,
-    HoverZoomConfig, HoverZoomMode, IconSource,
+    DockAlignment, DockConfig, DockConfigError, DockEdge, DockId, DockItem, DockItemKind,
+    DockRegistry, HoverZoomConfig, HoverZoomMode, IconSource, SETTINGS_SLOT_ID,
 };
-pub use layout::{compute_layout, drop_insert_index, hit_test_item};
-pub use layout::{DockLayout, DockSlotLayout, HoverVisualState, Point, Rect};
+pub use layout::{compute_layout, drop_insert_index, hit_test_item, hit_test_slot};
+pub use layout::{DockLayout, DockSlotLayout, HoverVisualState, Point, Rect, SlotKind};
 pub use render::render_dock_frame;
 pub use state::{DockEvent, DockInstance, DockMetrics, DockStepEffect};
 pub use storage::{load_docks_from_file, parse_docks, save_docks_to_file, serialize_docks};
@@ -37,12 +37,19 @@ pub fn build_menu_state(dock: &DockInstance, pt: Point, can_remove: bool) -> Doc
         DockEdge::Top => 2,
         DockEdge::Bottom => 3,
     };
+    let (hovered_item_id, hovered_is_separator) = match hit_test_slot(dock.layout(), pt) {
+        Some(slot) if slot.kind == SlotKind::Separator => (Some(slot.item_id), true),
+        Some(slot) if slot.kind == SlotKind::Shortcut => (Some(slot.item_id), false),
+        _ => (None, false),
+    };
     DockMenuState {
         edge_code,
         is_centered: matches!(cfg.alignment, DockAlignment::Center),
         icon_size_px: cfg.icon_size_px,
         hover_zoom_enabled: cfg.hover_zoom.enabled,
-        hovered_item_id: hit_test_item(dock.layout(), pt),
+        hovered_item_id,
+        hovered_is_separator,
+        show_settings_button: cfg.show_settings_button,
         can_remove_dock: can_remove,
     }
 }
@@ -78,7 +85,17 @@ pub fn apply_menu_action(
             }
         }
         DockMenuAction::RemoveItem(id) => cfg.items.retain(|i| i.id != id),
-        DockMenuAction::AddNewDock | DockMenuAction::RemoveDock => return false,
+        DockMenuAction::AddSeparator => {
+            let id = cfg.next_item_id();
+            cfg.items.push(DockItem::separator(id));
+        }
+        DockMenuAction::ToggleSettingsButton => {
+            cfg.show_settings_button = !cfg.show_settings_button;
+        }
+        DockMenuAction::OpenDockConfig
+        | DockMenuAction::ReloadDockConfig
+        | DockMenuAction::AddNewDock
+        | DockMenuAction::RemoveDock => return false,
     }
     true
 }

@@ -1,23 +1,18 @@
-use std::ffi::OsString;
 use std::mem;
-use std::os::windows::ffi::{OsStrExt, OsStringExt};
-use std::path::{Path, PathBuf};
 
 use asrbox_platform_api::{DockMenuAction, DockMenuState, PixelPoint, TrayAction, TrayMenuEntry};
-use windows::core::{PCWSTR, PWSTR};
+use windows::core::PCWSTR;
 use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
-use windows::Win32::UI::Controls::Dialogs::{
-    GetOpenFileNameW, OFN_FILEMUSTEXIST, OFN_NOCHANGEDIR, OFN_PATHMUSTEXIST, OPENFILENAMEW,
-};
 use windows::Win32::UI::Shell::{
-    ShellExecuteW, Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE,
-    NOTIFYICONDATAW,
+    Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, DestroyMenu, LoadIconW, PostMessageW, SetForegroundWindow,
     TrackPopupMenuEx, HMENU, IDI_APPLICATION, MF_CHECKED, MF_GRAYED, MF_SEPARATOR, MF_STRING,
-    SW_SHOWNORMAL, TPM_NONOTIFY, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_APP, WM_NULL,
+    TPM_NONOTIFY, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_APP, WM_NULL,
 };
+
+use crate::shell::encode_wide_str;
 
 pub(crate) const WM_TRAYICON: u32 = WM_APP + 10;
 
@@ -35,6 +30,10 @@ const CMD_TOGGLE_ZOOM: u32 = 130;
 const CMD_CHOOSE_ICON: u32 = 140;
 const CMD_RESET_ICON: u32 = 141;
 const CMD_REMOVE_ITEM: u32 = 142;
+const CMD_ADD_SEPARATOR: u32 = 145;
+const CMD_TOGGLE_SETTINGS_BTN: u32 = 146;
+const CMD_OPEN_DOCK_CFG: u32 = 147;
+const CMD_RELOAD_DOCK_CFG: u32 = 148;
 const CMD_ADD_DOCK: u32 = 150;
 const CMD_REMOVE_DOCK: u32 = 151;
 
@@ -42,6 +41,9 @@ const TRAY_ADD_DOCK: u32 = 1001;
 const TRAY_EXIT: u32 = 1002;
 const TRAY_TOGGLE_CALENDAR: u32 = 1003;
 const TRAY_OPEN_WIDGET_CFG: u32 = 1004;
+const TRAY_OPEN_DOCK_CFG: u32 = 1005;
+const TRAY_OPEN_DEBUG: u32 = 1006;
+const TRAY_OPEN_ABOUT: u32 = 1007;
 const TRAY_TOGGLE_BASE: u32 = 2000;
 const TRAY_REMOVE_BASE: u32 = 3000;
 
@@ -117,37 +119,103 @@ pub(crate) fn show_dock_context_menu(
 
 unsafe fn populate_dock_menu(menu: HMENU, state: &DockMenuState) {
     if state.hovered_item_id.is_some() {
-        add_item(menu, CMD_CHOOSE_ICON, "Сменить иконку...", false, true);
-        add_item(menu, CMD_RESET_ICON, "Авто-иконка Windows", false, true);
-        add_item(menu, CMD_REMOVE_ITEM, "Удалить значок", false, true);
+        if state.hovered_is_separator {
+            add_item(menu, CMD_REMOVE_ITEM, "Удалить разделитель", false, true);
+        } else {
+            add_item(menu, CMD_CHOOSE_ICON, "Сменить иконку...", false, true);
+            add_item(menu, CMD_RESET_ICON, "Авто-иконка Windows", false, true);
+            add_item(menu, CMD_REMOVE_ITEM, "Удалить значок", false, true);
+        }
         add_sep(menu);
     }
-    let bot = state.edge_code == 3;
-    let top = state.edge_code == 2;
-    let left = state.edge_code == 0;
-    let right = state.edge_code == 1;
-    add_item(menu, CMD_EDGE_BOTTOM, "Край: Снизу", bot, true);
-    add_item(menu, CMD_EDGE_TOP, "Край: Сверху", top, true);
-    add_item(menu, CMD_EDGE_LEFT, "Край: Слева", left, true);
-    add_item(menu, CMD_EDGE_RIGHT, "Край: Справа", right, true);
+    add_item(menu, CMD_ADD_SEPARATOR, "Добавить разделитель", false, true);
+    add_item(
+        menu,
+        CMD_TOGGLE_SETTINGS_BTN,
+        "Кнопка настроек на панели",
+        state.show_settings_button,
+        true,
+    );
+    add_item(
+        menu,
+        CMD_OPEN_DOCK_CFG,
+        "Открыть настройки (docks.cfg)",
+        false,
+        true,
+    );
+    add_item(
+        menu,
+        CMD_RELOAD_DOCK_CFG,
+        "Перечитать настройки",
+        false,
+        true,
+    );
     add_sep(menu);
-    let centered = state.is_centered;
-    add_item(menu, CMD_ALIGN_CENTER, "По центру", centered, true);
+    add_item(
+        menu,
+        CMD_EDGE_BOTTOM,
+        "Край: Снизу",
+        state.edge_code == 3,
+        true,
+    );
+    add_item(
+        menu,
+        CMD_EDGE_TOP,
+        "Край: Сверху",
+        state.edge_code == 2,
+        true,
+    );
+    add_item(
+        menu,
+        CMD_EDGE_LEFT,
+        "Край: Слева",
+        state.edge_code == 0,
+        true,
+    );
+    add_item(
+        menu,
+        CMD_EDGE_RIGHT,
+        "Край: Справа",
+        state.edge_code == 1,
+        true,
+    );
+    add_sep(menu);
+    add_item(menu, CMD_ALIGN_CENTER, "По центру", state.is_centered, true);
     add_item(menu, CMD_OFFSET_MINUS, "Сдвинуть (-80 px)", false, true);
     add_item(menu, CMD_OFFSET_PLUS, "Сдвинуть (+80 px)", false, true);
     add_sep(menu);
-    let sm = state.icon_size_px <= 42;
+    add_item(
+        menu,
+        CMD_SIZE_SMALL,
+        "Значки: 40 px",
+        state.icon_size_px <= 42,
+        true,
+    );
     let md = (43..=56).contains(&state.icon_size_px);
-    let lg = state.icon_size_px >= 57;
-    add_item(menu, CMD_SIZE_SMALL, "Значки: 40 px", sm, true);
     add_item(menu, CMD_SIZE_MEDIUM, "Значки: 48 px", md, true);
-    add_item(menu, CMD_SIZE_LARGE, "Значки: 64 px", lg, true);
-    let zoom = state.hover_zoom_enabled;
-    add_item(menu, CMD_TOGGLE_ZOOM, "Увеличение иконки", zoom, true);
+    add_item(
+        menu,
+        CMD_SIZE_LARGE,
+        "Значки: 64 px",
+        state.icon_size_px >= 57,
+        true,
+    );
+    add_item(
+        menu,
+        CMD_TOGGLE_ZOOM,
+        "Увеличение иконки",
+        state.hover_zoom_enabled,
+        true,
+    );
     add_sep(menu);
-    let can_del = state.can_remove_dock;
     add_item(menu, CMD_ADD_DOCK, "Добавить док-панель", false, true);
-    add_item(menu, CMD_REMOVE_DOCK, "Удалить эту панель", false, can_del);
+    add_item(
+        menu,
+        CMD_REMOVE_DOCK,
+        "Удалить эту панель",
+        false,
+        state.can_remove_dock,
+    );
 }
 
 fn decode_dock_command(cmd: u32, hovered: Option<u64>) -> Option<DockMenuAction> {
@@ -166,6 +234,10 @@ fn decode_dock_command(cmd: u32, hovered: Option<u64>) -> Option<DockMenuAction>
         CMD_CHOOSE_ICON => hovered.map(DockMenuAction::ChooseItemIcon),
         CMD_RESET_ICON => hovered.map(DockMenuAction::ResetItemIcon),
         CMD_REMOVE_ITEM => hovered.map(DockMenuAction::RemoveItem),
+        CMD_ADD_SEPARATOR => Some(DockMenuAction::AddSeparator),
+        CMD_TOGGLE_SETTINGS_BTN => Some(DockMenuAction::ToggleSettingsButton),
+        CMD_OPEN_DOCK_CFG => Some(DockMenuAction::OpenDockConfig),
+        CMD_RELOAD_DOCK_CFG => Some(DockMenuAction::ReloadDockConfig),
         CMD_ADD_DOCK => Some(DockMenuAction::AddNewDock),
         CMD_REMOVE_DOCK => Some(DockMenuAction::RemoveDock),
         _ => None,
@@ -184,6 +256,14 @@ pub(crate) fn show_tray_context_menu(
         add_item(menu, TRAY_ADD_DOCK, "Добавить док-панель", false, true);
         add_item(
             menu,
+            TRAY_OPEN_DOCK_CFG,
+            "Настройки док-панелей (docks.cfg)",
+            false,
+            true,
+        );
+        add_sep(menu);
+        add_item(
+            menu,
             TRAY_TOGGLE_CALENDAR,
             "Виджет: Google Календарь",
             calendar_visible,
@@ -200,18 +280,25 @@ pub(crate) fn show_tray_context_menu(
             add_sep(menu);
         }
         for (idx, dock) in docks.iter().take(50).enumerate() {
-            let toggle_id = TRAY_TOGGLE_BASE + u32::try_from(idx).unwrap_or(0);
-            let label = format!("Показать: {}", dock.title);
-            add_item(menu, toggle_id, &label, dock.enabled, true);
+            let id = TRAY_TOGGLE_BASE + u32::try_from(idx).unwrap_or(0);
+            add_item(
+                menu,
+                id,
+                &format!("Показать: {}", dock.title),
+                dock.enabled,
+                true,
+            );
         }
         if docks.len() > 1 {
             add_sep(menu);
             for (idx, dock) in docks.iter().take(50).enumerate() {
-                let remove_id = TRAY_REMOVE_BASE + u32::try_from(idx).unwrap_or(0);
-                let label = format!("Удалить: {}", dock.title);
-                add_item(menu, remove_id, &label, false, true);
+                let id = TRAY_REMOVE_BASE + u32::try_from(idx).unwrap_or(0);
+                add_item(menu, id, &format!("Удалить: {}", dock.title), false, true);
             }
         }
+        add_sep(menu);
+        add_item(menu, TRAY_OPEN_DEBUG, "Диагностика и логи...", false, true);
+        add_item(menu, TRAY_OPEN_ABOUT, "О программе...", false, true);
         add_sep(menu);
         add_item(menu, TRAY_EXIT, "Выход из asrbox", false, true);
 
@@ -225,27 +312,22 @@ pub(crate) fn show_tray_context_menu(
 }
 
 fn decode_tray_command(cmd: u32, docks: &[TrayMenuEntry]) -> Option<TrayAction> {
-    if cmd == TRAY_ADD_DOCK {
-        return Some(TrayAction::AddDock);
+    match cmd {
+        TRAY_ADD_DOCK => Some(TrayAction::AddDock),
+        TRAY_OPEN_DOCK_CFG => Some(TrayAction::OpenDockConfig),
+        TRAY_TOGGLE_CALENDAR => Some(TrayAction::ToggleCalendarWidget),
+        TRAY_OPEN_WIDGET_CFG => Some(TrayAction::OpenWidgetConfig),
+        TRAY_OPEN_DEBUG => Some(TrayAction::OpenDebugWindow),
+        TRAY_OPEN_ABOUT => Some(TrayAction::OpenAboutWindow),
+        TRAY_EXIT => Some(TrayAction::Exit),
+        c if (TRAY_TOGGLE_BASE..TRAY_REMOVE_BASE).contains(&c) => docks
+            .get((c - TRAY_TOGGLE_BASE) as usize)
+            .map(|d| TrayAction::ToggleDock(d.dock_id)),
+        c if c >= TRAY_REMOVE_BASE => docks
+            .get((c - TRAY_REMOVE_BASE) as usize)
+            .map(|d| TrayAction::RemoveDock(d.dock_id)),
+        _ => None,
     }
-    if cmd == TRAY_TOGGLE_CALENDAR {
-        return Some(TrayAction::ToggleCalendarWidget);
-    }
-    if cmd == TRAY_OPEN_WIDGET_CFG {
-        return Some(TrayAction::OpenWidgetConfig);
-    }
-    if cmd == TRAY_EXIT {
-        return Some(TrayAction::Exit);
-    }
-    if (TRAY_TOGGLE_BASE..TRAY_REMOVE_BASE).contains(&cmd) {
-        let idx = (cmd - TRAY_TOGGLE_BASE) as usize;
-        return docks.get(idx).map(|d| TrayAction::ToggleDock(d.dock_id));
-    }
-    if cmd >= TRAY_REMOVE_BASE {
-        let idx = (cmd - TRAY_REMOVE_BASE) as usize;
-        return docks.get(idx).map(|d| TrayAction::RemoveDock(d.dock_id));
-    }
-    None
 }
 
 pub(crate) unsafe fn add_item(menu: HMENU, id: u32, text: &str, checked: bool, enabled: bool) {
@@ -264,74 +346,4 @@ pub(crate) unsafe fn add_item(menu: HMENU, id: u32, text: &str, checked: bool, e
 pub(crate) unsafe fn add_sep(menu: HMENU) {
     // SAFETY: Appending a separator does not dereference the string pointer.
     let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
-}
-
-pub(crate) fn pick_icon_dialog(owner: HWND) -> Result<Option<PathBuf>, String> {
-    let filter = encode_wide_str(concat!(
-        "Иконки (*.ico;*.png;*.exe;*.dll)\0",
-        "*.ico;*.png;*.exe;*.dll\0",
-        "Все файлы (*.*)\0*.*\0",
-    ));
-    let mut file_buf = vec![0u16; 1024];
-    let mut ofn = OPENFILENAMEW {
-        lStructSize: u32::try_from(mem::size_of::<OPENFILENAMEW>()).unwrap_or(0),
-        hwndOwner: owner,
-        lpstrFilter: PCWSTR(filter.as_ptr()),
-        lpstrFile: PWSTR(file_buf.as_mut_ptr()),
-        nMaxFile: u32::try_from(file_buf.len()).unwrap_or(1024),
-        Flags: OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR,
-        ..Default::default()
-    };
-
-    // SAFETY: `filter` and `file_buf` stay valid during the modal GetOpenFileNameW call.
-    let accepted = unsafe { GetOpenFileNameW(&mut ofn).as_bool() };
-    if !accepted {
-        return Ok(None);
-    }
-    let len = file_buf
-        .iter()
-        .position(|&ch| ch == 0)
-        .unwrap_or(file_buf.len());
-    if len == 0 {
-        return Ok(None);
-    }
-    Ok(Some(PathBuf::from(OsString::from_wide(&file_buf[..len]))))
-}
-
-pub(crate) fn launch_path(path: &Path) -> Result<(), String> {
-    let verb = encode_wide_str("open");
-    let target: Vec<u16> = path
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect();
-    shell_open(&verb, &target)
-}
-
-pub(crate) fn open_url_str(url: &str) -> Result<(), String> {
-    let verb = encode_wide_str("open");
-    let target = encode_wide_str(url);
-    shell_open(&verb, &target)
-}
-
-fn shell_open(verb: &[u16], target: &[u16]) -> Result<(), String> {
-    // SAFETY: `verb` and `target` are NUL-terminated UTF-16 strings valid for ShellExecuteW.
-    let res = unsafe {
-        ShellExecuteW(
-            None,
-            PCWSTR(verb.as_ptr()),
-            PCWSTR(target.as_ptr()),
-            PCWSTR::null(),
-            PCWSTR::null(),
-            SW_SHOWNORMAL,
-        )
-    };
-    if (res.0 as usize) <= 32 {
-        return Err(format!("ShellExecuteW failed with code {}", res.0 as usize));
-    }
-    Ok(())
-}
-
-fn encode_wide_str(text: &str) -> Vec<u16> {
-    text.encode_utf16().chain(std::iter::once(0)).collect()
 }

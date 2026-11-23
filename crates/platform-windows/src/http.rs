@@ -5,12 +5,12 @@ use std::thread;
 
 use asrbox_platform_api::HttpFetchResult;
 use windows::core::{w, PCWSTR};
-use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+use windows::Win32::Foundation::{GetLastError, HWND, LPARAM, WPARAM};
 use windows::Win32::Networking::WinHttp::{
     WinHttpCloseHandle, WinHttpConnect, WinHttpOpen, WinHttpOpenRequest, WinHttpQueryHeaders,
-    WinHttpReadData, WinHttpReceiveResponse, WinHttpSendRequest, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
-    WINHTTP_FLAG_SECURE, WINHTTP_OPEN_REQUEST_FLAGS, WINHTTP_QUERY_FLAG_NUMBER,
-    WINHTTP_QUERY_STATUS_CODE,
+    WinHttpReadData, WinHttpReceiveResponse, WinHttpSendRequest, WinHttpSetTimeouts,
+    WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_FLAG_SECURE,
+    WINHTTP_OPEN_REQUEST_FLAGS, WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_QUERY_STATUS_CODE,
 };
 use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_APP};
 
@@ -121,20 +121,31 @@ fn winhttp_get(parsed: &ParsedUrl) -> Result<(u16, Vec<u8>), String> {
 
     // SAFETY: All WinHTTP handles are validated for null and closed before returning.
     unsafe {
-        let session = WinHttpOpen(
+        let mut session = WinHttpOpen(
             w!("asrbox/0.0.1"),
-            WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+            WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
             PCWSTR::null(),
             PCWSTR::null(),
             0,
         );
         if session.is_null() {
-            return Err("WinHttpOpen".to_owned());
+            session = WinHttpOpen(
+                w!("asrbox/0.0.1"),
+                WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                PCWSTR::null(),
+                PCWSTR::null(),
+                0,
+            );
         }
+        if session.is_null() {
+            return Err(format!("WinHttpOpen ({:?})", GetLastError()));
+        }
+        let _ = WinHttpSetTimeouts(session, 10_000, 10_000, 15_000, 20_000);
         let connect = WinHttpConnect(session, PCWSTR(host_w.as_ptr()), parsed.port, 0);
         if connect.is_null() {
+            let code = GetLastError();
             let _ = WinHttpCloseHandle(session);
-            return Err("WinHttpConnect".to_owned());
+            return Err(format!("WinHttpConnect ({code:?})"));
         }
         let req = WinHttpOpenRequest(
             connect,
@@ -146,9 +157,10 @@ fn winhttp_get(parsed: &ParsedUrl) -> Result<(u16, Vec<u8>), String> {
             flags,
         );
         if req.is_null() {
+            let code = GetLastError();
             let _ = WinHttpCloseHandle(connect);
             let _ = WinHttpCloseHandle(session);
-            return Err("WinHttpOpenRequest".to_owned());
+            return Err(format!("WinHttpOpenRequest ({code:?})"));
         }
         let res = send_and_read(req);
         let _ = WinHttpCloseHandle(req);
@@ -159,23 +171,21 @@ fn winhttp_get(parsed: &ParsedUrl) -> Result<(u16, Vec<u8>), String> {
 }
 
 unsafe fn send_and_read(req: *mut c_void) -> Result<(u16, Vec<u8>), String> {
-    WinHttpSendRequest(req, None, None, 0, 0, 0).map_err(|_| "ошибка соединения".to_owned())?;
+    WinHttpSendRequest(req, None, None, 0, 0, 0).map_err(|err| format!("SendRequest: {err}"))?;
     WinHttpReceiveResponse(req, std::ptr::null_mut())
-        .map_err(|_| "нет ответа сервера".to_owned())?;
+        .map_err(|err| format!("ReceiveResponse: {err}"))?;
 
     let mut status: u32 = 0;
     let mut status_len = std::mem::size_of::<u32>() as u32;
-    let query_ok = WinHttpQueryHeaders(
+    WinHttpQueryHeaders(
         req,
         WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
         PCWSTR::null(),
         Some(&mut status as *mut u32 as *mut c_void),
         &mut status_len,
         std::ptr::null_mut(),
-    );
-    if query_ok.is_err() {
-        return Err("ошибка чтения HTTP статуса".to_owned());
-    }
+    )
+    .map_err(|err| format!("QueryHeaders: {err}"))?;
 
     let mut body = Vec::new();
     let mut chunk = vec![0u8; 16_384];
@@ -187,7 +197,7 @@ unsafe fn send_and_read(req: *mut c_void) -> Result<(u16, Vec<u8>), String> {
             chunk.len() as u32,
             &mut read,
         )
-        .map_err(|_| "ошибка чтения потока".to_owned())?;
+        .map_err(|err| format!("ReadData: {err}"))?;
         if read == 0 {
             break;
         }

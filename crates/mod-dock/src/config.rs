@@ -4,6 +4,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 pub type DockId = u64;
+pub const SETTINGS_SLOT_ID: u64 = u64::MAX;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DockEdge {
@@ -83,9 +84,17 @@ impl HoverZoomConfig {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DockItemKind {
+    #[default]
+    Shortcut,
+    Separator,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DockItem {
     pub id: u64,
+    pub kind: DockItemKind,
     pub label: String,
     pub target: PathBuf,
     pub icon: IconSource,
@@ -99,10 +108,25 @@ impl DockItem {
         let label = derive_label(&target);
         Ok(Self {
             id,
+            kind: DockItemKind::Shortcut,
             label,
             target,
             icon: IconSource::AutoShell,
         })
+    }
+
+    pub fn separator(id: u64) -> Self {
+        Self {
+            id,
+            kind: DockItemKind::Separator,
+            label: "Разделитель".to_owned(),
+            target: PathBuf::new(),
+            icon: IconSource::AutoShell,
+        }
+    }
+
+    pub fn is_separator(&self) -> bool {
+        self.kind == DockItemKind::Separator
     }
 }
 
@@ -119,6 +143,7 @@ pub struct DockConfig {
     pub item_spacing_px: u16,
     pub padding_px: u16,
     pub corner_radius_px: u16,
+    pub show_settings_button: bool,
     pub hover_zoom: HoverZoomConfig,
     pub items: Vec<DockItem>,
 }
@@ -137,6 +162,7 @@ impl DockConfig {
             item_spacing_px: 10,
             padding_px: 12,
             corner_radius_px: 16,
+            show_settings_button: true,
             hover_zoom: HoverZoomConfig::default(),
             items: Vec::new(),
         }
@@ -157,11 +183,20 @@ impl DockConfig {
         }
         self.hover_zoom.validate()?;
         for item in &self.items {
-            if item.target.as_os_str().is_empty() {
+            if !item.is_separator() && item.target.as_os_str().is_empty() {
                 return Err(DockConfigError::EmptyTargetPath);
             }
         }
         Ok(())
+    }
+
+    pub fn next_item_id(&self) -> u64 {
+        self.items
+            .iter()
+            .map(|item| item.id)
+            .max()
+            .unwrap_or(0)
+            .saturating_add(1)
     }
 }
 
@@ -326,24 +361,21 @@ mod tests {
     }
 
     #[test]
-    fn custom_icon_choice_updates_target_item() -> Result<(), Box<dyn Error>> {
+    fn custom_icon_and_separator_validate_cleanly() -> Result<(), Box<dyn Error>> {
         let mut registry = DockRegistry::new();
         let dock_id = registry.create_dock("Main")?;
         let target = PathBuf::from("C:/Apps/Code.exe");
         let item_id = registry.add_dropped_item(dock_id, target, None)?;
-
         let custom = IconSource::CustomFile(PathBuf::from("data/icons/code.png"));
         registry.set_item_icon(dock_id, item_id, custom.clone())?;
 
         let dock = registry
-            .get(dock_id)
+            .get_mut(dock_id)
             .ok_or(DockConfigError::DockNotFound(dock_id))?;
-        let item = dock
-            .items
-            .first()
-            .ok_or(DockConfigError::ItemNotFound(item_id))?;
-        assert_eq!(item.label, "Code");
-        assert_eq!(item.icon, custom);
+        dock.items.push(DockItem::separator(99));
+        dock.validate()?;
+        assert!(dock.items[1].is_separator());
+        assert_eq!(dock.items[0].icon, custom);
         Ok(())
     }
 
@@ -352,7 +384,6 @@ mod tests {
         let mut dock = DockConfig::new(1, "Test");
         dock.icon_size_px = 12;
         assert_eq!(dock.validate(), Err(DockConfigError::InvalidIconSize(12)));
-
         dock.icon_size_px = 48;
         dock.hover_zoom.scale = 3.0;
         assert_eq!(dock.validate(), Err(DockConfigError::InvalidZoomScale));

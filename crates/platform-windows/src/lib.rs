@@ -5,6 +5,14 @@ mod http;
 #[cfg(windows)]
 mod icons;
 #[cfg(windows)]
+mod metrics;
+#[cfg(windows)]
+mod shell;
+#[cfg(windows)]
+mod tools_proc;
+#[cfg(windows)]
+mod tools_win;
+#[cfg(windows)]
 mod tray;
 #[cfg(windows)]
 mod widget_proc;

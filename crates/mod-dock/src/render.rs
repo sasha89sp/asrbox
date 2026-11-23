@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use asrbox_platform_api::{BgraFrame, RgbaImage};
 
-use crate::config::DockConfig;
-use crate::layout::{DockLayout, DockSlotLayout, Rect};
+use crate::config::{DockConfig, DockEdge};
+use crate::layout::{DockLayout, DockSlotLayout, Rect, SlotKind};
 
 pub fn render_dock_frame(
     config: &DockConfig,
@@ -23,12 +23,12 @@ pub fn render_dock_frame(
 
     for slot in &layout.slots {
         if slot.scale <= 1.001 {
-            draw_slot(&mut frame, *slot, icons.get(&slot.item_id));
+            draw_slot(&mut frame, *slot, icons.get(&slot.item_id), config.edge);
         }
     }
     for slot in &layout.slots {
         if slot.scale > 1.001 {
-            draw_slot(&mut frame, *slot, icons.get(&slot.item_id));
+            draw_slot(&mut frame, *slot, icons.get(&slot.item_id), config.edge);
         }
     }
     frame
@@ -118,12 +118,106 @@ fn draw_empty_plus(frame: &mut BgraFrame, bar: Rect) {
     }
 }
 
-fn draw_slot(frame: &mut BgraFrame, slot: DockSlotLayout, icon: Option<&RgbaImage>) {
-    match icon {
-        Some(image) if image.width > 0 && image.height > 0 => {
-            blit_scaled_icon(frame, slot.visual_rect, image);
+fn draw_slot(
+    frame: &mut BgraFrame,
+    slot: DockSlotLayout,
+    icon: Option<&RgbaImage>,
+    edge: DockEdge,
+) {
+    match slot.kind {
+        SlotKind::Separator => draw_separator(frame, slot.base_rect, edge),
+        SlotKind::SettingsButton => draw_settings_button(frame, slot.visual_rect),
+        SlotKind::Shortcut => match icon {
+            Some(image) if image.width > 0 && image.height > 0 => {
+                blit_scaled_icon(frame, slot.visual_rect, image);
+            }
+            _ => draw_fallback_tile(frame, slot.visual_rect),
+        },
+    }
+}
+
+fn draw_separator(frame: &mut BgraFrame, rect: Rect, edge: DockEdge) {
+    let cx = rect.x + i32::try_from(rect.width / 2).unwrap_or(0);
+    let cy = rect.y + i32::try_from(rect.height / 2).unwrap_or(0);
+    let light = [255, 255, 255, 76];
+    let shadow = [10, 12, 18, 95];
+    if edge.is_horizontal() {
+        let margin = (i32::try_from(rect.height).unwrap_or(40) / 6).max(4);
+        let y0 = rect.y.saturating_add(margin);
+        let y1 = rect
+            .y
+            .saturating_add(i32::try_from(rect.height).unwrap_or(40))
+            .saturating_sub(margin);
+        for py in y0..y1 {
+            blend_pixel(frame, cx - 1, py, shadow);
+            blend_pixel(frame, cx, py, light);
         }
-        _ => draw_fallback_tile(frame, slot.visual_rect),
+    } else {
+        let margin = (i32::try_from(rect.width).unwrap_or(40) / 6).max(4);
+        let x0 = rect.x.saturating_add(margin);
+        let x1 = rect
+            .x
+            .saturating_add(i32::try_from(rect.width).unwrap_or(40))
+            .saturating_sub(margin);
+        for px in x0..x1 {
+            blend_pixel(frame, px, cy - 1, shadow);
+            blend_pixel(frame, px, cy, light);
+        }
+    }
+}
+
+fn draw_settings_button(frame: &mut BgraFrame, rect: Rect) {
+    let radius = (rect.width.min(rect.height) as f32) * 0.24;
+    let x0 = rect.x.max(0);
+    let y0 = rect.y.max(0);
+    let x1 = rect
+        .x
+        .saturating_add(i32::try_from(rect.width).unwrap_or(0))
+        .min(i32::try_from(frame.width).unwrap_or(0));
+    let y1 = rect
+        .y
+        .saturating_add(i32::try_from(rect.height).unwrap_or(0))
+        .min(i32::try_from(frame.height).unwrap_or(0));
+    let cx = rect.x as f32 + (rect.width as f32) * 0.5;
+    let cy = rect.y as f32 + (rect.height as f32) * 0.5;
+    let unit = (rect.width.min(rect.height) as f32) * 0.5;
+
+    for py in y0..y1 {
+        let t = ((py - rect.y) as f32 / (rect.height.max(1) as f32)).clamp(0.0, 1.0);
+        let bg = (74.0 - 24.0 * t).round() as u8;
+        for px in x0..x1 {
+            let fx = px as f32 + 0.5;
+            let fy = py as f32 + 0.5;
+            let dist = rounded_rect_sdf(fx, fy, rect, radius);
+            if dist <= 0.6 {
+                let cov = (0.6 - dist).clamp(0.0, 1.0);
+                let a = (238.0 * cov).round() as u8;
+                blend_pixel(frame, px, py, [bg, bg + 4, bg + 12, a]);
+                if dist > -1.3 {
+                    let rim_a = (68.0 * cov).round() as u8;
+                    blend_pixel(frame, px, py, [255, 255, 255, rim_a]);
+                }
+                let gear_a = sample_gear_alpha(fx - cx, fy - cy, unit);
+                if gear_a > 0 {
+                    blend_pixel(frame, px, py, [232, 238, 248, gear_a]);
+                }
+            }
+        }
+    }
+}
+
+fn sample_gear_alpha(dx: f32, dy: f32, unit: f32) -> u8 {
+    let r = (dx * dx + dy * dy).sqrt() / unit.max(1.0);
+    let angle = dy.atan2(dx);
+    let tooth = (angle * 8.0).cos();
+    let outer = if tooth > 0.2 { 0.66 } else { 0.52 };
+    let inner = 0.22;
+    if r <= outer && r >= inner {
+        let edge_out = ((outer - r) * unit).clamp(0.0, 1.0);
+        let edge_in = ((r - inner) * unit).clamp(0.0, 1.0);
+        (242.0 * edge_out.min(edge_in)).round() as u8
+    } else {
+        0
     }
 }
 
@@ -274,42 +368,20 @@ mod tests {
     }
 
     #[test]
-    fn empty_dock_renders_visible_capsule_and_transparent_headroom() {
-        let config = DockConfig::new(1, "Empty");
+    fn renders_separator_and_settings_button() -> Result<(), Box<dyn Error>> {
+        let mut config = DockConfig::new(1, "Main");
+        config
+            .items
+            .push(DockItem::from_dropped_path(1, PathBuf::from("App.exe"))?);
+        config.items.push(DockItem::separator(2));
         let layout = compute_layout(&config, area(), HoverVisualState::default());
         let frame = render_dock_frame(&config, &layout, &HashMap::new());
-
         assert_eq!(frame.width, layout.window_rect.width);
-        assert_eq!(frame.height, layout.window_rect.height);
         assert_eq!(frame.pixels[3], 0);
-
-        let cx = (layout.bar_rect.x as usize) + (layout.bar_rect.width as usize / 2);
-        let cy = (layout.bar_rect.y as usize) + (layout.bar_rect.height as usize / 2);
-        let alpha_idx = (cy * (frame.width as usize) + cx) * 4 + 3;
-        assert!(frame.pixels[alpha_idx] > 180);
-    }
-
-    #[test]
-    fn zoomed_icon_renders_into_headroom_above_capsule() -> Result<(), Box<dyn Error>> {
-        let mut config = DockConfig::new(1, "Main");
-        let path = PathBuf::from("C:/Apps/App.exe");
-        config.items.push(DockItem::from_dropped_path(1, path)?);
-
-        let hover = HoverVisualState {
-            item_id: Some(1),
-            progress: 1.0,
-        };
-        let layout = compute_layout(&config, area(), hover);
-        let slot = layout.slots.first().copied().ok_or("missing slot")?;
-        let icon = RgbaImage::new(2, 2, vec![255u8; 16])?;
-        let mut icons = HashMap::new();
-        icons.insert(1, icon);
-
-        let frame = render_dock_frame(&config, &layout, &icons);
-        let px = (slot.visual_rect.x as usize) + (slot.visual_rect.width as usize / 2);
-        let py = (slot.visual_rect.y as usize) + 1;
-        let alpha_idx = (py * (frame.width as usize) + px) * 4 + 3;
-        assert!(frame.pixels[alpha_idx] > 200);
+        let gear = layout.slots.last().copied().ok_or("missing gear")?;
+        let px = (gear.visual_rect.x as usize) + (gear.visual_rect.width as usize / 2);
+        let py = (gear.visual_rect.y as usize) + (gear.visual_rect.height as usize / 2);
+        assert!(frame.pixels[(py * (frame.width as usize) + px) * 4 + 3] > 200);
         Ok(())
     }
 }

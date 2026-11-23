@@ -18,6 +18,8 @@
 | `crates/mod-screenshot` | `asrbox-mod-screenshot` | on-demand | Скриншоты (процесс по запросу). | `crates/mod-screenshot/MAP.md` |
 | `crates/mod-huawei` | `asrbox-mod-huawei` | process | Модем Huawei (AT-команды). | `crates/mod-huawei/MAP.md` |
 | `crates/mod-widgets` | `asrbox-mod-widgets` | process | Виджеты рабочего стола (macOS Dark), первый виджет — Google Календарь (`.ics`). | `crates/mod-widgets/MAP.md` |
+| `crates/mod-debug` | `asrbox-mod-debug` | on-open | Отладочный модуль: живые логи по модулям, переключатель TRACE/файл, метрики RAM/CPU/GDI и диагностический отчёт. | `crates/mod-debug/MAP.md` |
+| `crates/mod-about` | `asrbox-mod-about` | on-open | Модуль «О программе»: портативный статус, текущие пути на диске и встроенная история версий. | `crates/mod-about/MAP.md` |
 | `crates/app` | `asrbox` | supervisor | Точка входа `asrbox.exe`, супервизор (`--module`, `--safe-mode`, `--selftest`), трей, настройки. | `crates/app/MAP.md` |
 
 ## 2. Куда смотреть
@@ -27,7 +29,7 @@
 | Главные правила для ИИ, запреты и протокол закрытия | `AGENTS.md` |
 | Текущее состояние, статус CI и следующий шаг | `HANDOFF.yaml` |
 | Специфика проекта и бюджеты `NF-001..NF-010` | `SPEC.md` |
-| Детальные спецификации и критерии приёмки модулей | `specs/README.md`, `specs/mod-dock.md`, `specs/mod-widgets.md` |
+| Детальные спецификации и критерии приёмки модулей | `specs/README.md`, `specs/mod-dock.md`, `specs/mod-widgets.md`, `specs/mod-debug.md`, `specs/mod-about.md` |
 | Модули, трейты, процессы, IPC (Named Pipes) и защита | `ARCHITECTURE.md` |
 | Архитектурные решения (ADR) и обоснования зависимостей | `DECISIONS.md` |
 | Открытые баги и журнал попыток | `BUGS.md` |

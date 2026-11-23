@@ -1,33 +1,75 @@
 version: 0.0.1
-updated: 2026-11-22
-spec_ids: [NF-001, NF-002, NF-005, NF-007, DK-001, DK-010, WG-001, WG-002, WG-003, WG-004, WG-005, WG-006, WG-007, WG-008, WG-009, WG-010, WG-011, WG-012]
+updated: 2026-11-23
+spec_ids: [NF-001, NF-002, NF-005, NF-007, NF-010, DK-011, DK-012, WG-003, WG-004, WG-007, WG-011, DB-001, DB-002, DB-003, DB-004, DB-005, DB-006, DB-007, AB-001, AB-002, AB-003, AB-004]
 atlas_updated: true
 last_session:
-  goal: "Исправить BUG-004 (сильные задержки меню трея и UI при малом CPU)"
+  goal: "Починить календарь (настройки/обновление), заменить Acrylic на прозрачность, добавить разделители и настройки в док, создать модули mod-debug и mod-about"
   done:
-    - "В crates/platform-windows/src/window.rs добавлено пробуждение GetMessageW через PostMessageW(WM_WAKE_EVENTS) при push_event (чинит зависание после SendMessage WM_TRAYICON/WM_DISPLAYCHANGE) и убран дубль WM_CONTEXTMENU"
-    - "В tray.rs и widget_proc.rs добавлен PostMessageW(WM_NULL) после TrackPopupMenuEx (Microsoft KB135788)"
-    - "В crates/app/src/docks.rs кэширован timer_active в DockRuntime, чтобы WM_MOUSEMOVE не сбрасывал 16-мс таймер анимации"
-    - "В crates/mod-widgets/src/calendar.rs добавлен ранний выход в on_pointer_move при неизменном hit-target"
+    - "Календарь: открытие widgets.cfg через notepad.exe без перезаписи, толерантный парсер (BOM/кавычки/1-3 части/url=), WinHTTP AUTOMATIC_PROXY + таймауты + коды ошибок, статус загрузки, замена Acrylic на прозрачность (opacity=20..100, меню 100/85/70/50/35%)"
+    - "Док-панель: добавлены разделители (separator=<id> в docks.cfg, ПКМ добавить/удалить) и встроенная кнопка настроек (⚙, открывает docks.cfg в Блокноте, скрывается в ПКМ + Перечитать настройки)"
+    - "Новый модуль crates/mod-debug: живое окно «Диагностика и логи...» (TRACE, запись в файл с ротацией 2 МБ, фильтр, редакция секретов, RAM/% CPU/GDI/USER/uptime, нагрузка по модулям, копирование и сохранение отчёта)"
+    - "Новый модуль crates/mod-about: окно «О программе...» (версия, портативность, живые пути, встроенный CHANGELOG.md, кнопки открытия папки data и копирования путей)"
   not_done:
-    - "Подтверждение прогона GitHub Actions (windows-latest)"
-    - "Ручная проверка скорости отклика трея, док-панели и виджета на Windows 10/11"
+    - "Прогон GitHub Actions (.github/workflows/ci.yml) на windows-latest"
+    - "Ручная проверка на Windows 10/11 (открытие .cfg в Блокноте, загрузка Google .ics, прозрачность, разделители дока, окна Диагностика и О программе)"
   verified:
     ci_build: false
     tests: false
     manual_run: false
-open_bugs: [BUG-003, BUG-004]
-next_step: "Перезапустить GitHub Actions (.github/workflows/ci.yml), скачать asrbox.exe и проверить мгновенный отклик меню трея, дока и виджета на Windows 10/11"
+open_bugs: [BUG-003, BUG-004, BUG-005]
+next_step: "Запустить GitHub Actions (windows-latest), скачать asrbox.exe, заменить файл в текущей папке и проверить все исправления и окно «Диагностика и логи...»"
 touched_files:
-  - crates/platform-windows/src/window.rs
+  - Cargo.toml
+  - ATLAS.md
+  - ARCHITECTURE.md
+  - DECISIONS.md
+  - CHANGELOG.md
+  - BUGS.md
+  - HANDOFF.yaml
+  - specs/README.md
+  - specs/mod-widgets.md
+  - specs/mod-dock.md
+  - specs/mod-debug.md
+  - specs/mod-about.md
+  - crates/platform-api/src/lib.rs
+  - crates/platform-api/src/tools.rs
+  - crates/platform-api/MAP.md
+  - crates/mod-widgets/src/storage.rs
+  - crates/mod-widgets/src/render.rs
+  - crates/mod-widgets/src/calendar_view.rs
+  - crates/mod-widgets/src/calendar.rs
+  - crates/mod-dock/src/config.rs
+  - crates/mod-dock/src/storage.rs
+  - crates/mod-dock/src/layout.rs
+  - crates/mod-dock/src/render.rs
+  - crates/mod-dock/src/state.rs
+  - crates/mod-dock/src/lib.rs
+  - crates/mod-debug/Cargo.toml
+  - crates/mod-debug/MAP.md
+  - crates/mod-debug/src/lib.rs
+  - crates/mod-debug/src/report.rs
+  - crates/mod-about/Cargo.toml
+  - crates/mod-about/MAP.md
+  - crates/mod-about/src/lib.rs
+  - crates/platform-windows/Cargo.toml
+  - crates/platform-windows/MAP.md
+  - crates/platform-windows/src/lib.rs
+  - crates/platform-windows/src/http.rs
+  - crates/platform-windows/src/shell.rs
   - crates/platform-windows/src/tray.rs
   - crates/platform-windows/src/widget_proc.rs
+  - crates/platform-windows/src/widget_win.rs
+  - crates/platform-windows/src/metrics.rs
+  - crates/platform-windows/src/tools_proc.rs
+  - crates/platform-windows/src/tools_win.rs
+  - crates/platform-windows/src/window.rs
+  - crates/app/Cargo.toml
+  - crates/app/MAP.md
   - crates/app/src/docks.rs
-  - crates/mod-widgets/src/calendar.rs
-  - BUGS.md
-  - CHANGELOG.md
-  - HANDOFF.yaml
+  - crates/app/src/main.rs
+  - crates/app/src/tools.rs
+  - crates/app/src/selftest.rs
 warnings:
-  - "Изменения BUG-004 ещё не проверены на GitHub Actions (windows-latest) и на живой Windows"
+  - "Изменения проверены локальной кросс-проверкой (fmt/clippy/test/atlas-check), но ещё НЕ проверены в GitHub Actions (windows-latest)"
 ideas:
   - "Этап 2: OAuth2-интеграция с Google Calendar API для создания/редактирования событий прямо внутри виджета"

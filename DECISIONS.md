@@ -86,3 +86,17 @@
   4. В `crates/platform-windows` активировать фичи `Win32_Networking_WinHttp`, `Win32_Graphics_Dwmapi`, `Win32_System_SystemInformation`, `Win32_System_Time` существующего крейта `windows = "0.61"` (новых крейтов не добавлено): фоновая загрузка `.ics` в потоке WinHTTP, рендер кириллического шрифта `Segoe UI` (`CreateFontIndirectW` + `DrawTextW`) с альфа-композитингом на 32-битный BGRA-буфер `UpdateLayeredWindow`, слои `Wallpaper`/`Normal`/`Topmost` и опциональный Windows 11 Acrylic (`DWMWA_SYSTEMBACKDROP_TYPE`).
   5. Хранить настройки в `./data/config/widgets.cfg`, а кэш календарей — в `./data/cache/calendar_cache_<id>.ics`. Двустороннее редактирование через Google Calendar OAuth2 API вынесено в этап 2.
 - **Причина**: Нулевое раздувание `.exe` (без `reqwest`/`rustls`/`chrono`/`regex`), мгновенный офлайн-старт из кэша, 0% CPU в простое и строгое соблюдение границ `unsafe`.
+
+---
+
+## ADR-010: Замена Acrylic на прозрачность, разделители дока и модули `mod-debug` / `mod-about`
+
+- **Статус**: Принято (v0.0.1, согласовано владельцем)
+- **Решение**:
+  1. Убрать системное размытие DWM Acrylic (`DwmSetWindowAttribute`, фича `Win32_Graphics_Dwm`) из виджетов в пользу настраиваемой прозрачности фона (`opacity=20..100`, пресеты `100%/85%/70%/50%/35%`) в `mod-widgets`.
+  2. Открывать текстовые `.cfg`-файлы и диагностические отчёты через `notepad.exe` (`open_text_file`), не перезаписывая существующий файл настроек на диске при открытии; в `widgets.cfg` и `docks.cfg` поддерживать UTF-8 BOM и упрощённые форматы строк.
+  3. Добавить в `mod-dock` разделители (`DockItemKind::Separator`, строка `separator=<id>` в `docks.cfg`) и встроенную кнопку настроек (`⚙`, `show_settings_button`, по умолчанию включена).
+  4. Добавить в workspace два независимых крейта без `unsafe` и без внешних зависимостей: `crates/mod-debug` (живой журнал с `TRACE`, опциональный файл с ротацией 2 МБ, автоматическая редакция секретов, метрики процесса и помодульная нагрузка, отчёты) и `crates/mod-about` (версия, описание портативности, динамические пути на диске, встроенный `CHANGELOG.md`).
+  5. В `crates/platform-windows` активировать фичи `Win32_System_DataExchange`, `Win32_System_Memory`, `Win32_System_ProcessStatus` существующего крейта `windows = "0.61"` (новых крейтов не добавлено) и перевести WinHTTP на `WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY` с таймаутами.
+- **Причина**: Понятное управление прозрачностью без платформенных артефактов DWM, надёжное открытие конфигов на чистой Windows, удобная организация дока и прозрачная диагностика проблем в реальном времени без нагрузки в простое.
+

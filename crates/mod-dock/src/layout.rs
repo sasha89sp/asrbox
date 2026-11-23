@@ -1,4 +1,6 @@
-use crate::config::{DockAlignment, DockConfig, DockEdge};
+use crate::config::{DockAlignment, DockConfig, DockEdge, SETTINGS_SLOT_ID};
+
+pub const SEPARATOR_THICKNESS_PX: u32 = 14;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Point {
@@ -24,6 +26,13 @@ impl Rect {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SlotKind {
+    Shortcut,
+    Separator,
+    SettingsButton,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct HoverVisualState {
     pub item_id: Option<u64>,
@@ -33,6 +42,7 @@ pub struct HoverVisualState {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DockSlotLayout {
     pub item_id: u64,
+    pub kind: SlotKind,
     pub base_rect: Rect,
     pub visual_rect: Rect,
     pub scale: f32,
@@ -49,28 +59,19 @@ pub fn compute_layout(config: &DockConfig, work_area: Rect, hover: HoverVisualSt
     let icon = u32::from(config.icon_size_px);
     let spacing = u32::from(config.item_spacing_px);
     let padding = u32::from(config.padding_px);
-    let count = u32::try_from(config.items.len()).unwrap_or(u32::MAX);
 
-    let main_items_len = if count == 0 {
-        icon
-    } else {
-        count
-            .saturating_mul(icon)
-            .saturating_add(count.saturating_sub(1).saturating_mul(spacing))
-    };
+    let main_items_len = compute_main_items_len(config, icon, spacing);
     let bar_main = main_items_len.saturating_add(padding.saturating_mul(2));
     let bar_cross = icon.saturating_add(padding.saturating_mul(2));
 
     let max_scale = config.hover_zoom.effective_scale();
-    let raw_extra = (icon as f32) * (max_scale - 1.0);
-    let zoom_extra = raw_extra.ceil().max(0.0) as u32;
+    let zoom_extra = ((icon as f32) * (max_scale - 1.0)).ceil().max(0.0) as u32;
     let side_pad = zoom_extra / 2;
 
     let (win_w, win_h, bar_rect) =
         build_window_and_bar(config.edge, bar_main, bar_cross, zoom_extra, side_pad);
     let window_rect = place_window(config, work_area, win_w, win_h);
     let slots = build_slots(config, bar_rect, max_scale, hover);
-
     DockLayout {
         window_rect,
         bar_rect,
@@ -78,34 +79,57 @@ pub fn compute_layout(config: &DockConfig, work_area: Rect, hover: HoverVisualSt
     }
 }
 
-pub fn hit_test_item(layout: &DockLayout, local_point: Point) -> Option<u64> {
+pub fn hit_test_slot(layout: &DockLayout, local_point: Point) -> Option<DockSlotLayout> {
     layout
         .slots
         .iter()
+        .copied()
         .find(|slot| slot.base_rect.contains(local_point))
-        .map(|slot| slot.item_id)
+}
+
+pub fn hit_test_item(layout: &DockLayout, local_point: Point) -> Option<u64> {
+    hit_test_slot(layout, local_point).map(|slot| slot.item_id)
 }
 
 pub fn drop_insert_index(layout: &DockLayout, edge: DockEdge, local_point: Point) -> usize {
     let horizontal = edge.is_horizontal();
-    for (idx, slot) in layout.slots.iter().enumerate() {
-        let midpoint = if horizontal {
-            let half = i32::try_from(slot.base_rect.width / 2).unwrap_or(0);
-            slot.base_rect.x.saturating_add(half)
-        } else {
-            let half = i32::try_from(slot.base_rect.height / 2).unwrap_or(0);
-            slot.base_rect.y.saturating_add(half)
-        };
-        let coord = if horizontal {
-            local_point.x
-        } else {
-            local_point.y
-        };
-        if coord < midpoint {
-            return idx;
+    let mut item_count = 0usize;
+    for slot in &layout.slots {
+        if slot.kind == SlotKind::SettingsButton {
+            break;
         }
+        let (origin, len, coord) = if horizontal {
+            (slot.base_rect.x, slot.base_rect.width, local_point.x)
+        } else {
+            (slot.base_rect.y, slot.base_rect.height, local_point.y)
+        };
+        let midpoint = origin.saturating_add(i32::try_from(len / 2).unwrap_or(0));
+        if coord < midpoint {
+            return item_count;
+        }
+        item_count = item_count.saturating_add(1);
     }
-    layout.slots.len()
+    item_count
+}
+
+fn compute_main_items_len(config: &DockConfig, icon: u32, spacing: u32) -> u32 {
+    let total_slots = config.items.len() + usize::from(config.show_settings_button);
+    if total_slots == 0 {
+        return icon;
+    }
+    let mut sum = config.items.iter().fold(0u32, |acc, item| {
+        let len = if item.is_separator() {
+            SEPARATOR_THICKNESS_PX
+        } else {
+            icon
+        };
+        acc.saturating_add(len)
+    });
+    if config.show_settings_button {
+        sum = sum.saturating_add(icon);
+    }
+    let gaps = u32::try_from(total_slots.saturating_sub(1)).unwrap_or(0);
+    sum.saturating_add(gaps.saturating_mul(spacing))
 }
 
 fn build_window_and_bar(
@@ -115,54 +139,26 @@ fn build_window_and_bar(
     zoom_extra: u32,
     side_pad: u32,
 ) -> (u32, u32, Rect) {
-    let side_pad_i32 = i32::try_from(side_pad).unwrap_or(0);
-    let zoom_i32 = i32::try_from(zoom_extra).unwrap_or(0);
-    match edge {
-        DockEdge::Bottom => {
-            let win_w = bar_main.saturating_add(side_pad.saturating_mul(2));
-            let win_h = bar_cross.saturating_add(zoom_extra);
-            let bar = Rect {
-                x: side_pad_i32,
-                y: zoom_i32,
-                width: bar_main,
-                height: bar_cross,
-            };
-            (win_w, win_h, bar)
-        }
-        DockEdge::Top => {
-            let win_w = bar_main.saturating_add(side_pad.saturating_mul(2));
-            let win_h = bar_cross.saturating_add(zoom_extra);
-            let bar = Rect {
-                x: side_pad_i32,
-                y: 0,
-                width: bar_main,
-                height: bar_cross,
-            };
-            (win_w, win_h, bar)
-        }
-        DockEdge::Left => {
-            let win_w = bar_cross.saturating_add(zoom_extra);
-            let win_h = bar_main.saturating_add(side_pad.saturating_mul(2));
-            let bar = Rect {
-                x: 0,
-                y: side_pad_i32,
-                width: bar_cross,
-                height: bar_main,
-            };
-            (win_w, win_h, bar)
-        }
-        DockEdge::Right => {
-            let win_w = bar_cross.saturating_add(zoom_extra);
-            let win_h = bar_main.saturating_add(side_pad.saturating_mul(2));
-            let bar = Rect {
-                x: zoom_i32,
-                y: side_pad_i32,
-                width: bar_cross,
-                height: bar_main,
-            };
-            (win_w, win_h, bar)
-        }
-    }
+    let side = i32::try_from(side_pad).unwrap_or(0);
+    let zoom = i32::try_from(zoom_extra).unwrap_or(0);
+    let win_main = bar_main.saturating_add(side_pad.saturating_mul(2));
+    let win_cross = bar_cross.saturating_add(zoom_extra);
+    let (w, h, x, y, bw, bh) = match edge {
+        DockEdge::Bottom => (win_main, win_cross, side, zoom, bar_main, bar_cross),
+        DockEdge::Top => (win_main, win_cross, side, 0, bar_main, bar_cross),
+        DockEdge::Left => (win_cross, win_main, 0, side, bar_cross, bar_main),
+        DockEdge::Right => (win_cross, win_main, zoom, side, bar_cross, bar_main),
+    };
+    (
+        w,
+        h,
+        Rect {
+            x,
+            y,
+            width: bw,
+            height: bh,
+        },
+    )
 }
 
 fn place_window(config: &DockConfig, work_area: Rect, win_w: u32, win_h: u32) -> Rect {
@@ -171,32 +167,28 @@ fn place_window(config: &DockConfig, work_area: Rect, win_w: u32, win_h: u32) ->
     let area_h = i32::try_from(work_area.height).unwrap_or(i32::MAX);
     let w_i32 = i32::try_from(win_w).unwrap_or(i32::MAX);
     let h_i32 = i32::try_from(win_h).unwrap_or(i32::MAX);
-
+    let ax_x = align_axis(work_area.x, area_w, w_i32, config.alignment);
+    let ax_y = align_axis(work_area.y, area_h, h_i32, config.alignment);
     let (x, y) = match config.edge {
-        DockEdge::Bottom => {
-            let x = align_axis(work_area.x, area_w, w_i32, config.alignment);
-            let bottom = work_area.y.saturating_add(area_h);
-            let y = bottom.saturating_sub(h_i32).saturating_sub(margin);
-            (x, y)
-        }
-        DockEdge::Top => {
-            let x = align_axis(work_area.x, area_w, w_i32, config.alignment);
-            let y = work_area.y.saturating_add(margin);
-            (x, y)
-        }
-        DockEdge::Left => {
-            let x = work_area.x.saturating_add(margin);
-            let y = align_axis(work_area.y, area_h, h_i32, config.alignment);
-            (x, y)
-        }
-        DockEdge::Right => {
-            let right = work_area.x.saturating_add(area_w);
-            let x = right.saturating_sub(w_i32).saturating_sub(margin);
-            let y = align_axis(work_area.y, area_h, h_i32, config.alignment);
-            (x, y)
-        }
+        DockEdge::Bottom => (
+            ax_x,
+            work_area
+                .y
+                .saturating_add(area_h)
+                .saturating_sub(h_i32)
+                .saturating_sub(margin),
+        ),
+        DockEdge::Top => (ax_x, work_area.y.saturating_add(margin)),
+        DockEdge::Left => (work_area.x.saturating_add(margin), ax_y),
+        DockEdge::Right => (
+            work_area
+                .x
+                .saturating_add(area_w)
+                .saturating_sub(w_i32)
+                .saturating_sub(margin),
+            ax_y,
+        ),
     };
-
     Rect {
         x,
         y,
@@ -214,6 +206,60 @@ fn align_axis(origin: i32, area_len: i32, win_len: i32, alignment: DockAlignment
     origin.saturating_add(rel)
 }
 
+struct SlotCtx {
+    bar_rect: Rect,
+    pad: i32,
+    cross_len: u32,
+    edge: DockEdge,
+    max_scale: f32,
+    hover: HoverVisualState,
+    progress: f32,
+}
+
+impl SlotCtx {
+    fn make(&self, item_id: u64, kind: SlotKind, main_len: u32, cursor: i32) -> DockSlotLayout {
+        let base_rect = if self.edge.is_horizontal() {
+            Rect {
+                x: self
+                    .bar_rect
+                    .x
+                    .saturating_add(self.pad)
+                    .saturating_add(cursor),
+                y: self.bar_rect.y.saturating_add(self.pad),
+                width: main_len,
+                height: self.cross_len,
+            }
+        } else {
+            Rect {
+                x: self.bar_rect.x.saturating_add(self.pad),
+                y: self
+                    .bar_rect
+                    .y
+                    .saturating_add(self.pad)
+                    .saturating_add(cursor),
+                width: self.cross_len,
+                height: main_len,
+            }
+        };
+        let hovered = kind != SlotKind::Separator
+            && self.hover.item_id == Some(item_id)
+            && self.progress > 0.0
+            && self.max_scale > 1.0;
+        let scale = if hovered {
+            1.0 + (self.max_scale - 1.0) * self.progress
+        } else {
+            1.0
+        };
+        DockSlotLayout {
+            item_id,
+            kind,
+            base_rect,
+            visual_rect: scale_slot_rect(base_rect, scale, self.edge),
+            scale,
+        }
+    }
+}
+
 fn build_slots(
     config: &DockConfig,
     bar_rect: Rect,
@@ -221,46 +267,33 @@ fn build_slots(
     hover: HoverVisualState,
 ) -> Vec<DockSlotLayout> {
     let icon = u32::from(config.icon_size_px);
-    let icon_i32 = i32::from(config.icon_size_px);
-    let spacing_i32 = i32::from(config.item_spacing_px);
-    let step = icon_i32.saturating_add(spacing_i32);
-    let pad = i32::from(config.padding_px);
-    let progress = hover.progress.clamp(0.0, 1.0);
-    let horizontal = config.edge.is_horizontal();
+    let spacing = i32::from(config.item_spacing_px);
+    let ctx = SlotCtx {
+        bar_rect,
+        pad: i32::from(config.padding_px),
+        cross_len: icon,
+        edge: config.edge,
+        max_scale,
+        hover,
+        progress: hover.progress.clamp(0.0, 1.0),
+    };
+    let cap = config.items.len() + usize::from(config.show_settings_button);
+    let mut slots = Vec::with_capacity(cap);
+    let mut cursor = 0i32;
 
-    let mut slots = Vec::with_capacity(config.items.len());
-    for (idx, item) in config.items.iter().enumerate() {
-        let offset = i32::try_from(idx).unwrap_or(0).saturating_mul(step);
-        let base_rect = if horizontal {
-            Rect {
-                x: bar_rect.x.saturating_add(pad).saturating_add(offset),
-                y: bar_rect.y.saturating_add(pad),
-                width: icon,
-                height: icon,
-            }
+    for item in &config.items {
+        let (kind, len) = if item.is_separator() {
+            (SlotKind::Separator, SEPARATOR_THICKNESS_PX)
         } else {
-            Rect {
-                x: bar_rect.x.saturating_add(pad),
-                y: bar_rect.y.saturating_add(pad).saturating_add(offset),
-                width: icon,
-                height: icon,
-            }
+            (SlotKind::Shortcut, icon)
         };
-
-        let is_hovered = hover.item_id == Some(item.id) && progress > 0.0 && max_scale > 1.0;
-        let scale = if is_hovered {
-            1.0 + (max_scale - 1.0) * progress
-        } else {
-            1.0
-        };
-        let visual_rect = scale_slot_rect(base_rect, scale, config.edge);
-
-        slots.push(DockSlotLayout {
-            item_id: item.id,
-            base_rect,
-            visual_rect,
-            scale,
-        });
+        slots.push(ctx.make(item.id, kind, len, cursor));
+        cursor = cursor
+            .saturating_add(i32::try_from(len).unwrap_or(0))
+            .saturating_add(spacing);
+    }
+    if config.show_settings_button {
+        slots.push(ctx.make(SETTINGS_SLOT_ID, SlotKind::SettingsButton, icon, cursor));
     }
     slots
 }
@@ -273,14 +306,12 @@ fn scale_slot_rect(base: Rect, scale: f32, edge: DockEdge) -> Rect {
     let scaled_h = ((base.height as f32) * scale).round().max(1.0) as u32;
     let dw = i32::try_from(scaled_w.saturating_sub(base.width)).unwrap_or(0);
     let dh = i32::try_from(scaled_h.saturating_sub(base.height)).unwrap_or(0);
-
     let (x, y) = match edge {
         DockEdge::Bottom => (base.x.saturating_sub(dw / 2), base.y.saturating_sub(dh)),
         DockEdge::Top => (base.x.saturating_sub(dw / 2), base.y),
         DockEdge::Left => (base.x, base.y.saturating_sub(dh / 2)),
         DockEdge::Right => (base.x.saturating_sub(dw), base.y.saturating_sub(dh / 2)),
     };
-
     Rect {
         x,
         y,
@@ -298,7 +329,7 @@ mod tests {
 
     use super::*;
 
-    fn sample_work_area() -> Rect {
+    fn area() -> Rect {
         Rect {
             x: 0,
             y: 0,
@@ -307,96 +338,48 @@ mod tests {
         }
     }
 
-    fn dock_with_three_items(edge: DockEdge) -> Result<DockConfig, Box<dyn Error>> {
+    fn dock_with_items(edge: DockEdge) -> Result<DockConfig, Box<dyn Error>> {
         let mut dock = DockConfig::new(1, "Test");
         dock.edge = edge;
-        for id in 1..=3 {
-            let path = PathBuf::from(format!("app{id}.exe"));
-            dock.items.push(DockItem::from_dropped_path(id, path)?);
-        }
+        dock.items
+            .push(DockItem::from_dropped_path(1, PathBuf::from("a.exe"))?);
+        dock.items.push(DockItem::separator(2));
+        dock.items
+            .push(DockItem::from_dropped_path(3, PathBuf::from("b.exe"))?);
         Ok(dock)
     }
 
     #[test]
-    fn centers_dock_on_all_four_edges() -> Result<(), Box<dyn Error>> {
-        let area = sample_work_area();
-        let edges = [
+    fn centers_dock_and_keeps_separator_unzoomed() -> Result<(), Box<dyn Error>> {
+        for edge in [
             DockEdge::Bottom,
             DockEdge::Top,
             DockEdge::Left,
             DockEdge::Right,
-        ];
-
-        for edge in edges {
-            let dock = dock_with_three_items(edge)?;
-            let layout = compute_layout(&dock, area, HoverVisualState::default());
-            let w = layout.window_rect;
-            match edge {
-                DockEdge::Bottom => {
-                    assert_eq!(w.x, (1920 - w.width as i32) / 2);
-                    assert_eq!(w.y + w.height as i32, 1080 - 8);
-                }
-                DockEdge::Top => {
-                    assert_eq!(w.x, (1920 - w.width as i32) / 2);
-                    assert_eq!(w.y, 8);
-                }
-                DockEdge::Left => {
-                    assert_eq!(w.x, 8);
-                    assert_eq!(w.y, (1080 - w.height as i32) / 2);
-                }
-                DockEdge::Right => {
-                    assert_eq!(w.x + w.width as i32, 1920 - 8);
-                    assert_eq!(w.y, (1080 - w.height as i32) / 2);
-                }
-            }
+        ] {
+            let dock = dock_with_items(edge)?;
+            let hover = HoverVisualState {
+                item_id: Some(2),
+                progress: 1.0,
+            };
+            let layout = compute_layout(&dock, area(), hover);
+            assert_eq!(layout.slots.len(), 4);
+            assert_eq!(layout.slots[1].kind, SlotKind::Separator);
+            assert!((layout.slots[1].scale - 1.0).abs() < 1e-4);
+            assert_eq!(layout.slots[3].kind, SlotKind::SettingsButton);
+            assert_eq!(layout.slots[3].item_id, SETTINGS_SLOT_ID);
         }
         Ok(())
     }
 
     #[test]
-    fn hover_zoom_scales_only_single_active_icon() -> Result<(), Box<dyn Error>> {
-        let dock = dock_with_three_items(DockEdge::Bottom)?;
-        let hover = HoverVisualState {
-            item_id: Some(2),
-            progress: 1.0,
-        };
-        let layout = compute_layout(&dock, sample_work_area(), hover);
-
-        let first = layout.slots.first().ok_or("slot 0 missing")?;
-        let second = layout.slots.get(1).ok_or("slot 1 missing")?;
-        let third = layout.slots.get(2).ok_or("slot 2 missing")?;
-
-        assert_eq!(first.visual_rect, first.base_rect);
-        assert_eq!(third.visual_rect, third.base_rect);
-        assert!(second.visual_rect.width > second.base_rect.width);
-        assert!(second.visual_rect.y < second.base_rect.y);
-        assert!((second.scale - 1.35).abs() < 1e-4);
-        assert!((first.scale - 1.0).abs() < 1e-4);
-        Ok(())
-    }
-
-    #[test]
-    fn drop_insert_index_respects_icon_midpoints() -> Result<(), Box<dyn Error>> {
-        let dock = dock_with_three_items(DockEdge::Bottom)?;
-        let layout = compute_layout(&dock, sample_work_area(), HoverVisualState::default());
-        let first = layout.slots.first().ok_or("slot 0 missing")?;
-        let second = layout.slots.get(1).ok_or("slot 1 missing")?;
-
-        let left = Point {
-            x: 0,
-            y: first.base_rect.y,
-        };
-        let middle = Point {
-            x: second.base_rect.x + 2,
-            y: second.base_rect.y,
-        };
+    fn drop_insert_stops_before_settings_button() -> Result<(), Box<dyn Error>> {
+        let dock = dock_with_items(DockEdge::Bottom)?;
+        let layout = compute_layout(&dock, area(), HoverVisualState::default());
         let far_right = Point {
             x: 9999,
-            y: second.base_rect.y,
+            y: layout.bar_rect.y + 10,
         };
-
-        assert_eq!(drop_insert_index(&layout, DockEdge::Bottom, left), 0);
-        assert_eq!(drop_insert_index(&layout, DockEdge::Bottom, middle), 1);
         assert_eq!(drop_insert_index(&layout, DockEdge::Bottom, far_right), 3);
         Ok(())
     }

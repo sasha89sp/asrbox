@@ -1,4 +1,8 @@
+pub mod tools;
+
 use std::path::{Path, PathBuf};
+
+pub use tools::{AboutUiCommand, DebugUiCommand, ProcessMetrics, ToolsPlatform};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct PixelPoint {
@@ -110,7 +114,7 @@ pub enum WidgetLayer {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WidgetMenuState {
     pub layer: WidgetLayer,
-    pub acrylic: bool,
+    pub opacity_percent: u8,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -120,7 +124,7 @@ pub enum WidgetMenuAction {
     SetLayerWallpaper,
     SetLayerNormal,
     SetLayerTopmost,
-    ToggleAcrylic,
+    SetOpacity(u8),
     HideWidget,
 }
 
@@ -145,6 +149,8 @@ pub struct DockMenuState {
     pub icon_size_px: u16,
     pub hover_zoom_enabled: bool,
     pub hovered_item_id: Option<u64>,
+    pub hovered_is_separator: bool,
+    pub show_settings_button: bool,
     pub can_remove_dock: bool,
 }
 
@@ -164,6 +170,10 @@ pub enum DockMenuAction {
     ChooseItemIcon(u64),
     ResetItemIcon(u64),
     RemoveItem(u64),
+    AddSeparator,
+    ToggleSettingsButton,
+    OpenDockConfig,
+    ReloadDockConfig,
     AddNewDock,
     RemoveDock,
 }
@@ -180,8 +190,11 @@ pub enum TrayAction {
     AddDock,
     ToggleDock(u64),
     RemoveDock(u64),
+    OpenDockConfig,
     ToggleCalendarWidget,
     OpenWidgetConfig,
+    OpenDebugWindow,
+    OpenAboutWindow,
     Exit,
 }
 
@@ -252,6 +265,9 @@ pub enum PlatformEvent {
         request_id: u64,
         result: HttpFetchResult,
     },
+    DebugWindowTick,
+    DebugCommand(DebugUiCommand),
+    AboutCommand(AboutUiCommand),
 }
 
 pub trait IconProvider {
@@ -297,6 +313,8 @@ pub trait DockPlatform {
 
     fn launch_target(&self, path: &Path) -> Result<(), String>;
 
+    fn open_text_file(&self, path: &Path) -> Result<(), String>;
+
     fn request_quit(&mut self);
 }
 
@@ -309,18 +327,12 @@ pub trait WidgetPlatform {
         title: &str,
         rect: PixelRect,
         layer: WidgetLayer,
-        acrylic: bool,
         drag_header_h: i32,
     ) -> Result<(), String>;
 
     fn destroy_widget_window(&mut self, widget_id: u64) -> Result<(), String>;
 
-    fn set_widget_layer(
-        &mut self,
-        widget_id: u64,
-        layer: WidgetLayer,
-        acrylic: bool,
-    ) -> Result<(), String>;
+    fn set_widget_layer(&mut self, widget_id: u64, layer: WidgetLayer) -> Result<(), String>;
 
     fn present_widget_frame(
         &mut self,
@@ -348,4 +360,6 @@ pub trait WidgetPlatform {
     fn start_http_get(&mut self, request_id: u64, url: &str) -> Result<(), String>;
 
     fn open_url(&self, url: &str) -> Result<(), String>;
+
+    fn open_text_file(&self, path: &Path) -> Result<(), String>;
 }

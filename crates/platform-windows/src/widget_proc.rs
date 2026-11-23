@@ -1,16 +1,11 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::ffi::c_void;
 use std::mem;
 
 use asrbox_platform_api::{
     PixelPoint, PlatformEvent, WidgetLayer, WidgetMenuAction, WidgetMenuState,
 };
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
-use windows::Win32::Graphics::Dwm::{
-    DwmSetWindowAttribute, DWMSBT_NONE, DWMSBT_TRANSIENTWINDOW, DWMWA_SYSTEMBACKDROP_TYPE,
-    DWM_SYSTEMBACKDROP_TYPE,
-};
 use windows::Win32::Graphics::Gdi::ClientToScreen;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     ReleaseCapture, SetCapture, TrackMouseEvent, TME_LEAVE, TRACKMOUSEEVENT,
@@ -34,8 +29,12 @@ const CMD_OPEN_CFG: u32 = 402;
 const CMD_LAYER_WALLPAPER: u32 = 403;
 const CMD_LAYER_NORMAL: u32 = 404;
 const CMD_LAYER_TOPMOST: u32 = 405;
-const CMD_TOGGLE_ACRYLIC: u32 = 406;
-const CMD_HIDE: u32 = 407;
+const CMD_OPACITY_100: u32 = 410;
+const CMD_OPACITY_85: u32 = 411;
+const CMD_OPACITY_70: u32 = 412;
+const CMD_OPACITY_50: u32 = 413;
+const CMD_OPACITY_35: u32 = 414;
+const CMD_HIDE: u32 = 420;
 
 #[derive(Clone, Copy)]
 struct WidgetDragMeta {
@@ -81,18 +80,13 @@ pub(crate) fn remove_widget_meta(widget_id: u64) {
     });
 }
 
-pub(crate) fn apply_widget_layer(hwnd: HWND, layer: WidgetLayer, acrylic: bool) {
+pub(crate) fn apply_widget_layer(hwnd: HWND, layer: WidgetLayer) {
     let insert_after = match layer {
         WidgetLayer::Wallpaper => HWND_BOTTOM,
         WidgetLayer::Normal => HWND_NOTOPMOST,
         WidgetLayer::Topmost => HWND_TOPMOST,
     };
-    let backdrop: DWM_SYSTEMBACKDROP_TYPE = if acrylic {
-        DWMSBT_TRANSIENTWINDOW
-    } else {
-        DWMSBT_NONE
-    };
-    // SAFETY: Setting z-order and optional Windows 11 backdrop attribute on an owned HWND.
+    // SAFETY: Updating z-order on an owned widget HWND on the UI thread.
     unsafe {
         let _ = SetWindowPos(
             hwnd,
@@ -103,12 +97,6 @@ pub(crate) fn apply_widget_layer(hwnd: HWND, layer: WidgetLayer, acrylic: bool) 
             0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
         );
-        let _ = DwmSetWindowAttribute(
-            hwnd,
-            DWMWA_SYSTEMBACKDROP_TYPE,
-            &backdrop as *const DWM_SYSTEMBACKDROP_TYPE as *const c_void,
-            u32::try_from(mem::size_of::<DWM_SYSTEMBACKDROP_TYPE>()).unwrap_or(4),
-        );
     }
 }
 
@@ -117,11 +105,18 @@ pub(crate) fn show_widget_context_menu(
     screen_pt: PixelPoint,
     state: &WidgetMenuState,
 ) -> Result<Option<WidgetMenuAction>, String> {
+    let active_preset = closest_opacity_preset(state.opacity_percent);
     // SAFETY: Popup menu is created, tracked, and destroyed synchronously on UI thread.
     unsafe {
         let menu = CreatePopupMenu().map_err(|err| format!("CreatePopupMenu failed: {err}"))?;
         add_item(menu, CMD_REFRESH, "Обновить календарь сейчас", false, true);
-        add_item(menu, CMD_OPEN_CFG, "Открыть настройки", false, true);
+        add_item(
+            menu,
+            CMD_OPEN_CFG,
+            "Открыть настройки (widgets.cfg)",
+            false,
+            true,
+        );
         add_sep(menu);
         let is_wall = state.layer == WidgetLayer::Wallpaper;
         let is_norm = state.layer == WidgetLayer::Normal;
@@ -130,8 +125,42 @@ pub(crate) fn show_widget_context_menu(
         add_item(menu, CMD_LAYER_NORMAL, "Слой: Обычное окно", is_norm, true);
         add_item(menu, CMD_LAYER_TOPMOST, "Слой: Поверх всех", is_top, true);
         add_sep(menu);
-        let acr = state.acrylic;
-        add_item(menu, CMD_TOGGLE_ACRYLIC, "Размытие Acrylic", acr, true);
+        add_item(
+            menu,
+            CMD_OPACITY_100,
+            "Прозрачность: 100% (плотный)",
+            active_preset == 100,
+            true,
+        );
+        add_item(
+            menu,
+            CMD_OPACITY_85,
+            "Прозрачность: 85%",
+            active_preset == 85,
+            true,
+        );
+        add_item(
+            menu,
+            CMD_OPACITY_70,
+            "Прозрачность: 70%",
+            active_preset == 70,
+            true,
+        );
+        add_item(
+            menu,
+            CMD_OPACITY_50,
+            "Прозрачность: 50%",
+            active_preset == 50,
+            true,
+        );
+        add_item(
+            menu,
+            CMD_OPACITY_35,
+            "Прозрачность: 35%",
+            active_preset == 35,
+            true,
+        );
+        add_sep(menu);
         add_item(menu, CMD_HIDE, "Скрыть виджет", false, true);
 
         let _ = SetForegroundWindow(hwnd);
@@ -145,10 +174,24 @@ pub(crate) fn show_widget_context_menu(
             CMD_LAYER_WALLPAPER => Some(WidgetMenuAction::SetLayerWallpaper),
             CMD_LAYER_NORMAL => Some(WidgetMenuAction::SetLayerNormal),
             CMD_LAYER_TOPMOST => Some(WidgetMenuAction::SetLayerTopmost),
-            CMD_TOGGLE_ACRYLIC => Some(WidgetMenuAction::ToggleAcrylic),
+            CMD_OPACITY_100 => Some(WidgetMenuAction::SetOpacity(100)),
+            CMD_OPACITY_85 => Some(WidgetMenuAction::SetOpacity(85)),
+            CMD_OPACITY_70 => Some(WidgetMenuAction::SetOpacity(70)),
+            CMD_OPACITY_50 => Some(WidgetMenuAction::SetOpacity(50)),
+            CMD_OPACITY_35 => Some(WidgetMenuAction::SetOpacity(35)),
             CMD_HIDE => Some(WidgetMenuAction::HideWidget),
             _ => None,
         })
+    }
+}
+
+fn closest_opacity_preset(pct: u8) -> u8 {
+    match pct {
+        93..=100 => 100,
+        78..=92 => 85,
+        60..=77 => 70,
+        43..=59 => 50,
+        _ => 35,
     }
 }
 
