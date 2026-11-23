@@ -17,6 +17,10 @@ mod job;
 #[cfg(windows)]
 mod metrics;
 #[cfg(windows)]
+mod overlay_game;
+#[cfg(windows)]
+mod overlay_telemetry;
+#[cfg(windows)]
 mod running;
 #[cfg(windows)]
 mod settings_proc;

@@ -4,13 +4,14 @@ version = 4
 
 [[package]]
 name = "asrbox"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "asrbox-core",
  "asrbox-mod-about",
  "asrbox-mod-backup",
  "asrbox-mod-debug",
  "asrbox-mod-dock",
+ "asrbox-mod-overlay",
  "asrbox-mod-settings",
  "asrbox-mod-webdav",
  "asrbox-mod-widgets",
@@ -20,52 +21,60 @@ dependencies = [
 
 [[package]]
 name = "asrbox-core"
-version = "0.0.2"
+version = "0.0.3"
 
 [[package]]
 name = "asrbox-mod-about"
-version = "0.0.2"
+version = "0.0.3"
 
 [[package]]
 name = "asrbox-mod-backup"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "asrbox-platform-api",
 ]
 
 [[package]]
 name = "asrbox-mod-debug"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "asrbox-platform-api",
 ]
 
 [[package]]
 name = "asrbox-mod-dock"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "asrbox-platform-api",
 ]
 
 [[package]]
 name = "asrbox-mod-huawei"
-version = "0.0.2"
+version = "0.0.3"
 
 [[package]]
 name = "asrbox-mod-keyboard"
-version = "0.0.2"
+version = "0.0.3"
 
 [[package]]
 name = "asrbox-mod-monitor"
-version = "0.0.2"
+version = "0.0.3"
+
+[[package]]
+name = "asrbox-mod-overlay"
+version = "0.0.3"
+dependencies = [
+ "asrbox-core",
+ "asrbox-platform-api",
+]
 
 [[package]]
 name = "asrbox-mod-screenshot"
-version = "0.0.2"
+version = "0.0.3"
 
 [[package]]
 name = "asrbox-mod-settings"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "asrbox-core",
  "asrbox-platform-api",
@@ -73,26 +82,26 @@ dependencies = [
 
 [[package]]
 name = "asrbox-mod-speech"
-version = "0.0.2"
+version = "0.0.3"
 
 [[package]]
 name = "asrbox-mod-webdav"
-version = "0.0.2"
+version = "0.0.3"
 
 [[package]]
 name = "asrbox-mod-widgets"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "asrbox-platform-api",
 ]
 
 [[package]]
 name = "asrbox-platform-api"
-version = "0.0.2"
+version = "0.0.3"
 
 [[package]]
 name = "asrbox-platform-windows"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "asrbox-platform-api",
  "windows",
@@ -246,4 +255,4 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "0.0.2"
+version = "0.0.3"

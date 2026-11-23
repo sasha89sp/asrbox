@@ -5,22 +5,25 @@ use std::path::Path;
 pub enum ModuleId {
     Dock,
     Widgets,
+    Overlay,
 }
 
 impl ModuleId {
-    pub const ALL: [Self; 2] = [Self::Dock, Self::Widgets];
+    pub const ALL: [Self; 3] = [Self::Dock, Self::Widgets, Self::Overlay];
 
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Dock => "dock",
             Self::Widgets => "widgets",
+            Self::Overlay => "overlay",
         }
     }
 
     pub fn display_name(self) -> &'static str {
         match self {
             Self::Dock => "Док-панели",
-            Self::Widgets => "Google Календарь",
+            Self::Widgets => "Виджеты (Календарь + Монитор)",
+            Self::Overlay => "Игровой оверлей",
         }
     }
 
@@ -28,6 +31,7 @@ impl ModuleId {
         match raw.trim() {
             "dock" => Some(Self::Dock),
             "widgets" => Some(Self::Widgets),
+            "overlay" => Some(Self::Overlay),
             _ => None,
         }
     }
@@ -62,6 +66,7 @@ pub struct ModulesConfig {
     pub isolation: IsolationMode,
     pub dock_enabled: bool,
     pub widgets_enabled: bool,
+    pub overlay_enabled: bool,
 }
 
 impl Default for ModulesConfig {
@@ -70,6 +75,7 @@ impl Default for ModulesConfig {
             isolation: IsolationMode::Process,
             dock_enabled: true,
             widgets_enabled: true,
+            overlay_enabled: true,
         }
     }
 }
@@ -79,6 +85,7 @@ impl ModulesConfig {
         match id {
             ModuleId::Dock => self.dock_enabled,
             ModuleId::Widgets => self.widgets_enabled,
+            ModuleId::Overlay => self.overlay_enabled,
         }
     }
 
@@ -86,6 +93,7 @@ impl ModulesConfig {
         match id {
             ModuleId::Dock => self.dock_enabled = enabled,
             ModuleId::Widgets => self.widgets_enabled = enabled,
+            ModuleId::Overlay => self.overlay_enabled = enabled,
         }
     }
 }
@@ -127,6 +135,7 @@ pub fn parse_modules_config(raw: &str) -> ModulesConfig {
             "isolation" => cfg.isolation = IsolationMode::from_str_value(val),
             "module.dock" => cfg.dock_enabled = parse_bool(val),
             "module.widgets" => cfg.widgets_enabled = parse_bool(val),
+            "module.overlay" => cfg.overlay_enabled = parse_bool(val),
             _ => {}
         }
     }
@@ -142,10 +151,12 @@ pub fn serialize_modules_config(cfg: &ModulesConfig) -> String {
             "isolation={}\n",
             "module.dock={}\n",
             "module.widgets={}\n",
+            "module.overlay={}\n",
         ),
         cfg.isolation.as_str(),
         if cfg.dock_enabled { 1 } else { 0 },
         if cfg.widgets_enabled { 1 } else { 0 },
+        if cfg.overlay_enabled { 1 } else { 0 },
     )
 }
 
@@ -163,6 +174,7 @@ mod tests {
             isolation: IsolationMode::InProc,
             dock_enabled: true,
             widgets_enabled: false,
+            overlay_enabled: false,
         };
         let raw = serialize_modules_config(&cfg);
         assert_eq!(parse_modules_config(&raw), cfg);

@@ -10,8 +10,8 @@ pub use menu::{
     WidgetMenuAction, WidgetMenuState,
 };
 pub use telemetry::{
-    CpuTelemetry, DriveTelemetry, GpuTelemetry, NetTelemetry, ProcUsage, RamTelemetry,
-    SysTelemetry, WidgetSizeBounds,
+    CpuTelemetry, DriveTelemetry, GpuTelemetry, NetTelemetry, OverlayTelemetry, ProcUsage,
+    RamTelemetry, SysTelemetry, WidgetSizeBounds,
 };
 pub use tools::{
     AboutUiCommand, DebugUiCommand, ProcessMetrics, SettingsInputRects, SettingsUiEvent,
@@ -217,6 +217,9 @@ pub enum PlatformEvent {
     SysTelemetryReady {
         snapshot: Box<SysTelemetry>,
     },
+    OverlayTelemetryReady {
+        snapshot: Box<OverlayTelemetry>,
+    },
     HttpFetchDone {
         request_id: u64,
         result: HttpFetchResult,
@@ -283,6 +286,12 @@ pub trait WidgetPlatform {
     ) -> Result<(), String>;
     fn destroy_widget_window(&mut self, widget_id: u64) -> Result<(), String>;
     fn set_widget_layer(&mut self, widget_id: u64, layer: WidgetLayer) -> Result<(), String>;
+    fn set_widget_click_through(
+        &mut self,
+        widget_id: u64,
+        click_through: bool,
+    ) -> Result<(), String>;
+    fn set_widget_visible(&mut self, widget_id: u64, visible: bool) -> Result<(), String>;
     fn set_widget_resize_bounds(
         &mut self,
         widget_id: u64,
@@ -303,6 +312,11 @@ pub trait WidgetPlatform {
     ) -> Result<(), String>;
     fn set_widget_refresh_ms(&mut self, widget_id: u64, interval_ms: u32) -> Result<(), String>;
     fn request_sys_telemetry(&mut self) -> Result<(), String>;
+    fn request_overlay_telemetry(
+        &mut self,
+        full_sample: bool,
+        extra_game_procs: &[String],
+    ) -> Result<(), String>;
     fn show_widget_menu(
         &mut self,
         widget_id: u64,

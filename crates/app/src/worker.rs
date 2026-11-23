@@ -15,6 +15,7 @@ use asrbox_platform_windows::{
 
 use crate::docks::DockManager;
 use crate::tools::resolve_app_paths;
+use crate::worker_overlay::run_overlay_worker;
 use crate::worker_widgets::run_widgets_worker;
 use crate::APP_VERSION;
 
@@ -30,6 +31,7 @@ pub fn run_worker(module: ModuleId, parent_pid: u32, safe_mode: bool) -> Result<
     match module {
         ModuleId::Dock => run_dock_worker(&mut host, cmd_queue, parent_pid, safe_mode),
         ModuleId::Widgets => run_widgets_worker(&mut host, cmd_queue, parent_pid, safe_mode),
+        ModuleId::Overlay => run_overlay_worker(&mut host, cmd_queue, parent_pid),
     }
 }
 

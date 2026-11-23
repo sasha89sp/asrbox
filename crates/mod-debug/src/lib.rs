@@ -16,6 +16,7 @@ const FILTER_SLOTS: &[Option<&str>] = &[
     Some("app"),
     Some("dock"),
     Some("widgets"),
+    Some("overlay"),
     Some("http"),
     Some("platform"),
 ];
@@ -81,7 +82,7 @@ impl DebugHub {
             stats: BTreeMap::new(),
             dirty: true,
         };
-        for m in ["app", "dock", "widgets", "http", "platform"] {
+        for m in ["app", "dock", "widgets", "overlay", "http", "platform"] {
             hub.stats.insert(m.to_owned(), ModuleStats::default());
         }
         hub

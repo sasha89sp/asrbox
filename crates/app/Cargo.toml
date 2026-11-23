@@ -10,6 +10,7 @@ asrbox-mod-about = { path = "../mod-about" }
 asrbox-mod-backup = { path = "../mod-backup" }
 asrbox-mod-debug = { path = "../mod-debug" }
 asrbox-mod-dock = { path = "../mod-dock" }
+asrbox-mod-overlay = { path = "../mod-overlay" }
 asrbox-mod-settings = { path = "../mod-settings" }
 asrbox-mod-webdav = { path = "../mod-webdav" }
 asrbox-mod-widgets = { path = "../mod-widgets" }

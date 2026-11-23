@@ -2,6 +2,7 @@ pub mod draw;
 pub mod layout;
 pub mod layout_backup;
 pub mod layout_cal;
+pub mod layout_overlay;
 pub mod layout_sys;
 pub mod layout_tabs;
 pub mod render;
@@ -13,8 +14,8 @@ pub use layout::{build_layout, MIN_SETTINGS_HEIGHT, MIN_SETTINGS_WIDTH};
 pub use render::render_settings_frame;
 pub use types::{
     AboutSettingsView, BackupSettingsView, CalendarSettingsView, CalendarSourceView,
-    DebugSettingsView, DockSettingsView, ModuleStatusView, SettingsAction, SettingsSnapshot,
-    SettingsTab, SliderKind, SysMonitorSettingsView, WebDavSettingsView,
+    DebugSettingsView, DockSettingsView, ModuleStatusView, OverlaySettingsView, SettingsAction,
+    SettingsSnapshot, SettingsTab, SliderKind, SysMonitorSettingsView, WebDavSettingsView,
 };
 
 use layout::{rect_contains, HitKind, SettingsLayout};
@@ -196,6 +197,9 @@ impl SettingsUiState {
             SliderKind::SysMonitorOpacity => Some(SettingsAction::SetSysMonitorOpacity(val as u8)),
             SliderKind::SysMonitorWidth => Some(SettingsAction::SetSysMonitorWidth(val)),
             SliderKind::SysMonitorHeight => Some(SettingsAction::SetSysMonitorHeight(val)),
+            SliderKind::OverlayOpacity => Some(SettingsAction::SetOverlayOpacity(val as u8)),
+            SliderKind::OverlayWidth => Some(SettingsAction::SetOverlayWidth(val)),
+            SliderKind::OverlayHeight => Some(SettingsAction::SetOverlayHeight(val)),
         }
     }
 }
@@ -253,6 +257,18 @@ mod tests {
                 refresh_interval_ms: 2000,
                 width: 560,
                 height: 492,
+            },
+            overlay: OverlaySettingsView {
+                module_enabled: true,
+                auto_games_only: true,
+                setup_mode: false,
+                anchor_index: 1,
+                x: 24,
+                y: 24,
+                opacity_percent: 78,
+                width: 320,
+                height: 188,
+                refresh_interval_ms: 1000,
             },
             backup: BackupSettingsView {
                 auto_upload_cloud: false,

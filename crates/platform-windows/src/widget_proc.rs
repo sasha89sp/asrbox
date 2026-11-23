@@ -11,9 +11,10 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     DefWindowProcW, GetCursorPos, GetWindowLongPtrW, GetWindowRect, LoadCursorW, SetCursor,
-    SetWindowPos, GWLP_USERDATA, HWND_BOTTOM, HWND_NOTOPMOST, HWND_TOPMOST, SWP_NOACTIVATE,
-    SWP_NOMOVE, SWP_NOSIZE, WINDOWPOS, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL,
-    WM_RBUTTONUP, WM_SETCURSOR, WM_TIMER, WM_WINDOWPOSCHANGING,
+    SetWindowPos, GWLP_USERDATA, HTTRANSPARENT, HWND_BOTTOM, HWND_NOTOPMOST, HWND_TOPMOST,
+    MA_NOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, WINDOWPOS, WM_LBUTTONDOWN, WM_LBUTTONUP,
+    WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCHITTEST, WM_RBUTTONUP, WM_SETCURSOR,
+    WM_TIMER, WM_WINDOWPOSCHANGING,
 };
 
 use crate::widget_win::{compute_resized_rect, cursor_for_edges, hit_resize_edges};
@@ -25,6 +26,7 @@ pub(crate) const WIDGET_REFRESH_TIMER_ID: usize = 102;
 #[derive(Clone, Copy)]
 struct WidgetDragMeta {
     layer: WidgetLayer,
+    click_through: bool,
     drag_header_h: i32,
     bounds: Option<WidgetSizeBounds>,
     pressing_header: bool,
@@ -46,6 +48,7 @@ pub(crate) fn register_widget_meta(widget_id: u64, layer: WidgetLayer, drag_head
             widget_id,
             WidgetDragMeta {
                 layer,
+                click_through: false,
                 drag_header_h,
                 bounds: None,
                 pressing_header: false,
@@ -72,6 +75,19 @@ pub(crate) fn update_widget_layer_meta(widget_id: u64, layer: WidgetLayer) {
     WIDGET_META.with(|m| {
         if let Some(meta) = m.borrow_mut().get_mut(&widget_id) {
             meta.layer = layer;
+        }
+    });
+}
+
+pub(crate) fn set_widget_click_through_meta(widget_id: u64, click_through: bool) {
+    WIDGET_META.with(|m| {
+        if let Some(meta) = m.borrow_mut().get_mut(&widget_id) {
+            meta.click_through = click_through;
+            if click_through {
+                meta.pressing_header = false;
+                meta.dragging = false;
+                meta.resize_edges = 0;
+            }
         }
     });
 }
@@ -109,17 +125,20 @@ pub(crate) unsafe extern "system" fn widget_wnd_proc(
     lparam: LPARAM,
 ) -> LRESULT {
     let widget_id = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as u64;
+    let is_ct = WIDGET_META.with(|m| m.borrow().get(&widget_id).is_some_and(|x| x.click_through));
     match msg {
-        WM_SETCURSOR => on_widget_set_cursor(hwnd, widget_id, wparam, lparam),
-        WM_LBUTTONDOWN => on_widget_lbutton_down(hwnd, widget_id, lparam),
-        WM_MOUSEMOVE => on_widget_mouse_move(hwnd, widget_id, lparam),
-        WM_LBUTTONUP => on_widget_lbutton_up(hwnd, widget_id, lparam),
-        WM_MOUSELEAVE => {
+        WM_MOUSEACTIVATE => LRESULT(MA_NOACTIVATE as isize),
+        WM_NCHITTEST if is_ct => LRESULT(HTTRANSPARENT as isize),
+        WM_SETCURSOR if !is_ct => on_widget_set_cursor(hwnd, widget_id, wparam, lparam),
+        WM_LBUTTONDOWN if !is_ct => on_widget_lbutton_down(hwnd, widget_id, lparam),
+        WM_MOUSEMOVE if !is_ct => on_widget_mouse_move(hwnd, widget_id, lparam),
+        WM_LBUTTONUP if !is_ct => on_widget_lbutton_up(hwnd, widget_id, lparam),
+        WM_MOUSELEAVE if !is_ct => {
             push_event(PlatformEvent::WidgetPointerLeave { widget_id });
             LRESULT(0)
         }
-        WM_RBUTTONUP => on_widget_rbutton_up(hwnd, widget_id, lparam),
-        WM_MOUSEWHEEL => {
+        WM_RBUTTONUP if !is_ct => on_widget_rbutton_up(hwnd, widget_id, lparam),
+        WM_MOUSEWHEEL if !is_ct => {
             let delta = ((wparam.0 >> 16) & 0xFFFF) as i16;
             push_event(PlatformEvent::WidgetWheel { widget_id, delta });
             LRESULT(0)

@@ -10,6 +10,7 @@ pub struct AppPaths {
     pub docks_cfg: PathBuf,
     pub widgets_cfg: PathBuf,
     pub sysmon_cfg: PathBuf,
+    pub overlay_cfg: PathBuf,
     pub backup_cfg: PathBuf,
     pub webdav_cfg: PathBuf,
     pub backups_dir: PathBuf,
@@ -30,6 +31,7 @@ impl AppPaths {
             docks_cfg: config_dir.join("docks.cfg"),
             widgets_cfg: config_dir.join("widgets.cfg"),
             sysmon_cfg: config_dir.join("sysmon.cfg"),
+            overlay_cfg: config_dir.join("overlay.cfg"),
             backup_cfg: config_dir.join("backup.cfg"),
             webdav_cfg: config_dir.join("webdav.cfg"),
             backups_dir: data_dir.join("backups"),
@@ -74,6 +76,7 @@ pub fn build_paths_clipboard(paths: &AppPaths) -> String {
          Настройки доков  : {}\r\n\
          Настройки календ.: {}\r\n\
          Системн. монитор : {}\r\n\
+         Игровой оверлей  : {}\r\n\
          Настройки бэкапа : {}\r\n\
          Настройки WebDAV : {}\r\n\
          Папка бэкапов    : {}\r\n\
@@ -85,6 +88,7 @@ pub fn build_paths_clipboard(paths: &AppPaths) -> String {
         paths.docks_cfg.display(),
         paths.widgets_cfg.display(),
         paths.sysmon_cfg.display(),
+        paths.overlay_cfg.display(),
         paths.backup_cfg.display(),
         paths.webdav_cfg.display(),
         paths.backups_dir.display(),
@@ -103,11 +107,12 @@ mod tests {
             PathBuf::from("D:\\Tools\\asrbox\\asrbox.exe"),
             PathBuf::from("D:\\Tools\\asrbox\\data"),
         );
-        let text = build_about_text("0.0.2", &paths);
-        assert!(text.contains("asrbox v0.0.2"));
+        let text = build_about_text("0.0.3", &paths);
+        assert!(text.contains("asrbox v0.0.3"));
         assert!(text.contains("ПОРТАТИВНАЯ СБОРКА"));
         assert!(text.contains("widgets.cfg"));
         assert!(text.contains("docks.cfg"));
+        assert!(text.contains("overlay.cfg"));
         assert!(text.contains("backup.cfg"));
         assert!(text.contains("webdav.cfg"));
         assert!(text.contains("CHANGELOG"));

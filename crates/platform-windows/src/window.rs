@@ -19,6 +19,7 @@ use crate::app_icon::{cleanup_app_icons, large_app_icon, small_app_icon};
 use crate::dock_proc::dock_wnd_proc;
 use crate::http::{drain_http_results, WM_HTTP_DONE};
 use crate::metrics::ProcessMetricsSampler;
+use crate::overlay_telemetry::{drain_overlay_results, WM_OVERLAY_DONE};
 use crate::query_primary_work_area;
 use crate::settings_proc::settings_wnd_proc;
 use crate::sys_telemetry::{drain_telemetry_results, WM_TELEMETRY_DONE};
@@ -277,6 +278,14 @@ unsafe extern "system" fn host_wnd_proc(
         WM_TELEMETRY_DONE => {
             for snap in drain_telemetry_results() {
                 push_event(PlatformEvent::SysTelemetryReady {
+                    snapshot: Box::new(snap),
+                });
+            }
+            LRESULT(0)
+        }
+        WM_OVERLAY_DONE => {
+            for snap in drain_overlay_results() {
+                push_event(PlatformEvent::OverlayTelemetryReady {
                     snapshot: Box::new(snap),
                 });
             }

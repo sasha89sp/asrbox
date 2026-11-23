@@ -35,6 +35,10 @@ const TRAY_TOGGLE_AUTOSTART: u32 = 1014;
 const TRAY_BACKUP_SETTINGS: u32 = 1015;
 const TRAY_BACKUP_FULL: u32 = 1016;
 const TRAY_OPEN_BACKUP_TAB: u32 = 1017;
+const TRAY_TOGGLE_OVERLAY_MOD: u32 = 1018;
+const TRAY_OVERLAY_SETUP: u32 = 1019;
+const TRAY_OPEN_OVERLAY_TAB: u32 = 1020;
+const TRAY_OPEN_OVERLAY_CFG: u32 = 1021;
 const TRAY_TOGGLE_BASE: u32 = 2000;
 const TRAY_REMOVE_BASE: u32 = 3000;
 
@@ -208,6 +212,39 @@ pub(crate) fn show_tray_context_menu(
             add_submenu(menu, cal_sub, "Модуль: Виджеты");
         }
 
+        if let Ok(ov_sub) = CreatePopupMenu() {
+            add_item(
+                ov_sub,
+                TRAY_TOGGLE_OVERLAY_MOD,
+                "Модуль включён",
+                flags.overlay_module_enabled,
+                true,
+            );
+            add_sep(ov_sub);
+            add_item(
+                ov_sub,
+                TRAY_OVERLAY_SETUP,
+                "Режим настройки (перемещение/размер)",
+                flags.overlay_setup_mode,
+                flags.overlay_module_enabled,
+            );
+            add_item(
+                ov_sub,
+                TRAY_OPEN_OVERLAY_TAB,
+                "Настройки оверлея...",
+                false,
+                true,
+            );
+            add_item(
+                ov_sub,
+                TRAY_OPEN_OVERLAY_CFG,
+                "Открыть overlay.cfg",
+                false,
+                true,
+            );
+            add_submenu(menu, ov_sub, "Модуль: Игровой оверлей");
+        }
+
         if let Ok(bk_sub) = CreatePopupMenu() {
             add_item(
                 bk_sub,
@@ -278,6 +315,10 @@ fn decode_tray_command(cmd: u32, docks: &[TrayMenuEntry]) -> Option<TrayAction> 
         TRAY_BACKUP_SETTINGS => Some(TrayAction::BackupSettingsNow),
         TRAY_BACKUP_FULL => Some(TrayAction::BackupFullNow),
         TRAY_OPEN_BACKUP_TAB => Some(TrayAction::OpenBackupTab),
+        TRAY_TOGGLE_OVERLAY_MOD => Some(TrayAction::ToggleOverlayModule),
+        TRAY_OVERLAY_SETUP => Some(TrayAction::ToggleOverlaySetupMode),
+        TRAY_OPEN_OVERLAY_TAB => Some(TrayAction::OpenOverlayTab),
+        TRAY_OPEN_OVERLAY_CFG => Some(TrayAction::OpenOverlayConfig),
         TRAY_TOGGLE_AUTOSTART => Some(TrayAction::ToggleAutostart),
         TRAY_OPEN_DEBUG => Some(TrayAction::OpenDebugWindow),
         TRAY_OPEN_ABOUT => Some(TrayAction::OpenAboutWindow),

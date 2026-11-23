@@ -8,6 +8,7 @@ pub enum SupervisorCmd {
     RefreshCalendar,
     ToggleSysMonitor,
     RefreshSysMonitor,
+    SetOverlaySetupMode(bool),
     Shutdown,
 }
 
@@ -50,6 +51,9 @@ pub fn encode_supervisor_cmd(cmd: &SupervisorCmd) -> String {
         SupervisorCmd::RefreshCalendar => "REFRESH_CALENDAR".to_owned(),
         SupervisorCmd::ToggleSysMonitor => "TOGGLE_SYSMON".to_owned(),
         SupervisorCmd::RefreshSysMonitor => "REFRESH_SYSMON".to_owned(),
+        SupervisorCmd::SetOverlaySetupMode(on) => {
+            format!("OVERLAY_SETUP|{}", if *on { 1 } else { 0 })
+        }
         SupervisorCmd::Shutdown => "SHUTDOWN".to_owned(),
     }
 }
@@ -82,6 +86,11 @@ pub fn decode_supervisor_cmd(line: &str) -> Option<SupervisorCmd> {
     }
     if let Some(rest) = t.strip_prefix("REMOVE_DOCK|") {
         return rest.parse::<u64>().ok().map(SupervisorCmd::RemoveDock);
+    }
+    if let Some(rest) = t.strip_prefix("OVERLAY_SETUP|") {
+        return Some(SupervisorCmd::SetOverlaySetupMode(
+            rest == "1" || rest.eq_ignore_ascii_case("true"),
+        ));
     }
     None
 }
@@ -177,6 +186,8 @@ mod tests {
             SupervisorCmd::RefreshCalendar,
             SupervisorCmd::ToggleSysMonitor,
             SupervisorCmd::RefreshSysMonitor,
+            SupervisorCmd::SetOverlaySetupMode(true),
+            SupervisorCmd::SetOverlaySetupMode(false),
             SupervisorCmd::Shutdown,
         ];
         for c in cmds {

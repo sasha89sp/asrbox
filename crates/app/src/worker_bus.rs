@@ -68,6 +68,11 @@ impl<I: IconProvider> AppController<I> {
                     "app",
                     format!("Модуль {module} готов (PID {pid})"),
                 );
+                if module == "overlay" && self.overlay_setup_mode {
+                    let _ = self
+                        .supervisor
+                        .send_cmd(ModuleId::Overlay, &SupervisorCmd::SetOverlaySetupMode(true));
+                }
                 true
             }
             WorkerMsg::Log {
@@ -81,12 +86,7 @@ impl<I: IconProvider> AppController<I> {
                     "TRACE" => LogLevel::Trace,
                     _ => LogLevel::Info,
                 };
-                let mod_tag: &'static str = match module.as_str() {
-                    "dock" => "dock",
-                    "widgets" => "widgets",
-                    "http" => "http",
-                    _ => "app",
-                };
+                let mod_tag = map_module_tag(&module);
                 self.debug.log(now, lvl, mod_tag, message);
                 false
             }
@@ -95,6 +95,7 @@ impl<I: IconProvider> AppController<I> {
                     "dock" => SettingsTab::Dock,
                     "calendar" => SettingsTab::Calendar,
                     "sysmon" => SettingsTab::SysMonitor,
+                    "overlay" => SettingsTab::Overlay,
                     _ => SettingsTab::Modules,
                 };
                 self.open_settings_tab(host, t);
@@ -110,11 +111,7 @@ impl<I: IconProvider> AppController<I> {
                 max_us,
                 ..
             } => {
-                let tag: &'static str = match module.as_str() {
-                    "dock" => "dock",
-                    "widgets" => "widgets",
-                    _ => "app",
-                };
+                let tag = map_module_tag(&module);
                 self.debug.record_event(tag, "worker_metrics");
                 self.debug.log(
                     now,
@@ -165,36 +162,20 @@ impl<I: IconProvider> AppController<I> {
             let _ = self.supervisor.send_cmd(ModuleId::Widgets, &cmd);
             return;
         }
-        match cmd {
-            SupervisorCmd::ReloadConfig => {
-                if let Some(cal) = self.calendar.as_mut() {
-                    let _ = cal.reload_config_and_refresh(host);
-                    let _ = cal.sync_window(host, self.safe_mode);
+        match (cmd, self.calendar.as_mut(), self.sysmon.as_mut()) {
+            (SupervisorCmd::ReloadConfig, cal, sys) => {
+                if let Some(c) = cal {
+                    let _ = c.reload_config_and_refresh(host);
+                    let _ = c.sync_window(host, self.safe_mode);
                 }
-                if let Some(sys) = self.sysmon.as_mut() {
-                    let _ = sys.reload_config(host, self.safe_mode);
-                }
-            }
-            SupervisorCmd::ToggleCalendar => {
-                if let Some(cal) = self.calendar.as_mut() {
-                    cal.toggle_visible(host, false);
+                if let Some(s) = sys {
+                    let _ = s.reload_config(host, self.safe_mode);
                 }
             }
-            SupervisorCmd::RefreshCalendar => {
-                if let Some(cal) = self.calendar.as_mut() {
-                    cal.on_refresh_tick(host);
-                }
-            }
-            SupervisorCmd::ToggleSysMonitor => {
-                if let Some(sys) = self.sysmon.as_mut() {
-                    sys.toggle_visible(host, false);
-                }
-            }
-            SupervisorCmd::RefreshSysMonitor => {
-                if let Some(sys) = self.sysmon.as_mut() {
-                    sys.on_refresh_tick(host);
-                }
-            }
+            (SupervisorCmd::ToggleCalendar, Some(c), _) => c.toggle_visible(host, false),
+            (SupervisorCmd::RefreshCalendar, Some(c), _) => c.on_refresh_tick(host),
+            (SupervisorCmd::ToggleSysMonitor, _, Some(s)) => s.toggle_visible(host, false),
+            (SupervisorCmd::RefreshSysMonitor, _, Some(s)) => s.on_refresh_tick(host),
             _ => {}
         }
     }
@@ -207,6 +188,7 @@ impl<I: IconProvider> AppController<I> {
         match id {
             ModuleId::Dock => self.send_or_run_dock_cmd(host, SupervisorCmd::ReloadConfig),
             ModuleId::Widgets => self.send_or_run_widgets_cmd(host, SupervisorCmd::ReloadConfig),
+            ModuleId::Overlay => self.send_or_run_overlay_cmd(host, SupervisorCmd::ReloadConfig),
         }
     }
 
@@ -215,6 +197,9 @@ impl<I: IconProvider> AppController<I> {
         host: &mut H,
         ev: PlatformEvent,
     ) {
+        if self.handle_overlay_inproc_event(host, &ev) {
+            return;
+        }
         let t0 = Instant::now();
         let mut open_tab: Option<SettingsTab> = None;
         let mut msg_out: Option<(LogLevel, &'static str, String)> = None;
@@ -363,12 +348,26 @@ impl<I: IconProvider> AppController<I> {
         module: &'static str,
         msg: String,
     ) {
-        let lvl = if msg.starts_with("error:") {
-            LogLevel::Error
-        } else {
-            LogLevel::Info
-        };
+        let lvl = level_for_msg(&msg);
         self.debug.log(host.local_time_now(), lvl, module, msg);
+    }
+}
+
+fn map_module_tag(module: &str) -> &'static str {
+    match module {
+        "dock" => "dock",
+        "widgets" => "widgets",
+        "overlay" => "overlay",
+        "http" => "http",
+        _ => "app",
+    }
+}
+
+fn level_for_msg(msg: &str) -> LogLevel {
+    if msg.starts_with("error:") {
+        LogLevel::Error
+    } else {
+        LogLevel::Info
     }
 }
 
@@ -381,13 +380,6 @@ fn classify_widget_reply(
         "" => {}
         "open_settings" => *open_tab = Some(SettingsTab::Calendar),
         "open_settings_sysmon" => *open_tab = Some(SettingsTab::SysMonitor),
-        _ => {
-            let lvl = if msg.starts_with("error:") {
-                LogLevel::Error
-            } else {
-                LogLevel::Info
-            };
-            *msg_out = Some((lvl, "widgets", msg));
-        }
+        _ => *msg_out = Some((level_for_msg(&msg), "widgets", msg)),
     }
 }

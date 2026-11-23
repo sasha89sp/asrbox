@@ -91,3 +91,24 @@ pub struct SysTelemetry {
     pub top_cpu: Vec<ProcUsage>,
     pub top_ram: Vec<ProcUsage>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct OverlayTelemetry {
+    pub fps: Option<u32>,
+    pub fps_low_1pct: Option<u32>,
+    pub display_hz: u32,
+    pub gpu_temp_c: Option<i16>,
+    pub gpu_usage_pct: Option<u8>,
+    pub vram_used_mb: u32,
+    pub vram_total_mb: u32,
+    pub cpu_temp_c: Option<i16>,
+    pub cpu_usage_pct: u8,
+    pub ram_used_mb: u32,
+    pub ram_total_mb: u32,
+    pub ram_usage_pct: u8,
+    pub net_ping_ms: Option<u16>,
+    pub net_loss_tenths_pct: u16,
+    pub game_active: bool,
+    pub game_process: String,
+    pub monitor_rect: Option<crate::PixelRect>,
+}

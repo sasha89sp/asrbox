@@ -14,17 +14,19 @@
 - `src/running.rs` — определение запущенных приложений (`EnumWindows` + `QueryFullProcessImageNameW`), резолв `.lnk` (`IShellLinkW`) и активация открытого окна по клику.
 - `src/job.rs` — Win32 `JobObject` (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`) для изоляции дочерних процессов модулей и `is_process_alive(pid)`.
 - `src/settings_proc.rs` — изменяемое окно настроек (`AsrboxSettingsWindow`, NotePlan Dark, `WM_SETICON`), двойная буферизация DIB и 3 слота `EDIT` (URL/логин, пароль `ES_PASSWORD`, custom URL).
-- `src/widget_win.rs` — реализация `WidgetPlatform` для `WindowsDockHost` (окна виджетов, границы ресайза, таймеры, запрос телеметрии).
-- `src/widget_proc.rs` — оконная процедура виджета: перетаскивание за заголовок, 8-сторонний интерактивный ресайз с курсорами и управление слоем.
+- `src/widget_win.rs` — реализация `WidgetPlatform` для `WindowsDockHost` (окна виджетов, границы ресайза, клик-сквозь, видимость, таймеры, запрос телеметрии).
+- `src/widget_proc.rs` — оконная процедура виджета: клик-сквозь (`HTTRANSPARENT`/`MA_NOACTIVATE`), перетаскивание, 8-сторонний ресайз и управление слоем.
 - `src/widget_menu.rs` — ПКМ-меню виджетов (Календарь с подменю синхронизации и Системный монитор с подменю частоты обновления).
 - `src/widget_text.rs` — рендер кириллического текста `Segoe UI` (`DrawTextW`) на BGRA-кадр, tooltip и локальное время.
+- `src/overlay_game.rs` — детектор активных игр (D3D fullscreen / borderless покрытие монитора, чёрный список системных окон, белый список `extra_games`, rect монитора).
+- `src/overlay_telemetry.rs` — фоновый поток телеметрии игрового оверлея (`WM_OVERLAY_DONE`, DWM FPS + 1% low / Гц, GPU/VRAM, CPU, RAM, ICMP-пинг и % потерь).
 - `src/sys_telemetry.rs` — фоновый поток сбора телеметрии (`WM_TELEMETRY_DONE`, uptime, план питания, разрешение таймера ОС `NtQueryTimerResolution`).
 - `src/sys_procs.rs` — реальная телеметрия CPU/частоты (`CallNtPowerInformation`), ОЗУ/кэша/PF, топ-5 процессов CPU/ОЗУ и дисков (`IOCTL_DISK_PERFORMANCE`).
 - `src/sys_gpu.rs` — телеметрия GPU (DXGI VRAM, частота экрана Гц, динамическая загрузка `nvml.dll` при наличии NVIDIA).
 - `src/sys_net.rs` — телеметрия сети (IPv4, детектор VPN, трафик `GetIfTable2`, ICMP-пинг шлюза и `1.1.1.1` с джиттером и потерями).
 - `src/http.rs` — фоновый WinHTTP GET-клиент с `WM_HTTP_DONE`.
 - `src/icons.rs` — извлечение иконок (`IShellItemImageFactory`, WIC, `ExtractIconExW`).
-- `src/tray.rs` — иконка NotePlan в трее и сгруппированное по модулям ПКМ-подменю (`Док-панели`, `Виджеты`, `Бэкап и Облако`, `Автозагрузка`).
+- `src/tray.rs` — иконка NotePlan в трее и сгруппированное по модулям ПКМ-подменю (`Док-панели`, `Виджеты`, `Игровой оверлей`, `Бэкап и Облако`, `Автозагрузка`).
 - `src/shell.rs` — диалог выбора иконки и запуск программ, URL, `notepad.exe`, `explorer.exe`.
 - `src/metrics.rs` — `ProcessMetricsSampler` (RAM, % CPU, GDI/USER, uptime).
 - `src/tools_win.rs` — шрифты `ToolsWinState`, буфер обмена и `impl ToolsPlatform for WindowsDockHost`.

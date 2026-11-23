@@ -8,17 +8,19 @@ pub enum SettingsTab {
     Dock,
     Calendar,
     SysMonitor,
+    Overlay,
     Backup,
     Debug,
     About,
 }
 
 impl SettingsTab {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::Modules,
         Self::Dock,
         Self::Calendar,
         Self::SysMonitor,
+        Self::Overlay,
         Self::Backup,
         Self::Debug,
         Self::About,
@@ -30,6 +32,7 @@ impl SettingsTab {
             Self::Dock => "Док-панели",
             Self::Calendar => "Google Календарь",
             Self::SysMonitor => "Системный монитор",
+            Self::Overlay => "Игровой оверлей",
             Self::Backup => "Бэкап и Облако",
             Self::Debug => "Диагностика",
             Self::About => "О программе",
@@ -42,6 +45,7 @@ impl SettingsTab {
             Self::Dock => "▭",
             Self::Calendar => "▦",
             Self::SysMonitor => "▤",
+            Self::Overlay => "◎",
             Self::Backup => "☁",
             Self::Debug => "◉",
             Self::About => "ⓘ",
@@ -102,6 +106,20 @@ pub struct SysMonitorSettingsView {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OverlaySettingsView {
+    pub module_enabled: bool,
+    pub auto_games_only: bool,
+    pub setup_mode: bool,
+    pub anchor_index: u8,
+    pub x: i32,
+    pub y: i32,
+    pub opacity_percent: u8,
+    pub width: u32,
+    pub height: u32,
+    pub refresh_interval_ms: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BackupSettingsView {
     pub auto_upload_cloud: bool,
     pub last_backup_file: String,
@@ -143,6 +161,7 @@ pub struct SettingsSnapshot {
     pub docks: Vec<DockSettingsView>,
     pub calendar: CalendarSettingsView,
     pub sysmon: SysMonitorSettingsView,
+    pub overlay: OverlaySettingsView,
     pub backup: BackupSettingsView,
     pub webdav: WebDavSettingsView,
     pub debug: DebugSettingsView,
@@ -188,6 +207,15 @@ pub enum SettingsAction {
     MatchSysMonitorToCalendar,
     RefreshSysMonitorNow,
     OpenSysMonitorConfig,
+    SetOverlayAutoGamesOnly(bool),
+    SetOverlaySetupMode(bool),
+    SetOverlayAnchor(u8),
+    SetOverlayOpacity(u8),
+    SetOverlayWidth(u32),
+    SetOverlayHeight(u32),
+    SetOverlaySizePreset(u32, u32),
+    SetOverlayRefreshMs(u32),
+    OpenOverlayConfig,
     BackupSettingsNow,
     BackupFullNow,
     UploadLatestBackupNow,
@@ -214,17 +242,25 @@ pub enum SliderKind {
     SysMonitorOpacity,
     SysMonitorWidth,
     SysMonitorHeight,
+    OverlayOpacity,
+    OverlayWidth,
+    OverlayHeight,
 }
 
 impl SliderKind {
     pub fn range(self) -> (u32, u32) {
         match self {
             Self::DockIconSize => (24, 128),
-            Self::DockOpacity | Self::CalendarOpacity | Self::SysMonitorOpacity => (20, 100),
+            Self::DockOpacity
+            | Self::CalendarOpacity
+            | Self::SysMonitorOpacity
+            | Self::OverlayOpacity => (20, 100),
             Self::CalendarWidth => (280, 860),
             Self::CalendarRows => (3, 16),
             Self::SysMonitorWidth => (440, 900),
             Self::SysMonitorHeight => (380, 780),
+            Self::OverlayWidth => (220, 640),
+            Self::OverlayHeight => (132, 380),
         }
     }
 }

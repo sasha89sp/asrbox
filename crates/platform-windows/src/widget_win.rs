@@ -7,20 +7,23 @@ use asrbox_platform_api::{
 use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{HWND, POINT, RECT};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DestroyWindow, GetCursorPos, KillTimer, SetTimer, SetWindowLongPtrW,
-    ShowWindow, GWLP_USERDATA, IDC_ARROW, IDC_SIZENESW, IDC_SIZENS, IDC_SIZENWSE, IDC_SIZEWE,
-    SW_HIDE, SW_SHOWNOACTIVATE, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
-    WS_EX_TRANSPARENT, WS_POPUP,
+    CreateWindowExW, DestroyWindow, GetCursorPos, GetWindowLongPtrW, KillTimer, SetTimer,
+    SetWindowLongPtrW, SetWindowPos, ShowWindow, GWLP_USERDATA, GWL_EXSTYLE, HWND_TOPMOST,
+    IDC_ARROW, IDC_SIZENESW, IDC_SIZENS, IDC_SIZENWSE, IDC_SIZEWE, SWP_FRAMECHANGED,
+    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SW_HIDE, SW_SHOWNOACTIVATE, WS_EX_LAYERED,
+    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
 };
 
 use crate::http::spawn_http_get;
+use crate::overlay_telemetry::request_overlay_sample;
 use crate::present_layered_bgra;
 use crate::shell::{open_in_notepad, open_url_str};
 use crate::sys_telemetry::request_telemetry_sample;
 use crate::widget_menu::show_widget_context_menu;
 use crate::widget_proc::{
     apply_widget_layer, register_widget_meta, remove_widget_meta, set_widget_bounds_meta,
-    update_widget_layer_meta, WIDGET_MINUTE_TIMER_ID, WIDGET_REFRESH_TIMER_ID,
+    set_widget_click_through_meta, update_widget_layer_meta, WIDGET_MINUTE_TIMER_ID,
+    WIDGET_REFRESH_TIMER_ID,
 };
 use crate::widget_text::{composite_widget_frame, query_local_time, render_tooltip_frame};
 use crate::window::WindowsDockHost;
@@ -93,6 +96,60 @@ impl WidgetPlatform for WindowsDockHost {
         update_widget_layer_meta(widget_id, layer);
         if let Some(&hwnd) = self.widget_windows.get(&widget_id) {
             apply_widget_layer(hwnd, layer);
+        }
+        Ok(())
+    }
+
+    fn set_widget_click_through(
+        &mut self,
+        widget_id: u64,
+        click_through: bool,
+    ) -> Result<(), String> {
+        set_widget_click_through_meta(widget_id, click_through);
+        if let Some(&hwnd) = self.widget_windows.get(&widget_id) {
+            // SAFETY: Toggling WS_EX_TRANSPARENT on an owned layered HWND on the UI thread.
+            unsafe {
+                let mut ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+                let flag = WS_EX_TRANSPARENT.0 as isize;
+                if click_through {
+                    ex |= flag;
+                } else {
+                    ex &= !flag;
+                }
+                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex);
+                let _ = SetWindowPos(
+                    hwnd,
+                    None,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+                );
+            }
+        }
+        Ok(())
+    }
+
+    fn set_widget_visible(&mut self, widget_id: u64, visible: bool) -> Result<(), String> {
+        if let Some(&hwnd) = self.widget_windows.get(&widget_id) {
+            // SAFETY: Showing/hiding an owned popup widget HWND without activating it.
+            unsafe {
+                if visible {
+                    let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+                    let _ = SetWindowPos(
+                        hwnd,
+                        Some(HWND_TOPMOST),
+                        0,
+                        0,
+                        0,
+                        0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                    );
+                } else {
+                    let _ = ShowWindow(hwnd, SW_HIDE);
+                }
+            }
         }
         Ok(())
     }
@@ -188,6 +245,15 @@ impl WidgetPlatform for WindowsDockHost {
 
     fn request_sys_telemetry(&mut self) -> Result<(), String> {
         request_telemetry_sample(self.host_hwnd);
+        Ok(())
+    }
+
+    fn request_overlay_telemetry(
+        &mut self,
+        full_sample: bool,
+        extra_game_procs: &[String],
+    ) -> Result<(), String> {
+        request_overlay_sample(self.host_hwnd, full_sample, extra_game_procs);
         Ok(())
     }
 

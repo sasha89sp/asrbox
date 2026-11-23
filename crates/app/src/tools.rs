@@ -54,6 +54,8 @@ impl<I: IconProvider> AppController<I> {
         let flags = TrayModuleFlags {
             dock_module_enabled: self.modules_cfg.dock_enabled,
             widgets_module_enabled: self.modules_cfg.widgets_enabled,
+            overlay_module_enabled: self.modules_cfg.overlay_enabled,
+            overlay_setup_mode: self.overlay_setup_mode,
             calendar_visible: cal_vis,
             sys_monitor_visible: sys_vis,
             autostart_enabled: host.is_autostart_enabled(),
@@ -155,6 +157,25 @@ impl<I: IconProvider> AppController<I> {
             TrayAction::OpenSysMonitorConfig => {
                 let res = ToolsPlatform::open_text_file(host, &self.paths.sysmon_cfg);
                 self.log_io_result(now, "widgets", "Трей: открыт sysmon.cfg", res);
+            }
+            TrayAction::ToggleOverlayModule => {
+                self.modules_cfg.overlay_enabled = !self.modules_cfg.overlay_enabled;
+                if !self.modules_cfg.overlay_enabled {
+                    self.overlay_setup_mode = false;
+                }
+                self.persist_modules_cfg();
+                self.sync_runtime_modules(host);
+                self.render_settings_ui(host);
+            }
+            TrayAction::ToggleOverlaySetupMode => {
+                let next = !self.overlay_setup_mode;
+                self.set_overlay_setup_mode(host, next);
+                self.render_settings_ui(host);
+            }
+            TrayAction::OpenOverlayTab => self.open_settings_tab(host, SettingsTab::Overlay),
+            TrayAction::OpenOverlayConfig => {
+                let res = ToolsPlatform::open_text_file(host, &self.paths.overlay_cfg);
+                self.log_io_result(now, "overlay", "Трей: открыт overlay.cfg", res);
             }
             TrayAction::BackupSettingsNow => {
                 match self.backup.run_backup(host, BackupMode::SettingsOnly, now) {

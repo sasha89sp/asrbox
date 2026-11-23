@@ -70,6 +70,9 @@ impl<I: IconProvider> AppController<I> {
     ) {
         if matches!(ev, SettingsUiEvent::Closed) {
             self.last_settings_tab = None;
+            if self.overlay_setup_mode {
+                self.set_overlay_setup_mode(host, false);
+            }
         }
         let snap = self.build_settings_snapshot(host);
         let (redraw, action) = self.settings_ui.handle_event(ev, &snap);
@@ -145,6 +148,7 @@ impl<I: IconProvider> AppController<I> {
             docks,
             calendar,
             sysmon,
+            overlay: self.build_overlay_settings_view(),
             backup: self.backup.backup_view(),
             webdav: self.backup.webdav_view(),
             debug: DebugSettingsView {
@@ -195,6 +199,9 @@ impl<I: IconProvider> AppController<I> {
                 self.log_io_result(now, "app", msg, res);
             }
             SettingsAction::SetModuleEnabled { id, enabled } => {
+                if id == ModuleId::Overlay && !enabled {
+                    self.overlay_setup_mode = false;
+                }
                 self.modules_cfg.set_enabled(id, enabled);
                 self.persist_modules_cfg();
                 self.sync_runtime_modules(host);
@@ -248,6 +255,7 @@ impl<I: IconProvider> AppController<I> {
             }
             other => {
                 if !self.apply_dock_setting(host, &other)
+                    && !self.apply_overlay_setting(host, &other)
                     && !self.apply_backup_setting(host, &other)
                 {
                     self.apply_widget_setting(host, &other);

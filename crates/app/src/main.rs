@@ -22,6 +22,8 @@ mod worker;
 #[cfg(windows)]
 mod worker_bus;
 #[cfg(windows)]
+mod worker_overlay;
+#[cfg(windows)]
 mod worker_widgets;
 
 use std::env;
@@ -38,6 +40,8 @@ use asrbox_mod_about::AppPaths;
 use asrbox_mod_debug::{DebugHub, LogLevel};
 #[cfg(windows)]
 use asrbox_mod_dock::{to_dock_point, to_dock_rect, DockEvent, Rect};
+#[cfg(windows)]
+use asrbox_mod_overlay::GameOverlay;
 #[cfg(windows)]
 use asrbox_mod_settings::{SettingsTab, SettingsUiState};
 #[cfg(windows)]
@@ -154,6 +158,8 @@ pub(crate) struct AppController<I: IconProvider> {
     pub(crate) docks: Option<DockManager<I>>,
     pub(crate) calendar: Option<CalendarWidget>,
     pub(crate) sysmon: Option<SysMonitorWidget>,
+    pub(crate) overlay: Option<GameOverlay>,
+    pub(crate) overlay_setup_mode: bool,
     pub(crate) backup: BackupController,
     pub(crate) settings_ui: SettingsUiState,
     pub(crate) last_settings_tab: Option<SettingsTab>,
@@ -183,6 +189,8 @@ impl<I: IconProvider> AppController<I> {
             docks: None,
             calendar: None,
             sysmon: None,
+            overlay: None,
+            overlay_setup_mode: false,
             backup,
             settings_ui: SettingsUiState::default(),
             last_settings_tab: None,
@@ -247,6 +255,7 @@ impl<I: IconProvider> AppController<I> {
         } else if !want_inproc_cal && self.sysmon.take().is_some() {
             let _ = host.destroy_widget_window(SYS_WIDGET_ID);
         }
+        self.sync_inproc_overlay(host);
     }
 
     fn handle_event<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
@@ -272,6 +281,9 @@ impl<I: IconProvider> AppController<I> {
                 self.work_area = to_dock_rect(work_area);
                 if let Some(docks) = self.docks.as_mut() {
                     docks.on_display(host, work_area);
+                }
+                if let Some(ov) = self.overlay.as_mut() {
+                    ov.on_display_changed(host, work_area);
                 }
             }
             ev @ (PlatformEvent::PointerMove { .. }

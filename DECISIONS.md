@@ -137,5 +137,17 @@
   5. Добавить крейт `crates/mod-backup` (чистый `std`, стандартный STORE ZIP + IEEE CRC-32, режимы «только настройки» и «программа + настройки» в `./data/backups/`) и активировать `crates/mod-webdav` (пресеты Яндекс.Диск `https://webdav.yandex.ru`, Mail.ru `https://webdav.cloud.mail.ru`, Свой HTTPS) с фоновой отправкой через WinHTTP (`PROPFIND`, `MKCOL`, `PUT` в `webdav_http.rs`). В `crates/platform-windows` добавлена только фича `Win32_Security_Credentials` существующего крейта `windows = "0.61"` (новых внешних зависимостей нет; `docs/LICENSES.md` не требует изменений) для хранения паролей приложений исключительно в **Windows Credential Manager**.
 - **Причина**: Полное соответствие бюджетам `NF-001..NF-005` (ноль новых внешних крейтов, крошечный `.exe`), безопасность учётных данных и цельный визуальный язык всех компонентов.
 
+---
+
+## ADR-014: Изолированный модуль «Игровой оверлей» (`crates/mod-overlay`, `--worker overlay`, без инъекции DLL, `v0.0.3`)
+
+- **Статус**: Принято (v0.0.3, согласовано владельцем, `specs/mod-overlay.md`)
+- **Решение**:
+  1. Добавить независимый крейт `crates/mod-overlay` (`asrbox-mod-overlay`, без `unsafe` и без новых внешних крейтов), запускаемый отдельным изолированным дочерним процессом `asrbox.exe --worker overlay` под Win32 `JobObject` (`ModuleId::Overlay`, `SupervisorCmd::SetOverlaySetupMode`).
+  2. Отказаться от инъекции DLL и хуков DirectX/Vulkan/OpenGL в пользу нативного прозрачного layered-окна Win32 (`UpdateLayeredWindow` + `WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE`, `WM_NCHITTEST -> HTTRANSPARENT`, `WM_MOUSEACTIVATE -> MA_NOACTIVATE`), чтобы исключить риски античитов (EAC/BattlEye/Vanguard) и не создавать фризов в играх.
+  3. Вынести интерактивное перемещение и ресайз в явный режим настройки до игры (`setup_mode = true`), который автоматически отключается при закрытии окна «Настройки».
+  4. Активировать в `crates/platform-windows` только фичу `Win32_Graphics_Dwm` существующего крейта `windows = "0.61"` (`docs/LICENSES.md` без изменений) для чтения статистики кадров DWM (`DwmGetCompositionTimingInfo` -> FPS и 1% low с честным фолбэком на `display_hz` при обходе композитора), а обнаружение игр выполнять в фоновом потоке (`overlay_game.rs`: `SHQueryUserNotificationState`/`QUNS_RUNNING_D3D_FULL_SCREEN` + покрытие монитора + чёрный список системных процессов + белый список `extra_games` в `overlay.cfg`).
+- **Причина**: Максимальная надёжность, нулевая нагрузка вне игр (`auto_games_only = true`), безопасность для античитов и сохранение компактного портативного бинарника.
+
 
 

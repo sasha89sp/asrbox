@@ -13,10 +13,14 @@ use asrbox_mod_dock::{
     parse_docks, render_dock_frame, serialize_docks, DockConfig, DockInstance, DockItem,
     DockRenderOverlay, Rect,
 };
+use asrbox_mod_overlay::{
+    parse_overlay_config, render_game_overlay, serialize_overlay_config, OverlayAnchor,
+    OverlayConfig,
+};
 use asrbox_mod_settings::{
     AboutSettingsView, BackupSettingsView, CalendarSettingsView, DebugSettingsView,
-    DockSettingsView, ModuleStatusView, SettingsSnapshot, SettingsTab, SettingsUiState,
-    SysMonitorSettingsView, WebDavSettingsView,
+    DockSettingsView, ModuleStatusView, OverlaySettingsView, SettingsSnapshot, SettingsTab,
+    SettingsUiState, SysMonitorSettingsView, WebDavSettingsView,
 };
 use asrbox_mod_webdav::{
     base64_encode, parse_webdav_config, serialize_webdav_config, validate_https_url, WebDavConfig,
@@ -28,12 +32,15 @@ use asrbox_mod_widgets::{
     DateFormatMode, DisplayRow, IcsDateTime, ParseOptions, PeriodFilter, RenderView, SysHitTarget,
     SysMonitorConfig, SysRenderInput, WidgetHitTarget,
 };
-use asrbox_platform_api::{LocalDateTime, ProcessMetrics, SysTelemetry, WidgetLayer};
+use asrbox_platform_api::{
+    LocalDateTime, OverlayTelemetry, PixelRect, ProcessMetrics, SysTelemetry, WidgetLayer,
+};
 
 pub fn run_selftest(app_version: &str) -> Result<(), String> {
     selftest_core()?;
     selftest_dock(app_version)?;
     selftest_widgets()?;
+    selftest_overlay()?;
     selftest_settings(app_version)?;
     selftest_backup_and_webdav()?;
     selftest_debug_and_about(app_version)?;
@@ -45,16 +52,17 @@ fn selftest_core() -> Result<(), String> {
         isolation: IsolationMode::Process,
         dock_enabled: true,
         widgets_enabled: false,
+        overlay_enabled: true,
     };
     if parse_modules_config(&serialize_modules_config(&cfg)) != cfg {
         return Err("modules.cfg roundtrip mismatch".to_owned());
     }
-    let cmd = SupervisorCmd::ToggleDock(7);
+    let cmd = SupervisorCmd::SetOverlaySetupMode(true);
     if decode_supervisor_cmd(&encode_supervisor_cmd(&cmd)) != Some(cmd) {
         return Err("supervisor IPC roundtrip mismatch".to_owned());
     }
     let msg = WorkerMsg::OpenSettings {
-        tab: "calendar".to_owned(),
+        tab: "overlay".to_owned(),
     };
     if decode_worker_msg(&encode_worker_msg(&msg)) != Some(msg) {
         return Err("worker IPC roundtrip mismatch".to_owned());
@@ -182,6 +190,58 @@ fn selftest_widgets() -> Result<(), String> {
     Ok(())
 }
 
+fn selftest_overlay() -> Result<(), String> {
+    let cfg = OverlayConfig {
+        auto_games_only: true,
+        anchor: OverlayAnchor::BottomRight,
+        x: 64,
+        y: 80,
+        margin_px: 16,
+        width: 340,
+        height: 196,
+        opacity_percent: 76,
+        refresh_interval_ms: 1000,
+        extra_games: vec!["cyberpunk2077.exe".to_owned()],
+    };
+    if parse_overlay_config(&serialize_overlay_config(&cfg)) != cfg {
+        return Err("overlay config roundtrip mismatch".to_owned());
+    }
+    let mon = PixelRect {
+        x: 0,
+        y: 0,
+        width: 1920,
+        height: 1080,
+    };
+    let rect = cfg.compute_rect(mon);
+    if rect.x <= 0 || rect.y <= 0 || rect.width != 340 || rect.height != 196 {
+        return Err("overlay corner layout mismatch".to_owned());
+    }
+    let snap = OverlayTelemetry {
+        fps: Some(144),
+        fps_low_1pct: Some(112),
+        display_hz: 144,
+        gpu_temp_c: Some(65),
+        gpu_usage_pct: Some(98),
+        vram_used_mb: 15_155,
+        vram_total_mb: 16_384,
+        cpu_temp_c: Some(58),
+        cpu_usage_pct: 42,
+        ram_used_mb: 14_540,
+        ram_total_mb: 32_768,
+        ram_usage_pct: 44,
+        net_ping_ms: Some(148),
+        net_loss_tenths_pct: 24,
+        game_active: true,
+        game_process: "game.exe".to_owned(),
+        monitor_rect: Some(mon),
+    };
+    let frame = render_game_overlay(&cfg, &snap, true);
+    if frame.bgra.pixels.is_empty() || !frame.texts.iter().any(|t| t.text == "2.4% PL") {
+        return Err("overlay render selftest failed".to_owned());
+    }
+    Ok(())
+}
+
 fn selftest_settings(app_version: &str) -> Result<(), String> {
     let snap = SettingsSnapshot {
         isolation: IsolationMode::Process,
@@ -223,6 +283,18 @@ fn selftest_settings(app_version: &str) -> Result<(), String> {
             refresh_interval_ms: 2000,
             width: 560,
             height: 492,
+        },
+        overlay: OverlaySettingsView {
+            module_enabled: true,
+            auto_games_only: true,
+            setup_mode: false,
+            anchor_index: 1,
+            x: 24,
+            y: 24,
+            opacity_percent: 78,
+            width: 320,
+            height: 188,
+            refresh_interval_ms: 1000,
         },
         backup: BackupSettingsView {
             auto_upload_cloud: false,
