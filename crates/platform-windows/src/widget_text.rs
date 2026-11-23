@@ -3,10 +3,10 @@ use std::ffi::c_void;
 use asrbox_platform_api::{BgraFrame, LocalDateTime, TextAlign, WidgetFrame, WidgetTextCmd};
 use windows::Win32::Foundation::{COLORREF, RECT};
 use windows::Win32::Graphics::Gdi::{
-    ANTIALIASED_QUALITY, CreateCompatibleDC, CreateDIBSection, CreateFontIndirectW,
-    DEFAULT_CHARSET, DIB_RGB_COLORS, DT_CENTER, DT_END_ELLIPSIS, DT_LEFT, DT_NOPREFIX, DT_RIGHT,
-    DT_SINGLELINE, DT_VCENTER, DeleteDC, DeleteObject, DrawTextW, FW_NORMAL, FW_SEMIBOLD, GetDC,
-    LOGFONTW, ReleaseDC, SelectObject, SetBkMode, SetTextColor, TRANSPARENT,
+    CreateCompatibleDC, CreateDIBSection, CreateFontIndirectW, DeleteDC, DeleteObject, DrawTextW,
+    GetDC, ReleaseDC, SelectObject, SetBkMode, SetTextColor, ANTIALIASED_QUALITY, DEFAULT_CHARSET,
+    DIB_RGB_COLORS, DT_CENTER, DT_END_ELLIPSIS, DT_LEFT, DT_NOPREFIX, DT_RIGHT, DT_SINGLELINE,
+    DT_VCENTER, FW_NORMAL, FW_SEMIBOLD, LOGFONTW, TRANSPARENT,
 };
 use windows::Win32::System::SystemInformation::GetLocalTime;
 use windows::Win32::System::Time::{GetTimeZoneInformation, TIME_ZONE_INFORMATION};
@@ -119,10 +119,7 @@ unsafe fn draw_and_blend_cmd(
     blend_text_mask(scratch, out, x0, y0, x1, y1, cmd.color_rgba);
 }
 
-unsafe fn create_segoe_font(
-    size_px: i32,
-    bold: bool,
-) -> windows::Win32::Graphics::Gdi::HFONT {
+unsafe fn create_segoe_font(size_px: i32, bold: bool) -> windows::Win32::Graphics::Gdi::HFONT {
     let mut lf = LOGFONTW {
         lfHeight: -size_px.max(8),
         lfWeight: if bold {

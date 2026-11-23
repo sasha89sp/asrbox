@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 
 use asrbox_mod_dock::{
-    DockConfig, DockInstance, Rect, parse_docks, render_dock_frame, serialize_docks,
+    parse_docks, render_dock_frame, serialize_docks, DockConfig, DockInstance, Rect,
 };
 use asrbox_mod_widgets::{
+    parse_ics_bytes, parse_widget_config, render_calendar_widget, serialize_widget_config,
     CalendarWidgetConfig, DateFormatMode, DisplayRow, IcsDateTime, ParseOptions, PeriodFilter,
-    RenderView, WidgetHitTarget, parse_ics_bytes, parse_widget_config, render_calendar_widget,
-    serialize_widget_config,
+    RenderView, WidgetHitTarget,
 };
 
 pub fn run_selftest(app_version: &str) -> Result<(), String> {

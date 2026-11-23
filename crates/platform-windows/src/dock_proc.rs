@@ -1,18 +1,21 @@
-use std::ffi::{OsString, c_void};
+use std::ffi::{c_void, OsString};
 use std::mem;
 use std::os::windows::ffi::OsStringExt;
 use std::path::PathBuf;
 
 use asrbox_platform_api::{PixelPoint, PlatformEvent};
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM};
-use windows::Win32::UI::Input::KeyboardAndMouse::{TME_LEAVE, TRACKMOUSEEVENT, TrackMouseEvent};
+use windows::Win32::Graphics::Gdi::ClientToScreen;
+use windows::Win32::UI::Input::KeyboardAndMouse::{TrackMouseEvent, TME_LEAVE, TRACKMOUSEEVENT};
 use windows::Win32::UI::Shell::{DragFinish, DragQueryFileW, DragQueryPoint, HDROP};
 use windows::Win32::UI::WindowsAndMessaging::{
-    ClientToScreen, DefWindowProcW, GWLP_USERDATA, GetWindowLongPtrW, WM_DROPFILES, WM_LBUTTONUP,
-    WM_MOUSELEAVE, WM_MOUSEMOVE, WM_RBUTTONUP, WM_TIMER,
+    DefWindowProcW, GetWindowLongPtrW, GWLP_USERDATA, WM_DROPFILES, WM_LBUTTONUP, WM_MOUSEMOVE,
+    WM_RBUTTONUP, WM_TIMER,
 };
 
-use crate::window::{ANIMATION_TICK_MS, ANIMATION_TIMER_ID, lparam_point, push_event};
+use crate::window::{
+    lparam_point, push_event, ANIMATION_TICK_MS, ANIMATION_TIMER_ID, WM_MOUSELEAVE,
+};
 
 pub(crate) unsafe extern "system" fn dock_wnd_proc(
     hwnd: HWND,

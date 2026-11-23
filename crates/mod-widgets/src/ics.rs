@@ -5,7 +5,7 @@ use crate::date::IcsDateTime;
 use crate::ics_time::{
     default_end, is_busy_title, parse_ics_datetime, parse_tz_offset, unescape_ics_text,
 };
-use crate::rrule::{Rrule, expand_rrule, parse_rrule};
+use crate::rrule::{expand_rrule, parse_rrule, Rrule};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CalendarEvent {

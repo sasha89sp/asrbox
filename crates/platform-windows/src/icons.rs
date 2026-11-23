@@ -7,22 +7,21 @@ use asrbox_platform_api::{IconProvider, IconRequest, RgbaImage};
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{GENERIC_READ, SIZE};
 use windows::Win32::Graphics::Gdi::{
-    BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, CreateCompatibleDC, CreateDIBSection,
-    DIB_RGB_COLORS, DeleteDC, DeleteObject, GetDC, GetDIBits, GetObjectW, HBITMAP, ReleaseDC,
-    SelectObject,
+    CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GetDC, GetDIBits, GetObjectW,
+    ReleaseDC, SelectObject, BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HBITMAP,
 };
 use windows::Win32::Graphics::Imaging::{
     CLSID_WICImagingFactory, GUID_WICPixelFormat32bppRGBA, IWICImagingFactory,
     WICBitmapDitherTypeNone, WICBitmapPaletteTypeMedianCut, WICDecodeMetadataCacheOnLoad,
 };
 use windows::Win32::System::Com::{
-    CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx,
+    CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED,
 };
 use windows::Win32::UI::Shell::{
     ExtractIconExW, IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF_BIGGERSIZEOK,
     SIIGBF_ICONONLY,
 };
-use windows::Win32::UI::WindowsAndMessaging::{DI_NORMAL, DestroyIcon, DrawIconEx, HICON};
+use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, DrawIconEx, DI_NORMAL, HICON};
 
 pub struct WindowsIconProvider;
 
@@ -260,7 +259,7 @@ fn hbitmap_to_rgba(hbitmap: HBITMAP) -> Result<RgbaImage, String> {
 fn bgra_to_rgba(pixels: &mut [u8]) {
     let mut any_alpha = false;
     let mut any_color = false;
-    for chunk in pixels.chunks_exact_mut(4) {
+    for chunk in pixels.as_chunks_mut::<4>().0 {
         chunk.swap(0, 2);
         if chunk[3] != 0 {
             any_alpha = true;
@@ -270,7 +269,7 @@ fn bgra_to_rgba(pixels: &mut [u8]) {
         }
     }
     if !any_alpha && any_color {
-        for chunk in pixels.chunks_exact_mut(4) {
+        for chunk in pixels.as_chunks_mut::<4>().0 {
             chunk[3] = 255;
         }
     }

@@ -6,7 +6,7 @@ use crate::format::{
     event_matches_period, format_event_subtitle, format_event_tooltip, local_now_as_ics,
     pick_bar_color,
 };
-use crate::ics::{CalendarEvent, ParseOptions, parse_ics_bytes};
+use crate::ics::{parse_ics_bytes, CalendarEvent, ParseOptions};
 use crate::render::{DisplayRow, WidgetHitTarget};
 use crate::storage::CalendarWidgetConfig;
 

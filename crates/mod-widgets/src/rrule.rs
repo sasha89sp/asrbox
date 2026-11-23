@@ -1,4 +1,4 @@
-pub use crate::date::{IcsDateTime, civil_from_days, days_from_civil, days_in_month, weekday_mon0};
+pub use crate::date::{civil_from_days, days_from_civil, days_in_month, weekday_mon0, IcsDateTime};
 pub use crate::rrule_parse::parse_rrule;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -13,12 +13,12 @@ use crate::calendar_view::{
 use crate::format::event_day_url;
 use crate::ics::CalendarEvent;
 use crate::render::{
-    HEADER_HEIGHT, RenderView, WidgetHitTarget, hit_test_widget, render_calendar_widget,
-    widget_height,
+    hit_test_widget, render_calendar_widget, widget_height, RenderView, WidgetHitTarget,
+    HEADER_HEIGHT,
 };
 use crate::storage::{
-    CalendarWidgetConfig, DateFormatMode, load_cached_ics, load_widget_config, save_cached_ics,
-    save_widget_config,
+    load_cached_ics, load_widget_config, save_cached_ics, save_widget_config, CalendarWidgetConfig,
+    DateFormatMode,
 };
 
 pub const CALENDAR_WIDGET_ID: u64 = 1;
@@ -149,7 +149,10 @@ impl CalendarWidget {
         let now = host.local_time_now();
         let filtered = filter_events(&self.all_events, &self.config, now);
         let max_rows = usize::from(self.config.visible_rows);
-        let shown = filtered.len().saturating_sub(self.scroll_offset).min(max_rows);
+        let shown = filtered
+            .len()
+            .saturating_sub(self.scroll_offset)
+            .min(max_rows);
         let hit = hit_test_widget(point, self.config.width, self.config.visible_rows, shown);
         match hit {
             WidgetHitTarget::TitleLink => {
@@ -310,7 +313,9 @@ impl CalendarWidget {
         let next = if delta < 0 {
             self.scroll_offset.saturating_sub(delta.unsigned_abs())
         } else {
-            self.scroll_offset.saturating_add(delta as usize).min(max_off)
+            self.scroll_offset
+                .saturating_add(delta as usize)
+                .min(max_off)
         };
         if next != self.scroll_offset {
             self.scroll_offset = next;

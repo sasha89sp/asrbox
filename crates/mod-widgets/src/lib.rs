@@ -10,16 +10,16 @@ pub mod rrule;
 pub mod rrule_parse;
 pub mod storage;
 
-pub use calendar::{CALENDAR_WIDGET_ID, CalendarWidget};
+pub use calendar::{CalendarWidget, CALENDAR_WIDGET_ID};
 pub use date::IcsDateTime;
-pub use ics::{CalendarEvent, ParseOptions, ParsedCalendar, parse_ics_bytes};
+pub use ics::{parse_ics_bytes, CalendarEvent, ParseOptions, ParsedCalendar};
 pub use render::{
-    DisplayRow, HEADER_HEIGHT, RenderView, WidgetHitTarget, hit_test_widget,
-    render_calendar_widget, widget_height,
+    hit_test_widget, render_calendar_widget, widget_height, DisplayRow, RenderView,
+    WidgetHitTarget, HEADER_HEIGHT,
 };
-pub use rrule::{ByDay, Freq, Rrule, expand_rrule, parse_rrule};
+pub use rrule::{expand_rrule, parse_rrule, ByDay, Freq, Rrule};
 pub use storage::{
-    CalendarSource, CalendarWidgetConfig, DateFormatMode, PeriodFilter, cache_file_path,
-    load_cached_ics, load_widget_config, parse_widget_config, save_cached_ics, save_widget_config,
-    serialize_widget_config,
+    cache_file_path, load_cached_ics, load_widget_config, parse_widget_config, save_cached_ics,
+    save_widget_config, serialize_widget_config, CalendarSource, CalendarWidgetConfig,
+    DateFormatMode, PeriodFilter,
 };

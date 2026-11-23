@@ -11,7 +11,7 @@ use std::process::ExitCode;
 use std::path::PathBuf;
 
 #[cfg(windows)]
-use asrbox_mod_dock::{DockEvent, Rect, to_dock_point, to_dock_rect};
+use asrbox_mod_dock::{to_dock_point, to_dock_rect, DockEvent, Rect};
 #[cfg(windows)]
 use asrbox_mod_widgets::CalendarWidget;
 #[cfg(windows)]
@@ -118,9 +118,12 @@ impl<I: IconProvider> AppController<I> {
                 dock_id,
                 paths,
                 point,
-            } => self.docks.on_drop(host, dock_id, paths, to_dock_point(point)),
+            } => self
+                .docks
+                .on_drop(host, dock_id, paths, to_dock_point(point)),
             PlatformEvent::LeftClick { dock_id, point } => {
-                self.docks.on_left_click(host, dock_id, to_dock_point(point));
+                self.docks
+                    .on_left_click(host, dock_id, to_dock_point(point));
             }
             PlatformEvent::RightClick {
                 dock_id,

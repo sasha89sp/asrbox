@@ -4,13 +4,13 @@ use std::sync::{Mutex, OnceLock};
 use std::thread;
 
 use asrbox_platform_api::HttpFetchResult;
-use windows::core::{PCWSTR, w};
+use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 use windows::Win32::Networking::WinHttp::{
-    WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_FLAG_SECURE, WINHTTP_OPEN_REQUEST_FLAGS,
-    WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_QUERY_STATUS_CODE, WinHttpCloseHandle, WinHttpConnect,
-    WinHttpOpen, WinHttpOpenRequest, WinHttpQueryHeaders, WinHttpReadData, WinHttpReceiveResponse,
-    WinHttpSendRequest,
+    WinHttpCloseHandle, WinHttpConnect, WinHttpOpen, WinHttpOpenRequest, WinHttpQueryHeaders,
+    WinHttpReadData, WinHttpReceiveResponse, WinHttpSendRequest, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+    WINHTTP_FLAG_SECURE, WINHTTP_OPEN_REQUEST_FLAGS, WINHTTP_QUERY_FLAG_NUMBER,
+    WINHTTP_QUERY_STATUS_CODE,
 };
 use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_APP};
 
@@ -160,7 +160,8 @@ fn winhttp_get(parsed: &ParsedUrl) -> Result<(u16, Vec<u8>), String> {
 
 unsafe fn send_and_read(req: *mut c_void) -> Result<(u16, Vec<u8>), String> {
     WinHttpSendRequest(req, None, None, 0, 0, 0).map_err(|_| "ошибка соединения".to_owned())?;
-    WinHttpReceiveResponse(req, std::ptr::null_mut()).map_err(|_| "нет ответа сервера".to_owned())?;
+    WinHttpReceiveResponse(req, std::ptr::null_mut())
+        .map_err(|_| "нет ответа сервера".to_owned())?;
 
     let mut status: u32 = 0;
     let mut status_len = std::mem::size_of::<u32>() as u32;
@@ -180,8 +181,13 @@ unsafe fn send_and_read(req: *mut c_void) -> Result<(u16, Vec<u8>), String> {
     let mut chunk = vec![0u8; 16_384];
     loop {
         let mut read: u32 = 0;
-        WinHttpReadData(req, chunk.as_mut_ptr().cast(), chunk.len() as u32, &mut read)
-            .map_err(|_| "ошибка чтения потока".to_owned())?;
+        WinHttpReadData(
+            req,
+            chunk.as_mut_ptr().cast(),
+            chunk.len() as u32,
+            &mut read,
+        )
+        .map_err(|_| "ошибка чтения потока".to_owned())?;
         if read == 0 {
             break;
         }

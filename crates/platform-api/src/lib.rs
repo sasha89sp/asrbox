@@ -135,10 +135,7 @@ pub struct HttpFetchResult {
 pub enum IconRequest {
     AutoShell(PathBuf),
     CustomFile(PathBuf),
-    ExeResource {
-        path: PathBuf,
-        index: u32,
-    },
+    ExeResource { path: PathBuf, index: u32 },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

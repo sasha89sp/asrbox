@@ -167,9 +167,30 @@ fn draw_header(
 
     let refresh_glyph = if view.is_loading { "…" } else { "↻" };
     let buttons = [
-        (WidgetHitTarget::AddEventBtn, w - 94, "+", [52, 211, 153, 255], 19, true),
-        (WidgetHitTarget::SettingsBtn, w - 64, "⚙", [156, 163, 175, 255], 16, false),
-        (WidgetHitTarget::RefreshBtn, w - 34, refresh_glyph, [156, 163, 175, 255], 16, false),
+        (
+            WidgetHitTarget::AddEventBtn,
+            w - 94,
+            "+",
+            [52, 211, 153, 255],
+            19,
+            true,
+        ),
+        (
+            WidgetHitTarget::SettingsBtn,
+            w - 64,
+            "⚙",
+            [156, 163, 175, 255],
+            16,
+            false,
+        ),
+        (
+            WidgetHitTarget::RefreshBtn,
+            w - 34,
+            refresh_glyph,
+            [156, 163, 175, 255],
+            16,
+            false,
+        ),
     ];
     for (target, bx, glyph, color, size, bold) in buttons {
         if view.hovered == target {
@@ -328,12 +349,10 @@ fn draw_footer(
 }
 
 fn arrow_color(enabled: bool, hovered: bool) -> [u8; 4] {
-    if !enabled {
-        [86, 92, 104, 140]
-    } else if hovered {
-        [243, 244, 246, 255]
-    } else {
-        [156, 163, 175, 255]
+    match (enabled, hovered) {
+        (false, _) => [86, 92, 104, 140],
+        (true, true) => [243, 244, 246, 255],
+        (true, false) => [156, 163, 175, 255],
     }
 }
 
@@ -368,13 +387,9 @@ mod tests {
         assert_eq!(frame.bgra.width, 336);
         assert_eq!(frame.bgra.height, widget_height(8));
         assert!(!frame.texts.is_empty());
-        assert_eq!(
-            hit_test_widget(PixelPoint { x: 255, y: 20 }, 336, 8, 1),
-            WidgetHitTarget::AddEventBtn
-        );
-        assert_eq!(
-            hit_test_widget(PixelPoint { x: 40, y: 100 }, 336, 8, 1),
-            WidgetHitTarget::EventRow(0)
-        );
+        let add_hit = hit_test_widget(PixelPoint { x: 255, y: 20 }, 336, 8, 1);
+        assert_eq!(add_hit, WidgetHitTarget::AddEventBtn);
+        let row_hit = hit_test_widget(PixelPoint { x: 40, y: 100 }, 336, 8, 1);
+        assert_eq!(row_hit, WidgetHitTarget::EventRow(0));
     }
 }

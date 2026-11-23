@@ -1,7 +1,7 @@
 use asrbox_platform_api::LocalDateTime;
 
 use crate::ics::CalendarEvent;
-use crate::rrule::{IcsDateTime, days_from_civil, weekday_mon0};
+use crate::rrule::{days_from_civil, weekday_mon0, IcsDateTime};
 use crate::storage::{DateFormatMode, PeriodFilter};
 
 const COLOR_TODAY: [u8; 3] = [52, 211, 153];

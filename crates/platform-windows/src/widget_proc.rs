@@ -7,23 +7,24 @@ use asrbox_platform_api::{
     PixelPoint, PlatformEvent, WidgetLayer, WidgetMenuAction, WidgetMenuState,
 };
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
-use windows::Win32::Graphics::Dwmapi::{
-    DWMSBT_NONE, DWMSBT_TRANSIENTWINDOW, DWMWA_SYSTEMBACKDROP_TYPE, DWM_SYSTEMBACKDROP_TYPE,
-    DwmSetWindowAttribute,
+use windows::Win32::Graphics::Dwm::{
+    DwmSetWindowAttribute, DWMSBT_NONE, DWMSBT_TRANSIENTWINDOW, DWMWA_SYSTEMBACKDROP_TYPE,
+    DWM_SYSTEMBACKDROP_TYPE,
 };
+use windows::Win32::Graphics::Gdi::ClientToScreen;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    ReleaseCapture, SetCapture, TME_LEAVE, TRACKMOUSEEVENT, TrackMouseEvent,
+    ReleaseCapture, SetCapture, TrackMouseEvent, TME_LEAVE, TRACKMOUSEEVENT,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    ClientToScreen, CreatePopupMenu, DefWindowProcW, DestroyMenu, GWLP_USERDATA, GetCursorPos,
-    GetWindowLongPtrW, GetWindowRect, HWND_BOTTOM, HWND_NOTOPMOST, HWND_TOPMOST, SWP_NOACTIVATE,
-    SWP_NOMOVE, SWP_NOSIZE, SetForegroundWindow, SetWindowPos, TPM_NONOTIFY, TPM_RETURNCMD,
-    TPM_RIGHTBUTTON, TrackPopupMenuEx, WINDOWPOS, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSELEAVE,
-    WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONUP, WM_TIMER, WM_WINDOWPOSCHANGING,
+    CreatePopupMenu, DefWindowProcW, DestroyMenu, GetCursorPos, GetWindowLongPtrW, GetWindowRect,
+    SetForegroundWindow, SetWindowPos, TrackPopupMenuEx, GWLP_USERDATA, HWND_BOTTOM,
+    HWND_NOTOPMOST, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, TPM_NONOTIFY,
+    TPM_RETURNCMD, TPM_RIGHTBUTTON, WINDOWPOS, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
+    WM_MOUSEWHEEL, WM_RBUTTONUP, WM_TIMER, WM_WINDOWPOSCHANGING,
 };
 
 use crate::tray::{add_item, add_sep};
-use crate::window::{lparam_point, push_event};
+use crate::window::{lparam_point, push_event, WM_MOUSELEAVE};
 
 pub(crate) const WIDGET_MINUTE_TIMER_ID: usize = 101;
 pub(crate) const WIDGET_REFRESH_TIMER_ID: usize = 102;

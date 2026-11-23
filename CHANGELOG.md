@@ -26,6 +26,7 @@
 
 ### Исправлено
 - `BUG-001`: устранены расхождения `cargo fmt --check` в `xtask`, `crates/mod-dock` и пустых `src/lib.rs` (закрыто после зелёного CI, перенесено в `docs/archive/bugs-closed.md`).
+- `BUG-002` (ожидает CI): отформатирован workspace (`cargo fmt`), исправлены фичи/импорты `windows 0.61` (`Win32_Graphics_Dwm`, `Win32_Security`, `ClientToScreen`, `WM_MOUSELEAVE`) и предупреждения Clippy 1.100 в `icons.rs` и тесте `storage.rs`.
 
 ### Изменено
 - Снято фиксированное ограничение «8 док-панелей» в пользу неограниченного числа независимых панелей (`ADR-007`, `ATLAS.md`, `ARCHITECTURE.md`, `crates/mod-dock/MAP.md`).

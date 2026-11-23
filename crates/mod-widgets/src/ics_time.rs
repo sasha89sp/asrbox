@@ -23,9 +23,7 @@ pub fn parse_ics_datetime(
     let y = s[0..4].parse::<i32>().ok()?;
     let m = s[4..6].parse::<u8>().ok()?;
     let d = s[6..8].parse::<u8>().ok()?;
-    let is_date_param = params
-        .iter()
-        .any(|p| p.eq_ignore_ascii_case("VALUE=DATE"));
+    let is_date_param = params.iter().any(|p| p.eq_ignore_ascii_case("VALUE=DATE"));
     if is_date_param || s.len() == 8 {
         return Some(IcsDateTime::date(y, m, d));
     }
@@ -98,10 +96,7 @@ pub fn is_busy_title(title: &str) -> bool {
 
 fn extract_tzid<'a>(params: &[&'a str]) -> Option<&'a str> {
     for p in params {
-        if let Some(rest) = p
-            .strip_prefix("TZID=")
-            .or_else(|| p.strip_prefix("tzid="))
-        {
+        if let Some(rest) = p.strip_prefix("TZID=").or_else(|| p.strip_prefix("tzid=")) {
             return Some(rest.trim_matches('"'));
         }
     }

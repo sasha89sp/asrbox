@@ -82,8 +82,7 @@ pub fn save_docks_to_file(
             .map_err(|err| format!("cannot create config dir {}: {err}", parent.display()))?;
     }
     let content = serialize_docks(docks, app_version);
-    fs::write(path, content)
-        .map_err(|err| format!("cannot write config {}: {err}", path.display()))
+    fs::write(path, content).map_err(|err| format!("cannot write config {}: {err}", path.display()))
 }
 
 pub fn load_docks_from_file(path: &Path) -> Result<Vec<DockConfig>, String> {

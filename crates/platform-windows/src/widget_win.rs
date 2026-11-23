@@ -2,11 +2,11 @@ use asrbox_platform_api::{
     LocalDateTime, PixelPoint, PixelRect, WidgetFrame, WidgetLayer, WidgetMenuAction,
     WidgetMenuState, WidgetPlatform,
 };
-use windows::core::{PCWSTR, w};
+use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{HWND, POINT};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DestroyWindow, GWLP_USERDATA, GetCursorPos, KillTimer, SW_HIDE,
-    SW_SHOWNOACTIVATE, SetTimer, SetWindowLongPtrW, ShowWindow, WS_EX_LAYERED, WS_EX_NOACTIVATE,
+    CreateWindowExW, DestroyWindow, GetCursorPos, KillTimer, SetTimer, SetWindowLongPtrW,
+    ShowWindow, GWLP_USERDATA, SW_HIDE, SW_SHOWNOACTIVATE, WS_EX_LAYERED, WS_EX_NOACTIVATE,
     WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
 };
 
@@ -14,8 +14,8 @@ use crate::http::spawn_http_get;
 use crate::present_layered_bgra;
 use crate::tray::open_url_str;
 use crate::widget_proc::{
-    WIDGET_MINUTE_TIMER_ID, WIDGET_REFRESH_TIMER_ID, apply_widget_layer, register_widget_meta,
-    remove_widget_meta, show_widget_context_menu, update_widget_layer_meta,
+    apply_widget_layer, register_widget_meta, remove_widget_meta, show_widget_context_menu,
+    update_widget_layer_meta, WIDGET_MINUTE_TIMER_ID, WIDGET_REFRESH_TIMER_ID,
 };
 use crate::widget_text::{composite_widget_frame, query_local_time, render_tooltip_frame};
 use crate::window::WindowsDockHost;
@@ -195,11 +195,8 @@ impl WindowsDockHost {
         if let Some(hwnd) = self.tooltip_hwnd {
             return Ok(hwnd);
         }
-        let ex = WS_EX_LAYERED
-            | WS_EX_TOPMOST
-            | WS_EX_TOOLWINDOW
-            | WS_EX_NOACTIVATE
-            | WS_EX_TRANSPARENT;
+        let ex =
+            WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT;
         // SAFETY: Creating a click-through layered tooltip popup on UI thread.
         let hwnd = unsafe {
             CreateWindowExW(

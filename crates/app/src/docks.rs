@@ -4,9 +4,9 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use asrbox_mod_dock::{
-    DockConfig, DockEdge, DockEvent, DockInstance, Point, Rect, apply_menu_action,
-    build_menu_state, hit_test_item, icon_request_for_item, load_docks_from_file,
-    render_dock_frame, save_docks_to_file, to_dock_rect, to_pixel_rect,
+    apply_menu_action, build_menu_state, hit_test_item, icon_request_for_item,
+    load_docks_from_file, render_dock_frame, save_docks_to_file, to_dock_rect, to_pixel_rect,
+    DockConfig, DockEdge, DockEvent, DockInstance, Point, Rect,
 };
 use asrbox_platform_api::{
     DockMenuAction, DockPlatform, IconProvider, PixelPoint, PixelRect, RgbaImage, TrayMenuEntry,

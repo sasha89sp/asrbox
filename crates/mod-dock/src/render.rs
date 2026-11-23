@@ -260,7 +260,7 @@ mod tests {
     use std::path::PathBuf;
 
     use crate::config::DockItem;
-    use crate::layout::{HoverVisualState, compute_layout};
+    use crate::layout::{compute_layout, HoverVisualState};
 
     use super::*;
 

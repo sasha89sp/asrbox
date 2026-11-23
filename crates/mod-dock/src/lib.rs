@@ -12,8 +12,8 @@ pub use config::{
     DockAlignment, DockConfig, DockConfigError, DockEdge, DockId, DockItem, DockRegistry,
     HoverZoomConfig, HoverZoomMode, IconSource,
 };
-pub use layout::{DockLayout, DockSlotLayout, HoverVisualState, Point, Rect};
 pub use layout::{compute_layout, drop_insert_index, hit_test_item};
+pub use layout::{DockLayout, DockSlotLayout, HoverVisualState, Point, Rect};
 pub use render::render_dock_frame;
 pub use state::{DockEvent, DockInstance, DockMetrics, DockStepEffect};
 pub use storage::{load_docks_from_file, parse_docks, save_docks_to_file, serialize_docks};

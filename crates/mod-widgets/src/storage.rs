@@ -224,7 +224,10 @@ pub fn serialize_widget_config(cfg: &CalendarWidgetConfig) -> String {
     out.push_str(&format!("layer={}\n", layer_to_str(cfg.layer)));
     out.push_str(&format!("acrylic={}\n", if cfg.acrylic { 1 } else { 0 }));
     out.push_str(&format!("title={}\n", cfg.title));
-    out.push_str(&format!("refresh_interval_sec={}\n", cfg.refresh_interval_sec));
+    out.push_str(&format!(
+        "refresh_interval_sec={}\n",
+        cfg.refresh_interval_sec
+    ));
     out.push_str(&format!("lookahead_days={}\n", cfg.lookahead_days));
     out.push_str(&format!("period={}\n", cfg.period.as_str()));
     out.push_str(&format!("date_format={}\n", cfg.date_format.as_str()));
@@ -328,18 +331,20 @@ mod tests {
 
     #[test]
     fn widget_config_roundtrip() {
-        let mut cfg = CalendarWidgetConfig::default();
-        cfg.x = 120;
-        cfg.y = 85;
-        cfg.visible_rows = 6;
-        cfg.layer = WidgetLayer::Topmost;
-        cfg.period = PeriodFilter::Days7;
-        cfg.date_format = DateFormatMode::Countdown;
-        cfg.sources.push(CalendarSource {
-            id: "work".to_owned(),
-            url: "https://example.com/cal.ics".to_owned(),
-            color_rgb: Some([0xA8, 0x55, 0xF7]),
-        });
+        let cfg = CalendarWidgetConfig {
+            x: 120,
+            y: 85,
+            visible_rows: 6,
+            layer: WidgetLayer::Topmost,
+            period: PeriodFilter::Days7,
+            date_format: DateFormatMode::Countdown,
+            sources: vec![CalendarSource {
+                id: "work".to_owned(),
+                url: "https://example.com/cal.ics".to_owned(),
+                color_rgb: Some([0xA8, 0x55, 0xF7]),
+            }],
+            ..Default::default()
+        };
         let text = serialize_widget_config(&cfg);
         let parsed = parse_widget_config(&text);
         assert_eq!(parsed, cfg);

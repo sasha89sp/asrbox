@@ -7,30 +7,31 @@ use asrbox_platform_api::{
     BgraFrame, DockMenuAction, DockMenuState, DockPlatform, PixelPoint, PixelRect, PlatformEvent,
     TrayAction, TrayMenuEntry,
 };
-use windows::core::{PCWSTR, w};
+use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Shell::DragAcceptFiles;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GWLP_USERDATA, GetCursorPos,
-    GetMessageW, IDC_ARROW, KillTimer, LoadCursorW, MSG, PostQuitMessage, RegisterClassExW,
-    SW_SHOWNOACTIVATE, SetTimer, SetWindowLongPtrW, ShowWindow, TranslateMessage, WM_CONTEXTMENU,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetCursorPos, GetMessageW,
+    KillTimer, LoadCursorW, PostQuitMessage, RegisterClassExW, SetTimer, SetWindowLongPtrW,
+    ShowWindow, TranslateMessage, GWLP_USERDATA, IDC_ARROW, MSG, SW_SHOWNOACTIVATE, WM_CONTEXTMENU,
     WM_DISPLAYCHANGE, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_TOOLWINDOW,
     WS_EX_TOPMOST, WS_POPUP,
 };
 
 use crate::dock_proc::dock_wnd_proc;
-use crate::http::{WM_HTTP_DONE, drain_http_results};
+use crate::http::{drain_http_results, WM_HTTP_DONE};
 use crate::present_layered_bgra;
 use crate::query_primary_work_area;
 use crate::tray::{
-    TrayIconHandle, WM_TRAYICON, launch_path, pick_icon_dialog, show_dock_context_menu,
-    show_tray_context_menu,
+    launch_path, pick_icon_dialog, show_dock_context_menu, show_tray_context_menu, TrayIconHandle,
+    WM_TRAYICON,
 };
 use crate::widget_proc::widget_wnd_proc;
 
 pub(crate) const ANIMATION_TIMER_ID: usize = 1;
 pub(crate) const ANIMATION_TICK_MS: u32 = 16;
+pub(crate) const WM_MOUSELEAVE: u32 = 0x02A3;
 
 thread_local! {
     static EVENT_QUEUE: RefCell<VecDeque<PlatformEvent>> = const { RefCell::new(VecDeque::new()) };
@@ -49,8 +50,8 @@ impl WindowsDockHost {
     pub fn new(tooltip: &str) -> Result<Self, String> {
         // SAFETY: Registering window classes and creating hidden host window on UI thread.
         unsafe {
-            let hmod = GetModuleHandleW(None)
-                .map_err(|err| format!("GetModuleHandleW failed: {err}"))?;
+            let hmod =
+                GetModuleHandleW(None).map_err(|err| format!("GetModuleHandleW failed: {err}"))?;
             let hinstance = HINSTANCE::from(hmod);
             register_class(hinstance, w!("AsrboxHostWindow"), Some(host_wnd_proc))?;
             register_class(hinstance, w!("AsrboxDockWindow"), Some(dock_wnd_proc))?;
@@ -214,7 +215,11 @@ impl DockPlatform for WindowsDockHost {
         screen_point: PixelPoint,
         state: &DockMenuState,
     ) -> Result<Option<DockMenuAction>, String> {
-        let hwnd = self.windows.get(&dock_id).copied().unwrap_or(self.host_hwnd);
+        let hwnd = self
+            .windows
+            .get(&dock_id)
+            .copied()
+            .unwrap_or(self.host_hwnd);
         show_dock_context_menu(hwnd, screen_point, state)
     }
 
