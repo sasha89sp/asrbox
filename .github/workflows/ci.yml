@@ -56,10 +56,11 @@ jobs:
       - name: Smoke test (--selftest)
         shell: pwsh
         run: |
-          & ".\target\release\asrbox.exe" --selftest
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Selftest exited with code $LASTEXITCODE"
-            exit $LASTEXITCODE
+          $proc = Start-Process -FilePath ".\target\release\asrbox.exe" -ArgumentList "--selftest" -Wait -PassThru -ErrorAction Stop
+          Write-Host "Selftest exit code: $($proc.ExitCode)"
+          if ($proc.ExitCode -ne 0) {
+            Write-Error "Selftest exited with code $($proc.ExitCode)"
+            exit $proc.ExitCode
           }
 
       - name: Upload portable executable

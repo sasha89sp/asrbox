@@ -18,15 +18,15 @@
 
 ## Открытые баги
 
-### BUG-002 — Падение CI на шаге `Check formatting` (`cargo fmt --check`) и импортах `windows 0.61`
+### BUG-003 — Падение шага CI `Smoke test (--selftest)` с пустым `$LASTEXITCODE`
 - **Версия**: `0.0.1`
-- **Крейты**: `crates/mod-widgets`, `crates/mod-dock`, `crates/platform-api`, `crates/platform-windows`, `crates/app`
-- **Воспроизведение**: GitHub Actions `.github/workflows/ci.yml` → шаг `Check formatting` (`cargo fmt --check`), run `45121511537` / job `137516111111`.
-- **Лог**: `exit code 1` (568 строк diff; порядок `use` Edition 2021, перенос `let ... =`, `chain_width = 60`). При кросс-проверке `cargo clippy --workspace --all-targets --target x86_64-pc-windows-msvc -- -D warnings` также выявлены: неверное имя фичи `Win32_Graphics_Dwmapi` (нужно `Win32_Graphics_Dwm`), отсутствующая фича `Win32_Security` для `CreateMutexW`, пути импорта `ClientToScreen` (`Graphics::Gdi`) и `WM_MOUSELEAVE` (`0x02A3`), а также 2 линта Rust 1.100 (`chunks_exact_to_as_chunks` в `icons.rs`, `field_reassign_with_default` в тесте `storage.rs`).
-- **Попытка 1**: выполнен `cargo fmt`, исправлены фичи/импорты `windows 0.61` и 2 предупреждения Clippy 1.100. Локально пройдены `cargo fmt --check`, `cargo clippy --workspace --all-targets --target x86_64-pc-windows-msvc -- -D warnings`, `cargo xtask atlas-check`, `cargo test --workspace` (20/20) и `--selftest`.
+- **Крейты / файлы**: `.github/workflows/ci.yml` (`Smoke test (--selftest)`), бинарник `crates/app` (`windows_subsystem = "windows"` в release)
+- **Воспроизведение**: GitHub Actions `.github/workflows/ci.yml`, run `45127781497` / job `137536033873` — все шаги до `Build release binary` и проверки `< 25 MB` прошли успешно, но `Smoke test (--selftest)` упал с `Write-Error: Selftest exited with code ` (пустое значение `$LASTEXITCODE`).
+- **Локализация**: в release-сборке `asrbox.exe` собран с `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]`. В PowerShell (`pwsh`) запуск GUI-бинарника через `& ".\target\release\asrbox.exe" --selftest` не дожидается завершения и оставляет `$LASTEXITCODE` пустым (`$null`), из-за чего `if ($LASTEXITCODE -ne 0)` всегда истинно.
+- **Попытка 1**: заменён запуск в `.github/workflows/ci.yml` на `$proc = Start-Process -FilePath ".\target\release\asrbox.exe" -ArgumentList "--selftest" -Wait -PassThru -ErrorAction Stop` с проверкой `$proc.ExitCode`.
 - **Статус**: правка готова, ожидает подтверждения CI (`windows-latest`).
 
-(Закрытый `BUG-001` перенесён в `docs/archive/bugs-closed.md`.)
+(Закрытые `BUG-001`, `BUG-002` перенесены в `docs/archive/bugs-closed.md`.)
 
 ---
 

@@ -3,37 +3,28 @@ updated: 2026-11-22
 spec_ids: [NF-001, NF-002, NF-005, NF-007, DK-001, DK-010, WG-001, WG-002, WG-003, WG-004, WG-005, WG-006, WG-007, WG-008, WG-009, WG-010, WG-011, WG-012]
 atlas_updated: true
 last_session:
-  goal: "Исправить BUG-002 (падение CI cargo fmt --check) и упреждающе проверить Windows-сборку/Clippy/тесты"
+  goal: "Исправить BUG-003 (падение шага CI Smoke test --selftest из-за пустого $LASTEXITCODE у GUI-бинарника)"
   done:
-    - "Отформатирован весь workspace через rustfmt 1.100 (cargo fmt --check проходит чисто)"
-    - "Исправлены фичи windows 0.61 в crates/platform-windows/Cargo.toml (Win32_Graphics_Dwm, Win32_Security)"
-    - "Исправлены импорты ClientToScreen (Graphics::Gdi), Dwm и константа WM_MOUSELEAVE (0x02A3) в dock_proc.rs, widget_proc.rs, window.rs"
-    - "Устранены предупреждения Clippy 1.100 в icons.rs (as_chunks_mut::<4>) и тесте storage.rs (..Default::default())"
-    - "Сокращён render.rs до <= 400 строк после rustfmt"
-    - "Локально пройдены: cargo fmt --check, cargo clippy --workspace --all-targets --target x86_64-pc-windows-msvc -- -D warnings, cargo xtask atlas-check, cargo test --workspace (20/20), --selftest"
+    - "CI run 45127781497 (windows-latest) подтвердил зелёными: Check formatting, Run Clippy, Verify ATLAS and MAP coverage, Run tests, Build release binary, Check portable .exe size limit (< 25 MB)"
+    - "Закрыт и перенесён в docs/archive/bugs-closed.md баг BUG-002"
+    - "Зафиксирован BUG-003 и исправлен шаг Smoke test (--selftest) в .github/workflows/ci.yml через Start-Process -Wait -PassThru с проверкой $proc.ExitCode"
   not_done:
-    - "Подтверждение прогона GitHub Actions (windows-latest: release build, <25 MB, --selftest на Windows)"
-    - "Закрытие BUG-002 в docs/archive/bugs-closed.md после зелёного лога CI"
+    - "Подтверждение зелёного шага Smoke test (--selftest) и выгрузки артефакта asrbox-windows-x64 на GitHub Actions"
+    - "Закрытие BUG-003 после полностью зелёного CI"
     - "Ручная проверка живого виджета Google Календарь и док-панелей на Windows 10/11"
   verified:
-    ci_build: false
-    tests: false
+    ci_build: true
+    tests: true
     manual_run: false
-open_bugs: [BUG-002]
-next_step: "Перезапустить GitHub Actions (.github/workflows/ci.yml) на windows-latest, при зелёном CI закрыть BUG-002 и проверить asrbox.exe на Windows 10/11"
+open_bugs: [BUG-003]
+next_step: "Перезапустить GitHub Actions (.github/workflows/ci.yml), скачать артефакт asrbox.exe и проверить на Windows 10/11"
 touched_files:
+  - .github/workflows/ci.yml
   - BUGS.md
+  - docs/archive/bugs-closed.md
   - CHANGELOG.md
   - HANDOFF.yaml
-  - crates/platform-windows/Cargo.toml
-  - crates/platform-windows/src/dock_proc.rs
-  - crates/platform-windows/src/icons.rs
-  - crates/platform-windows/src/widget_proc.rs
-  - crates/platform-windows/src/window.rs
-  - crates/mod-widgets/src/render.rs
-  - crates/mod-widgets/src/storage.rs
-  - "и автоформатирование rustfmt в остальных .rs файлах workspace"
 warnings:
-  - "Локальная кросс-проверка clippy/test на Linux не заменяет полноценную линковку и запуск на GitHub Actions (windows-latest)"
+  - "Шаг Smoke test (--selftest) в release-сборке ещё не подтверждён повторным прогоном CI"
 ideas:
   - "Этап 2: OAuth2-интеграция с Google Calendar API для создания/редактирования событий прямо внутри виджета"
