@@ -27,7 +27,8 @@
 ### Исправлено
 - `BUG-001`: устранены расхождения `cargo fmt --check` в `xtask`, `crates/mod-dock` и пустых `src/lib.rs` (закрыто после зелёного CI, перенесено в `docs/archive/bugs-closed.md`).
 - `BUG-002`: отформатирован workspace (`cargo fmt`), исправлены фичи/импорты `windows 0.61` (`Win32_Graphics_Dwm`, `Win32_Security`, `ClientToScreen`, `WM_MOUSELEAVE`) и предупреждения Clippy 1.100 в `icons.rs` и тесте `storage.rs` (подтверждено CI run `45127781497`, перенесено в `docs/archive/bugs-closed.md`).
-- `BUG-003` (ожидает CI): шаг `Smoke test (--selftest)` в `.github/workflows/ci.yml` переведён на `Start-Process -Wait -PassThru` для корректного ожидания GUI-бинарника (`windows_subsystem = "windows"`) и чтения `$proc.ExitCode`.
+- `BUG-003` (ожидает подтверждения лога CI): шаг `Smoke test (--selftest)` в `.github/workflows/ci.yml` переведён на `Start-Process -Wait -PassThru` для корректного ожидания GUI-бинарника (`windows_subsystem = "windows"`) и чтения `$proc.ExitCode`.
+- `BUG-004` (ожидает CI и ручной проверки): устранён лаг меню трея и UI — `push_event` мгновенно будит `GetMessageW` через `WM_WAKE_EVENTS` после `SendMessage`-уведомлений (`WM_TRAYICON`/`WM_DISPLAYCHANGE`), добавлен `PostMessageW(WM_NULL)` после `TrackPopupMenuEx` (KB135788), убран сброс таймера анимации дока на каждый `WM_MOUSEMOVE` и добавлен ранний выход в `CalendarWidget::on_pointer_move`.
 
 ### Изменено
 - Снято фиксированное ограничение «8 док-панелей» в пользу неограниченного числа независимых панелей (`ADR-007`, `ATLAS.md`, `ARCHITECTURE.md`, `crates/mod-dock/MAP.md`).

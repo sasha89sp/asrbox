@@ -1,5 +1,6 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
+use std::ffi::c_void;
 use std::mem;
 use std::path::{Path, PathBuf};
 
@@ -13,10 +14,10 @@ use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Shell::DragAcceptFiles;
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetCursorPos, GetMessageW,
-    KillTimer, LoadCursorW, PostQuitMessage, RegisterClassExW, SetTimer, SetWindowLongPtrW,
-    ShowWindow, TranslateMessage, GWLP_USERDATA, IDC_ARROW, MSG, SW_SHOWNOACTIVATE, WM_CONTEXTMENU,
-    WM_DISPLAYCHANGE, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_TOOLWINDOW,
-    WS_EX_TOPMOST, WS_POPUP,
+    KillTimer, LoadCursorW, PostMessageW, PostQuitMessage, RegisterClassExW, SetTimer,
+    SetWindowLongPtrW, ShowWindow, TranslateMessage, GWLP_USERDATA, IDC_ARROW, MSG,
+    SW_SHOWNOACTIVATE, WM_APP, WM_DISPLAYCHANGE, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSEXW,
+    WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
 };
 
 use crate::dock_proc::dock_wnd_proc;
@@ -32,9 +33,12 @@ use crate::widget_proc::widget_wnd_proc;
 pub(crate) const ANIMATION_TIMER_ID: usize = 1;
 pub(crate) const ANIMATION_TICK_MS: u32 = 16;
 pub(crate) const WM_MOUSELEAVE: u32 = 0x02A3;
+const WM_WAKE_EVENTS: u32 = WM_APP + 12;
 
 thread_local! {
     static EVENT_QUEUE: RefCell<VecDeque<PlatformEvent>> = const { RefCell::new(VecDeque::new()) };
+    static HOST_HWND_RAW: Cell<usize> = const { Cell::new(0) };
+    static WAKE_POSTED: Cell<bool> = const { Cell::new(false) };
 }
 
 pub struct WindowsDockHost {
@@ -73,6 +77,8 @@ impl WindowsDockHost {
             )
             .map_err(|err| format!("CreateWindowExW(host) failed: {err}"))?;
 
+            HOST_HWND_RAW.with(|cell| cell.set(host_hwnd.0 as usize));
+            WAKE_POSTED.with(|cell| cell.set(false));
             let tray = TrayIconHandle::create(host_hwnd, tooltip)?;
             Ok(Self {
                 hinstance,
@@ -101,6 +107,7 @@ impl WindowsDockHost {
                 let _ = TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
+            WAKE_POSTED.with(|cell| cell.set(false));
             while let Some(event) = pop_event() {
                 on_event(self, event);
             }
@@ -124,6 +131,8 @@ impl Drop for WindowsDockHost {
             }
             let _ = DestroyWindow(self.host_hwnd);
         }
+        HOST_HWND_RAW.with(|cell| cell.set(0));
+        WAKE_POSTED.with(|cell| cell.set(false));
     }
 }
 
@@ -277,7 +286,7 @@ unsafe extern "system" fn host_wnd_proc(
     match msg {
         WM_TRAYICON => {
             let sub = (lparam.0 as usize & 0xFFFF) as u32;
-            if sub == WM_RBUTTONUP || sub == WM_CONTEXTMENU || sub == WM_LBUTTONUP {
+            if sub == WM_RBUTTONUP || sub == WM_LBUTTONUP {
                 let mut pt = POINT::default();
                 let _ = GetCursorPos(&mut pt);
                 push_event(PlatformEvent::TrayContextMenu {
@@ -286,6 +295,7 @@ unsafe extern "system" fn host_wnd_proc(
             }
             LRESULT(0)
         }
+        WM_WAKE_EVENTS => LRESULT(0),
         WM_HTTP_DONE => {
             for (request_id, result) in drain_http_results() {
                 push_event(PlatformEvent::HttpFetchDone { request_id, result });
@@ -311,6 +321,15 @@ pub(crate) fn lparam_point(lparam: LPARAM) -> PixelPoint {
 
 pub(crate) fn push_event(event: PlatformEvent) {
     EVENT_QUEUE.with(|queue| queue.borrow_mut().push_back(event));
+    let raw = HOST_HWND_RAW.with(Cell::get);
+    let already = WAKE_POSTED.with(|cell| cell.replace(true));
+    if raw != 0 && !already {
+        let hwnd = HWND(raw as *mut c_void);
+        // SAFETY: Posting a no-op wake message unblocks GetMessageW after SendMessage callbacks.
+        unsafe {
+            let _ = PostMessageW(Some(hwnd), WM_WAKE_EVENTS, WPARAM(0), LPARAM(0));
+        }
+    }
 }
 
 fn pop_event() -> Option<PlatformEvent> {

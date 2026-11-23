@@ -16,6 +16,7 @@ pub struct DockRuntime {
     pub instance: DockInstance,
     pub icons: HashMap<u64, RgbaImage>,
     pub window_open: bool,
+    pub timer_active: bool,
 }
 
 pub struct DockManager<I: IconProvider> {
@@ -47,6 +48,7 @@ impl<I: IconProvider> DockManager<I> {
                 instance,
                 icons,
                 window_open: false,
+                timer_active: false,
             });
         }
         Ok(Self {
@@ -77,6 +79,7 @@ impl<I: IconProvider> DockManager<I> {
             } else if dock.window_open {
                 let _ = host.destroy_dock_window(id);
                 dock.window_open = false;
+                dock.timer_active = false;
             }
         }
         Ok(())
@@ -87,7 +90,10 @@ impl<I: IconProvider> DockManager<I> {
             return;
         };
         let effect = dock.instance.handle_event(ev);
-        let _ = host.set_animation_timer(id, effect.animation_active);
+        if dock.timer_active != effect.animation_active {
+            dock.timer_active = effect.animation_active;
+            let _ = host.set_animation_timer(id, effect.animation_active);
+        }
         if effect.needs_redraw && dock.window_open {
             let _ = present_dock(host, dock);
         }
@@ -196,6 +202,7 @@ impl<I: IconProvider> DockManager<I> {
                 instance,
                 icons: HashMap::new(),
                 window_open: false,
+                timer_active: false,
             });
             *safe_mode = false;
             let _ = self.sync_windows(host, false);
@@ -259,7 +266,10 @@ impl<I: IconProvider> DockManager<I> {
                 if let Ok(rebuilt) = DockInstance::new(cfg, self.work_area) {
                     dock.icons = load_dock_icons(&self.icon_provider, rebuilt.config());
                     dock.instance = rebuilt;
-                    let _ = host.set_animation_timer(id, false);
+                    if dock.timer_active {
+                        dock.timer_active = false;
+                        let _ = host.set_animation_timer(id, false);
+                    }
                     if dock.window_open {
                         let _ = present_dock(host, dock);
                     }

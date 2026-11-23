@@ -35,6 +35,7 @@ pub struct CalendarWidget {
     pending_requests: HashMap<u64, String>,
     next_request_id: u64,
     scroll_offset: usize,
+    shown_row_count: usize,
     hovered: WidgetHitTarget,
     last_tooltip: Option<String>,
     last_updated: Option<String>,
@@ -55,6 +56,7 @@ impl CalendarWidget {
             pending_requests: HashMap::new(),
             next_request_id: 1,
             scroll_offset: 0,
+            shown_row_count: 0,
             hovered: WidgetHitTarget::None,
             last_tooltip: None,
             last_updated: None,
@@ -115,23 +117,24 @@ impl CalendarWidget {
     }
 
     pub fn on_pointer_move(&mut self, host: &mut dyn WidgetPlatform, point: PixelPoint) {
-        let now = host.local_time_now();
-        let rows = build_display_rows(&self.all_events, &self.config, now, self.scroll_offset);
         let target = hit_test_widget(
             point,
             self.config.width,
             self.config.visible_rows,
-            rows.len(),
+            self.shown_row_count,
         );
+        if target == self.hovered {
+            return;
+        }
+        self.hovered = target;
+        let now = host.local_time_now();
+        let rows = build_display_rows(&self.all_events, &self.config, now, self.scroll_offset);
         let tip = tooltip_for_target(target, &rows);
         if tip != self.last_tooltip {
             let _ = host.set_widget_tooltip(CALENDAR_WIDGET_ID, tip.as_deref());
             self.last_tooltip = tip;
         }
-        if target != self.hovered {
-            self.hovered = target;
-            self.redraw(host);
-        }
+        self.redraw(host);
     }
 
     pub fn on_pointer_leave(&mut self, host: &mut dyn WidgetPlatform) {
@@ -155,12 +158,8 @@ impl CalendarWidget {
             .min(max_rows);
         let hit = hit_test_widget(point, self.config.width, self.config.visible_rows, shown);
         match hit {
-            WidgetHitTarget::TitleLink => {
-                let _ = host.open_url(GOOGLE_CAL_HOME);
-            }
-            WidgetHitTarget::AddEventBtn => {
-                let _ = host.open_url(GOOGLE_CAL_NEW_EVENT);
-            }
+            WidgetHitTarget::TitleLink => drop(host.open_url(GOOGLE_CAL_HOME)),
+            WidgetHitTarget::AddEventBtn => drop(host.open_url(GOOGLE_CAL_NEW_EVENT)),
             WidgetHitTarget::SettingsBtn => self.open_config_file(host),
             WidgetHitTarget::RefreshBtn => self.reload_config_and_refresh(host),
             WidgetHitTarget::FilterTab(period) => {
@@ -346,6 +345,7 @@ impl CalendarWidget {
         let max_rows = usize::from(self.config.visible_rows);
         self.scroll_offset = self.scroll_offset.min(total.saturating_sub(max_rows));
         let rows = build_display_rows(&self.all_events, &self.config, now, self.scroll_offset);
+        self.shown_row_count = rows.len();
         let (footer_text, footer_error) = build_footer_status(
             self.status_error.as_deref(),
             self.busy_warning,

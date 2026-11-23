@@ -21,10 +21,21 @@
 ### BUG-003 — Падение шага CI `Smoke test (--selftest)` с пустым `$LASTEXITCODE`
 - **Версия**: `0.0.1`
 - **Крейты / файлы**: `.github/workflows/ci.yml` (`Smoke test (--selftest)`), бинарник `crates/app` (`windows_subsystem = "windows"` в release)
-- **Воспроизведение**: GitHub Actions `.github/workflows/ci.yml`, run `45127781497` / job `137536033873` — все шаги до `Build release binary` и проверки `< 25 MB` прошли успешно, но `Smoke test (--selftest)` упал с `Write-Error: Selftest exited with code ` (пустое значение `$LASTEXITCODE`).
-- **Локализация**: в release-сборке `asrbox.exe` собран с `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]`. В PowerShell (`pwsh`) запуск GUI-бинарника через `& ".\target\release\asrbox.exe" --selftest` не дожидается завершения и оставляет `$LASTEXITCODE` пустым (`$null`), из-за чего `if ($LASTEXITCODE -ne 0)` всегда истинно.
-- **Попытка 1**: заменён запуск в `.github/workflows/ci.yml` на `$proc = Start-Process -FilePath ".\target\release\asrbox.exe" -ArgumentList "--selftest" -Wait -PassThru -ErrorAction Stop` с проверкой `$proc.ExitCode`.
-- **Статус**: правка готова, ожидает подтверждения CI (`windows-latest`).
+- **Воспроизведение**: GitHub Actions `.github/workflows/ci.yml`, run `45127781497` / job `137536033873`.
+- **Попытка 1**: заменён запуск на `Start-Process -Wait -PassThru` с проверкой `$proc.ExitCode`.
+- **Статус**: исправление применено (пользователь собрал и запустил `.exe`; закроем после подтверждения зелёного лога CI).
+
+### BUG-004 — Сильные тормоза отклика UI и контекстного меню в трее при почти нулевом CPU
+- **Версия**: `0.0.1`
+- **Крейты**: `crates/platform-windows`, `crates/app`, `crates/mod-widgets`
+- **Воспроизведение**: запуск `asrbox.exe` на Windows, правый клик по значку в системном трее — меню открывается с большой задержкой (или только после движения мыши по окнам приложения), анимация дока дёргается при движении курсора.
+- **Локализация**:
+  1. `crates/platform-windows/src/window.rs` (`host_wnd_proc` + `push_event` + `run_event_loop`): `explorer.exe` доставляет `WM_TRAYICON` через не-очередной `SendMessage`/`SendNotifyMessage` прямо во время сна `GetMessageW`; `push_event` клал событие в `EVENT_QUEUE`, но не будил `GetMessageW`, поэтому цикл обработки событий спал до любого следующего `PostMessage`.
+  2. `crates/platform-windows/src/tray.rs` и `widget_proc.rs`: после `TrackPopupMenuEx` отсутствовал обязательный `PostMessageW(hwnd, WM_NULL, 0, 0)` (Microsoft KB135788), а `WM_TRAYICON` срабатывал и на `WM_RBUTTONUP`, и на `WM_CONTEXTMENU`.
+  3. `crates/app/src/docks.rs` (`step_dock`): `set_animation_timer` вызывался на каждый `WM_MOUSEMOVE`, сбрасывая 16-мс таймер Windows на каждый пиксель движения мыши.
+  4. `crates/mod-widgets/src/calendar.rs` (`on_pointer_move`): на каждый пиксель движения мыши пересобирались строки календаря `build_display_rows`, даже когда наведённый элемент не менялся.
+- **Попытка 1**: добавлено немедленное пробуждение `GetMessageW` через `PostMessageW(host_hwnd, WM_WAKE_EVENTS)` в `push_event`, добавлен `PostMessageW(WM_NULL)` после всех `TrackPopupMenuEx`, убран дубль `WM_CONTEXTMENU`, кэширован `timer_active` в `DockRuntime` и `shown_row_count` в `CalendarWidget`.
+- **Статус**: правка готова, ожидает проверки CI (`windows-latest`) и ручной проверки на Windows.
 
 (Закрытые `BUG-001`, `BUG-002` перенесены в `docs/archive/bugs-closed.md`.)
 

@@ -17,10 +17,10 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CreatePopupMenu, DefWindowProcW, DestroyMenu, GetCursorPos, GetWindowLongPtrW, GetWindowRect,
-    SetForegroundWindow, SetWindowPos, TrackPopupMenuEx, GWLP_USERDATA, HWND_BOTTOM,
+    PostMessageW, SetForegroundWindow, SetWindowPos, TrackPopupMenuEx, GWLP_USERDATA, HWND_BOTTOM,
     HWND_NOTOPMOST, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, TPM_NONOTIFY,
     TPM_RETURNCMD, TPM_RIGHTBUTTON, WINDOWPOS, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
-    WM_MOUSEWHEEL, WM_RBUTTONUP, WM_TIMER, WM_WINDOWPOSCHANGING,
+    WM_MOUSEWHEEL, WM_NULL, WM_RBUTTONUP, WM_TIMER, WM_WINDOWPOSCHANGING,
 };
 
 use crate::tray::{add_item, add_sep};
@@ -137,6 +137,7 @@ pub(crate) fn show_widget_context_menu(
         let _ = SetForegroundWindow(hwnd);
         let flags = (TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON).0;
         let raw = TrackPopupMenuEx(menu, flags, screen_pt.x, screen_pt.y, hwnd, None);
+        let _ = PostMessageW(Some(hwnd), WM_NULL, WPARAM(0), LPARAM(0));
         let _ = DestroyMenu(menu);
         Ok(match raw.0 as u32 {
             CMD_REFRESH => Some(WidgetMenuAction::Refresh),

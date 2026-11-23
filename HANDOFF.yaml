@@ -3,28 +3,31 @@ updated: 2026-11-22
 spec_ids: [NF-001, NF-002, NF-005, NF-007, DK-001, DK-010, WG-001, WG-002, WG-003, WG-004, WG-005, WG-006, WG-007, WG-008, WG-009, WG-010, WG-011, WG-012]
 atlas_updated: true
 last_session:
-  goal: "Исправить BUG-003 (падение шага CI Smoke test --selftest из-за пустого $LASTEXITCODE у GUI-бинарника)"
+  goal: "Исправить BUG-004 (сильные задержки меню трея и UI при малом CPU)"
   done:
-    - "CI run 45127781497 (windows-latest) подтвердил зелёными: Check formatting, Run Clippy, Verify ATLAS and MAP coverage, Run tests, Build release binary, Check portable .exe size limit (< 25 MB)"
-    - "Закрыт и перенесён в docs/archive/bugs-closed.md баг BUG-002"
-    - "Зафиксирован BUG-003 и исправлен шаг Smoke test (--selftest) в .github/workflows/ci.yml через Start-Process -Wait -PassThru с проверкой $proc.ExitCode"
+    - "В crates/platform-windows/src/window.rs добавлено пробуждение GetMessageW через PostMessageW(WM_WAKE_EVENTS) при push_event (чинит зависание после SendMessage WM_TRAYICON/WM_DISPLAYCHANGE) и убран дубль WM_CONTEXTMENU"
+    - "В tray.rs и widget_proc.rs добавлен PostMessageW(WM_NULL) после TrackPopupMenuEx (Microsoft KB135788)"
+    - "В crates/app/src/docks.rs кэширован timer_active в DockRuntime, чтобы WM_MOUSEMOVE не сбрасывал 16-мс таймер анимации"
+    - "В crates/mod-widgets/src/calendar.rs добавлен ранний выход в on_pointer_move при неизменном hit-target"
   not_done:
-    - "Подтверждение зелёного шага Smoke test (--selftest) и выгрузки артефакта asrbox-windows-x64 на GitHub Actions"
-    - "Закрытие BUG-003 после полностью зелёного CI"
-    - "Ручная проверка живого виджета Google Календарь и док-панелей на Windows 10/11"
+    - "Подтверждение прогона GitHub Actions (windows-latest)"
+    - "Ручная проверка скорости отклика трея, док-панели и виджета на Windows 10/11"
   verified:
-    ci_build: true
-    tests: true
+    ci_build: false
+    tests: false
     manual_run: false
-open_bugs: [BUG-003]
-next_step: "Перезапустить GitHub Actions (.github/workflows/ci.yml), скачать артефакт asrbox.exe и проверить на Windows 10/11"
+open_bugs: [BUG-003, BUG-004]
+next_step: "Перезапустить GitHub Actions (.github/workflows/ci.yml), скачать asrbox.exe и проверить мгновенный отклик меню трея, дока и виджета на Windows 10/11"
 touched_files:
-  - .github/workflows/ci.yml
+  - crates/platform-windows/src/window.rs
+  - crates/platform-windows/src/tray.rs
+  - crates/platform-windows/src/widget_proc.rs
+  - crates/app/src/docks.rs
+  - crates/mod-widgets/src/calendar.rs
   - BUGS.md
-  - docs/archive/bugs-closed.md
   - CHANGELOG.md
   - HANDOFF.yaml
 warnings:
-  - "Шаг Smoke test (--selftest) в release-сборке ещё не подтверждён повторным прогоном CI"
+  - "Изменения BUG-004 ещё не проверены на GitHub Actions (windows-latest) и на живой Windows"
 ideas:
   - "Этап 2: OAuth2-интеграция с Google Calendar API для создания/редактирования событий прямо внутри виджета"

@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use asrbox_platform_api::{DockMenuAction, DockMenuState, PixelPoint, TrayAction, TrayMenuEntry};
 use windows::core::{PCWSTR, PWSTR};
-use windows::Win32::Foundation::HWND;
+use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 use windows::Win32::UI::Controls::Dialogs::{
     GetOpenFileNameW, OFN_FILEMUSTEXIST, OFN_NOCHANGEDIR, OFN_PATHMUSTEXIST, OPENFILENAMEW,
 };
@@ -14,9 +14,9 @@ use windows::Win32::UI::Shell::{
     NOTIFYICONDATAW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    AppendMenuW, CreatePopupMenu, DestroyMenu, LoadIconW, SetForegroundWindow, TrackPopupMenuEx,
-    HMENU, IDI_APPLICATION, MF_CHECKED, MF_GRAYED, MF_SEPARATOR, MF_STRING, SW_SHOWNORMAL,
-    TPM_NONOTIFY, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_APP,
+    AppendMenuW, CreatePopupMenu, DestroyMenu, LoadIconW, PostMessageW, SetForegroundWindow,
+    TrackPopupMenuEx, HMENU, IDI_APPLICATION, MF_CHECKED, MF_GRAYED, MF_SEPARATOR, MF_STRING,
+    SW_SHOWNORMAL, TPM_NONOTIFY, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_APP, WM_NULL,
 };
 
 pub(crate) const WM_TRAYICON: u32 = WM_APP + 10;
@@ -109,6 +109,7 @@ pub(crate) fn show_dock_context_menu(
         let _ = SetForegroundWindow(hwnd);
         let flags = (TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON).0;
         let raw = TrackPopupMenuEx(menu, flags, screen_pt.x, screen_pt.y, hwnd, None);
+        let _ = PostMessageW(Some(hwnd), WM_NULL, WPARAM(0), LPARAM(0));
         let _ = DestroyMenu(menu);
         Ok(decode_dock_command(raw.0 as u32, state.hovered_item_id))
     }
@@ -217,6 +218,7 @@ pub(crate) fn show_tray_context_menu(
         let _ = SetForegroundWindow(hwnd);
         let flags = (TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON).0;
         let raw = TrackPopupMenuEx(menu, flags, screen_pt.x, screen_pt.y, hwnd, None);
+        let _ = PostMessageW(Some(hwnd), WM_NULL, WPARAM(0), LPARAM(0));
         let _ = DestroyMenu(menu);
         Ok(decode_tray_command(raw.0 as u32, docks))
     }
