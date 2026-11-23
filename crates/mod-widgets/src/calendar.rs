@@ -155,7 +155,7 @@ impl CalendarWidget {
             WidgetHitTarget::AddEventBtn => {
                 self.open_url_log(host, GOOGLE_CAL_NEW_EVENT, "add event")
             }
-            WidgetHitTarget::SettingsBtn => self.open_cfg_log(host, "click"),
+            WidgetHitTarget::SettingsBtn => "open_settings".to_owned(),
             WidgetHitTarget::RefreshBtn => self.reload_config_and_refresh(host),
             WidgetHitTarget::FilterTab(period) => {
                 self.config.period = period;
@@ -199,6 +199,7 @@ impl CalendarWidget {
         };
         match action {
             WidgetMenuAction::Refresh => self.reload_config_and_refresh(host),
+            WidgetMenuAction::OpenSettings => "open_settings".to_owned(),
             WidgetMenuAction::OpenConfig => self.open_cfg_log(host, "menu"),
             WidgetMenuAction::SetLayerWallpaper => self.set_layer(host, WidgetLayer::Wallpaper),
             WidgetMenuAction::SetLayerNormal => self.set_layer(host, WidgetLayer::Normal),
@@ -290,7 +291,7 @@ impl CalendarWidget {
         }
     }
 
-    fn reload_config_and_refresh(&mut self, host: &mut dyn WidgetPlatform) -> String {
+    pub fn reload_config_and_refresh(&mut self, host: &mut dyn WidgetPlatform) -> String {
         match load_widget_config(&self.config_path) {
             Ok(reloaded) => {
                 self.config = reloaded;

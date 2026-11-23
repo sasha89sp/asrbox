@@ -5,9 +5,11 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
+asrbox-core = { path = "../core" }
 asrbox-mod-about = { path = "../mod-about" }
 asrbox-mod-debug = { path = "../mod-debug" }
 asrbox-mod-dock = { path = "../mod-dock" }
+asrbox-mod-settings = { path = "../mod-settings" }
 asrbox-mod-widgets = { path = "../mod-widgets" }
 asrbox-platform-api = { path = "../platform-api" }
 asrbox-platform-windows = { path = "../platform-windows" }

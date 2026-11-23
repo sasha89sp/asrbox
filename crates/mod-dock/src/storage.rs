@@ -3,10 +3,10 @@ use std::path::{Path, PathBuf};
 
 use crate::config::{
     DockAlignment, DockConfig, DockEdge, DockItem, DockItemKind, HoverZoomConfig, HoverZoomMode,
-    IconSource,
+    IconSource, MAX_DOCK_OPACITY, MIN_DOCK_OPACITY,
 };
 
-const SETTINGS_VERSION: u32 = 1;
+const SETTINGS_VERSION: u32 = 2;
 
 pub fn serialize_docks(docks: &[DockConfig], app_version: &str) -> String {
     let mut out = String::new();
@@ -20,17 +20,30 @@ pub fn serialize_docks(docks: &[DockConfig], app_version: &str) -> String {
         out.push_str(&format!("id={}\n", dock.id));
         out.push_str(&format!("name={}\n", escape_field(&dock.name)));
         out.push_str(&format!("enabled={}\n", dock.enabled));
+        out.push_str(&format!("locked={}\n", dock.locked));
+        if let Some((x, y)) = dock.free_pos {
+            out.push_str(&format!("free_pos={x},{y}\n"));
+        }
         out.push_str(&format!("monitor_index={}\n", dock.monitor_index));
         out.push_str(&format!("edge={}\n", edge_to_str(dock.edge)));
         out.push_str(&format!("alignment={}\n", alignment_to_str(dock.alignment)));
         out.push_str(&format!("edge_margin_px={}\n", dock.edge_margin_px));
         out.push_str(&format!("icon_size_px={}\n", dock.icon_size_px));
+        out.push_str(&format!("opacity={}\n", dock.opacity_percent));
         out.push_str(&format!("item_spacing_px={}\n", dock.item_spacing_px));
         out.push_str(&format!("padding_px={}\n", dock.padding_px));
         out.push_str(&format!("corner_radius_px={}\n", dock.corner_radius_px));
         out.push_str(&format!(
             "show_settings_button={}\n",
             dock.show_settings_button
+        ));
+        out.push_str(&format!(
+            "show_running_indicator={}\n",
+            dock.show_running_indicator
+        ));
+        out.push_str(&format!(
+            "focus_running_window={}\n",
+            dock.focus_running_window
         ));
         out.push_str(&format!("hover_zoom_enabled={}\n", dock.hover_zoom.enabled));
         out.push_str(&format!("hover_zoom_scale={:.3}\n", dock.hover_zoom.scale));
@@ -64,7 +77,7 @@ pub fn parse_docks(input: &str) -> Result<Vec<DockConfig>, String> {
                 docks.push(dock);
             }
             let next_id = (docks.len() as u64).saturating_add(1);
-            current = Some(DockConfig::new(next_id, format!("Dock {next_id}")));
+            current = Some(DockConfig::new(next_id, format!("Док {next_id}")));
             continue;
         }
         let Some((key, value)) = line.split_once('=') else {
@@ -109,6 +122,14 @@ fn apply_field(dock: &mut DockConfig, key: &str, val: &str) -> Result<(), String
         "id" => dock.id = val.parse::<u64>().map_err(|e| format!("bad id: {e}"))?,
         "name" => dock.name = unescape_field(val),
         "enabled" => dock.enabled = parse_bool(val),
+        "locked" => dock.locked = parse_bool(val),
+        "free_pos" => {
+            if let Some((xs, ys)) = val.split_once(',') {
+                if let (Ok(x), Ok(y)) = (xs.trim().parse::<i32>(), ys.trim().parse::<i32>()) {
+                    dock.free_pos = Some((x, y));
+                }
+            }
+        }
         "monitor_index" => {
             dock.monitor_index = val.parse().map_err(|e| format!("bad monitor_index: {e}"))?;
         }
@@ -120,6 +141,11 @@ fn apply_field(dock: &mut DockConfig, key: &str, val: &str) -> Result<(), String
         "icon_size_px" => {
             dock.icon_size_px = val.parse().map_err(|e| format!("bad icon_size: {e}"))?;
         }
+        "opacity" => {
+            if let Ok(pct) = val.trim_end_matches('%').trim().parse::<u8>() {
+                dock.opacity_percent = pct.clamp(MIN_DOCK_OPACITY, MAX_DOCK_OPACITY);
+            }
+        }
         "item_spacing_px" => {
             dock.item_spacing_px = val.parse().map_err(|e| format!("bad item_spacing: {e}"))?;
         }
@@ -130,6 +156,8 @@ fn apply_field(dock: &mut DockConfig, key: &str, val: &str) -> Result<(), String
             dock.corner_radius_px = val.parse().map_err(|e| format!("bad radius: {e}"))?;
         }
         "show_settings_button" => dock.show_settings_button = parse_bool(val),
+        "show_running_indicator" => dock.show_running_indicator = parse_bool(val),
+        "focus_running_window" => dock.focus_running_window = parse_bool(val),
         "hover_zoom_enabled" => dock.hover_zoom.enabled = parse_bool(val),
         "hover_zoom_scale" => {
             let scale: f32 = val.parse().map_err(|e| format!("bad zoom_scale: {e}"))?;
@@ -291,9 +319,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn roundtrip_preserves_separators_settings_button_and_icons() -> Result<(), Box<dyn Error>> {
+    fn roundtrip_preserves_new_fields_and_separators() -> Result<(), Box<dyn Error>> {
         let mut first = DockConfig::new(1, "Основная | Панель");
+        first.locked = false;
+        first.free_pos = Some((320, 48));
+        first.opacity_percent = 65;
+        first.icon_size_px = 54;
         first.show_settings_button = false;
+        first.show_running_indicator = false;
+        first.focus_running_window = false;
         first.items.push(DockItem {
             id: 1,
             kind: DockItemKind::Shortcut,

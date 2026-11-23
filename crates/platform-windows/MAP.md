@@ -3,16 +3,21 @@
 Единственный крейт workspace с `unsafe` (каждый блок снабжён комментарием `// SAFETY:`). Реализует контракты `crates/platform-api` через `windows` (`0.61`).
 
 ## Файлы
-- `src/lib.rs` — экспорт `WindowsDockHost`, `WindowsIconProvider`, `SingleInstanceGuard`, `present_layered_bgra`, `query_primary_work_area`.
-- `src/window.rs` — `WindowsDockHost`, регистрация классов окон, создание/удаление док-окон, `WM_DISPLAYCHANGE`, `WM_HTTP_DONE`, `WM_WAKE_EVENTS` и цикл сообщений.
-- `src/dock_proc.rs` — оконная процедура док-панели (`dock_wnd_proc`), события мыши, таймер анимации и `DragAcceptFiles`/`WM_DROPFILES`.
-- `src/widget_win.rs` — реализация `WidgetPlatform` для `WindowsDockHost` (окна виджетов, кадры, таймеры, tooltip, HTTP, URL и открытие `.cfg` в Notepad).
-- `src/widget_proc.rs` — оконная процедура виджета (`widget_wnd_proc`), перетаскивание за шапку, слои (`Wallpaper`/`Normal`/`Topmost`) и ПКМ-меню с пресетами прозрачности.
-- `src/widget_text.rs` — рендер кириллического текста `Segoe UI` (`CreateFontIndirectW` + `DrawTextW`) с альфа-композитингом на BGRA-кадр, рендер tooltip и `GetLocalTime`/`GetTimeZoneInformation`.
-- `src/http.rs` — фоновый HTTPS/HTTP GET-клиент на WinHTTP (`WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY` + таймауты) в отдельном потоке с уведомлением UI через `WM_HTTP_DONE`.
-- `src/icons.rs` — извлечение качественных иконок (`IShellItemImageFactory` до 256×256, WIC для `.png`/`.ico`, `ExtractIconExW` для `.exe`/`.dll`).
-- `src/tray.rs` — иконка в трее (`Shell_NotifyIconW`) и нативные ПКМ-меню док-панели и трея (разделители, настройки, Диагностика, О программе).
-- `src/shell.rs` — диалог выбора иконки (`GetOpenFileNameW`) и запуск программ, URL, `notepad.exe` и `explorer.exe` (`ShellExecuteW`).
-- `src/metrics.rs` — `ProcessMetricsSampler` (Working Set RAM, % CPU процесса, счётчики GDI/USER дескрипторов и uptime).
-- `src/tools_win.rs` — состояние шрифтов `ToolsWinState`, буфер обмена и `impl ToolsPlatform for WindowsDockHost`.
-- `src/tools_proc.rs` — нативные окна Win32 «Диагностика и логи» (`AsrboxDebugWindow`) и «О программе» (`AsrboxAboutWindow`), процедуры и раскладка контролов.
+- `src/lib.rs` — экспорт `WindowsDockHost`, `WindowsIconProvider`, `SingleInstanceGuard`, `JobObject`, `is_process_alive`, `wake_host_window`, `present_layered_bgra`, `query_primary_work_area`.
+- `src/window.rs` — `WindowsDockHost` (режимы master с треем и `new_worker()` без трея), регистрация классов окон, таймеры (`ANIMATION`, `RUNNING_POLL`, `SUPERVISOR_TICK`), `WM_IPC_WAKE` и цикл сообщений.
+- `src/dock_win.rs` — реализация `DockPlatform` для `WindowsDockHost` (окна доков, рендер, меню, запуск/фокус).
+- `src/dock_proc.rs` — оконная процедура док-панели (`dock_wnd_proc`), захват ЛКМ (`SetCapture`) для перетаскивания значков/панели, ПКМ, анимация и `WM_DROPFILES`.
+- `src/dock_menu.rs` — ПКМ-меню док-панели с вложенными подменю положения, прозрачности и поведения.
+- `src/running.rs` — определение запущенных приложений (`EnumWindows` + `QueryFullProcessImageNameW`), резолв `.lnk` (`IShellLinkW`) и активация открытого окна по клику.
+- `src/job.rs` — Win32 `JobObject` (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`) для изоляции дочерних процессов модулей и `is_process_alive(pid)`.
+- `src/settings_proc.rs` — изменяемое окно настроек (`AsrboxSettingsWindow`, `WS_OVERLAPPEDWINDOW`, min 680×480), двойная буферизация DIB и встроенный `EDIT` для URL календаря.
+- `src/widget_win.rs` — реализация `WidgetPlatform` для `WindowsDockHost`.
+- `src/widget_proc.rs` — оконная процедура виджета, перетаскивание, слои и ПКМ-меню с пунктом «Настройки календаря...».
+- `src/widget_text.rs` — рендер кириллического текста `Segoe UI` (`DrawTextW`) на BGRA-кадр, tooltip и локальное время.
+- `src/http.rs` — фоновый WinHTTP GET-клиент с `WM_HTTP_DONE`.
+- `src/icons.rs` — извлечение иконок (`IShellItemImageFactory`, WIC, `ExtractIconExW`).
+- `src/tray.rs` — иконка в трее и сгруппированное по модулям ПКМ-подменю (`MF_POPUP`) трея.
+- `src/shell.rs` — диалог выбора иконки и запуск программ, URL, `notepad.exe`, `explorer.exe`.
+- `src/metrics.rs` — `ProcessMetricsSampler` (RAM, % CPU, GDI/USER, uptime).
+- `src/tools_win.rs` — шрифты `ToolsWinState`, буфер обмена и `impl ToolsPlatform for WindowsDockHost`.
+- `src/tools_proc.rs` — нативные окна «Диагностика и логи» и «О программе».

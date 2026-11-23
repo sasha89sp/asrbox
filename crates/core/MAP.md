@@ -1,9 +1,11 @@
 # MAP: `crates/core`
 
-Настройки (с `settings_version`, `written_by` и бэкапами), шина событий, трейт `Module (start, stop, health)`, контракты логирования и профилирования (`tracing`). Без `unsafe`. Лимит: <= 100 строк.
+Контракт модулей (`Module`, `ModuleId`, `ModuleHealth`), настройки изоляции процессов и вкл/выкл модулей (`modules.cfg`), а также текстовый протокол IPC между супервизором и дочерними процессами модулей. Без `unsafe`. Лимит: <= 100 строк.
 
 ## Файлы
 
 | Путь | Назначение |
 | --- | --- |
-| `src/lib.rs` | Корневой модуль крейта `asrbox-core` (каркас v0.0.1). |
+| `src/lib.rs` | Трейт `Module`, `ModuleHealth` и публичные реэкспорты `asrbox-core`. |
+| `src/modules_cfg.rs` | `ModuleId`, `IsolationMode`, `ModulesConfig` и чтение/запись `data/config/modules.cfg`. |
+| `src/ipc.rs` | Кодирование/декодирование команд супервизора (`SupervisorCmd`) и сообщений воркеров (`WorkerMsg`). |

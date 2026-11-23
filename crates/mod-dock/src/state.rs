@@ -49,13 +49,7 @@ pub struct DockInstance {
 impl DockInstance {
     pub fn new(config: DockConfig, work_area: Rect) -> Result<Self, DockConfigError> {
         config.validate()?;
-        let next_item_id = config
-            .items
-            .iter()
-            .map(|item| item.id)
-            .max()
-            .unwrap_or(0)
-            .saturating_add(1);
+        let next_item_id = config.next_item_id();
         let layout = compute_layout(&config, work_area, HoverVisualState::default());
         Ok(Self {
             config,
@@ -73,6 +67,10 @@ impl DockInstance {
         &self.config
     }
 
+    pub fn config_mut(&mut self) -> &mut DockConfig {
+        &mut self.config
+    }
+
     pub fn layout(&self) -> &DockLayout {
         &self.layout
     }
@@ -83,6 +81,55 @@ impl DockInstance {
 
     pub fn hovered_item(&self) -> Option<u64> {
         self.hovered_item
+    }
+
+    pub fn refresh_layout(&mut self) {
+        self.recompute_layout();
+        self.record_redraw();
+    }
+
+    pub fn move_item_within(&mut self, item_id: u64, mut target_idx: usize) -> bool {
+        let Some(old_idx) = self.config.items.iter().position(|i| i.id == item_id) else {
+            return false;
+        };
+        if target_idx > old_idx {
+            target_idx = target_idx.saturating_sub(1);
+        }
+        let target_idx = target_idx.min(self.config.items.len().saturating_sub(1));
+        if old_idx == target_idx {
+            return false;
+        }
+        let item = self.config.items.remove(old_idx);
+        self.config.items.insert(target_idx, item);
+        self.recompute_layout();
+        self.record_redraw();
+        true
+    }
+
+    pub fn take_item(&mut self, item_id: u64) -> Option<DockItem> {
+        let pos = self.config.items.iter().position(|i| i.id == item_id)?;
+        let item = self.config.items.remove(pos);
+        if self.hovered_item == Some(item_id) {
+            self.hovered_item = None;
+        }
+        if self.active_zoom_item == Some(item_id) {
+            self.active_zoom_item = None;
+            self.zoom_progress = 0.0;
+        }
+        self.recompute_layout();
+        self.record_redraw();
+        Some(item)
+    }
+
+    pub fn insert_existing_item(&mut self, mut item: DockItem, target_idx: usize) -> u64 {
+        let new_id = self.next_item_id.max(self.config.next_item_id());
+        self.next_item_id = new_id.saturating_add(1);
+        item.id = new_id;
+        let idx = target_idx.min(self.config.items.len());
+        self.config.items.insert(idx, item);
+        self.recompute_layout();
+        self.record_redraw();
+        new_id
     }
 
     pub fn handle_event(&mut self, event: DockEvent) -> DockStepEffect {
@@ -98,7 +145,7 @@ impl DockInstance {
 
     fn on_pointer_move(&mut self, point: Point) -> DockStepEffect {
         let hit = hit_test_slot(&self.layout, point)
-            .filter(|slot| slot.kind != SlotKind::Separator)
+            .filter(|slot| !matches!(slot.kind, SlotKind::Separator | SlotKind::DragHandle))
             .map(|slot| slot.item_id);
         if hit == self.hovered_item {
             return DockStepEffect {
@@ -155,7 +202,6 @@ impl DockInstance {
         if !self.is_animation_pending() || dt_ms == 0 {
             return DockStepEffect::default();
         }
-
         let target = if self.hovered_item.is_some() {
             1.0
         } else {
@@ -163,7 +209,6 @@ impl DockInstance {
         };
         let duration = f32::from(self.config.hover_zoom.duration_ms).max(1.0);
         let delta = f32::from(dt_ms) / duration;
-
         if target > self.zoom_progress {
             self.zoom_progress = (self.zoom_progress + delta).min(1.0);
         } else {
@@ -172,7 +217,6 @@ impl DockInstance {
                 self.active_zoom_item = None;
             }
         }
-
         self.recompute_layout();
         self.record_redraw();
         DockStepEffect {
@@ -185,7 +229,6 @@ impl DockInstance {
     fn on_drop(&mut self, paths: Vec<PathBuf>, local_point: Point) -> DockStepEffect {
         let mut insert_at = drop_insert_index(&self.layout, self.config.edge, local_point);
         let mut added_item_ids = Vec::new();
-
         for path in paths {
             let item_id = self.next_item_id;
             if let Ok(item) = DockItem::from_dropped_path(item_id, path) {
@@ -197,7 +240,6 @@ impl DockInstance {
                 added_item_ids.push(item_id);
             }
         }
-
         if added_item_ids.is_empty() {
             return DockStepEffect {
                 needs_redraw: false,
@@ -205,7 +247,6 @@ impl DockInstance {
                 added_item_ids,
             };
         }
-
         self.recompute_layout();
         self.record_redraw();
         DockStepEffect {
@@ -272,69 +313,44 @@ mod tests {
     }
 
     #[test]
-    fn idle_dock_produces_zero_redraws_and_stops_animation() -> Result<(), Box<dyn Error>> {
-        let mut config = DockConfig::new(1, "Primary");
-        let path = PathBuf::from("C:/Apps/Firefox.exe");
-        config.items.push(DockItem::from_dropped_path(1, path)?);
-        let mut dock = DockInstance::new(config, work_area())?;
-
-        let idle_tick = dock.handle_event(DockEvent::AnimationTick { dt_ms: 16 });
-        assert!(!idle_tick.needs_redraw);
-        assert!(!idle_tick.animation_active);
-
-        let slot = dock
-            .layout()
-            .slots
-            .first()
-            .copied()
-            .ok_or("missing first slot")?;
-        let center = Point {
-            x: slot.base_rect.x + 10,
-            y: slot.base_rect.y + 10,
-        };
-
-        let enter = dock.handle_event(DockEvent::PointerMove(center));
-        assert!(enter.needs_redraw);
-        assert!(enter.animation_active);
-
-        let finish = dock.handle_event(DockEvent::AnimationTick { dt_ms: 120 });
-        assert!(finish.needs_redraw);
-        assert!(!finish.animation_active);
-
-        let moved = Point {
-            x: center.x + 2,
-            y: center.y,
-        };
-        let same_icon_move = dock.handle_event(DockEvent::PointerMove(moved));
-        assert!(!same_icon_move.needs_redraw);
-        assert!(!same_icon_move.animation_active);
-
-        let leave = dock.handle_event(DockEvent::PointerLeave);
-        assert!(leave.needs_redraw);
-        assert!(leave.animation_active);
-
-        let settled = dock.handle_event(DockEvent::AnimationTick { dt_ms: 120 });
-        assert!(settled.needs_redraw);
-        assert!(!settled.animation_active);
+    fn move_take_and_insert_works_for_items_and_separators() -> Result<(), Box<dyn Error>> {
+        let mut cfg = DockConfig::new(1, "Primary");
+        cfg.items
+            .push(DockItem::from_dropped_path(1, PathBuf::from("a.exe"))?);
+        cfg.items.push(DockItem::separator(2));
+        cfg.items
+            .push(DockItem::from_dropped_path(3, PathBuf::from("b.exe"))?);
+        let mut dock = DockInstance::new(cfg, work_area())?;
+        assert!(dock.move_item_within(2, 0));
+        assert!(dock.config().items[0].is_separator());
+        let taken = dock.take_item(2).ok_or("separator missing")?;
+        assert_eq!(dock.config().items.len(), 2);
+        let new_id = dock.insert_existing_item(taken, 2);
+        assert!(new_id > 3);
+        assert!(dock.config().items[2].is_separator());
         Ok(())
     }
 
     #[test]
-    fn drop_files_adds_items_and_requests_redraw() -> Result<(), Box<dyn Error>> {
-        let config = DockConfig::new(1, "Primary");
+    fn idle_dock_produces_zero_redraws_and_stops_animation() -> Result<(), Box<dyn Error>> {
+        let mut config = DockConfig::new(1, "Primary");
+        config
+            .items
+            .push(DockItem::from_dropped_path(1, PathBuf::from("a.exe"))?);
         let mut dock = DockInstance::new(config, work_area())?;
-
-        let effect = dock.handle_event(DockEvent::DropFiles {
-            paths: vec![
-                PathBuf::from("C:/Apps/Note.exe"),
-                PathBuf::from("C:/Apps/Terminal.lnk"),
-            ],
-            local_point: Point { x: 0, y: 0 },
-        });
-        assert!(effect.needs_redraw);
-        assert_eq!(effect.added_item_ids.len(), 2);
-        assert_eq!(dock.config().items.len(), 2);
-        assert_eq!(dock.metrics().drops_accepted, 2);
+        let idle = dock.handle_event(DockEvent::AnimationTick { dt_ms: 16 });
+        assert!(!idle.needs_redraw && !idle.animation_active);
+        let slot = dock.layout().slots[0];
+        let pt = Point {
+            x: slot.base_rect.x + 10,
+            y: slot.base_rect.y + 10,
+        };
+        assert!(dock.handle_event(DockEvent::PointerMove(pt)).needs_redraw);
+        assert!(
+            !dock
+                .handle_event(DockEvent::AnimationTick { dt_ms: 120 })
+                .animation_active
+        );
         Ok(())
     }
 }

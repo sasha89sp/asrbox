@@ -3,11 +3,15 @@
 use std::env;
 use std::path::PathBuf;
 
+use asrbox_core::SupervisorCmd;
 use asrbox_mod_about::{build_about_text, build_paths_clipboard, AppPaths};
 use asrbox_mod_debug::LogLevel;
+use asrbox_mod_dock::load_docks_from_file;
+use asrbox_mod_settings::SettingsTab;
+use asrbox_mod_widgets::load_widget_config;
 use asrbox_platform_api::{
     AboutUiCommand, DebugUiCommand, DockPlatform, IconProvider, PixelPoint, ToolsPlatform,
-    TrayAction, WidgetPlatform,
+    TrayAction, TrayMenuEntry, TrayModuleFlags, WidgetPlatform,
 };
 
 use crate::{AppController, APP_VERSION};
@@ -28,12 +32,40 @@ impl<I: IconProvider> AppController<I> {
         screen: PixelPoint,
     ) {
         self.debug.record_event("app", "tray_menu");
-        let entries = self.docks.tray_entries();
-        let cal_vis = self.calendar.is_visible();
-        let Ok(Some(action)) = host.show_tray_menu(screen, &entries, cal_vis) else {
+        let entries = self.current_tray_entries();
+        let cal_vis = self
+            .calendar
+            .as_ref()
+            .map(|c| c.is_visible())
+            .unwrap_or_else(|| {
+                load_widget_config(&self.paths.widgets_cfg)
+                    .map(|c| c.visible)
+                    .unwrap_or(true)
+            });
+        let flags = TrayModuleFlags {
+            dock_module_enabled: self.modules_cfg.dock_enabled,
+            widgets_module_enabled: self.modules_cfg.widgets_enabled,
+            calendar_visible: cal_vis,
+        };
+        let Ok(Some(action)) = host.show_tray_menu(screen, &entries, flags) else {
             return;
         };
         self.apply_tray_action(host, action);
+    }
+
+    fn current_tray_entries(&self) -> Vec<TrayMenuEntry> {
+        if let Some(docks) = &self.docks {
+            return docks.tray_entries();
+        }
+        load_docks_from_file(&self.paths.docks_cfg)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|d| TrayMenuEntry {
+                dock_id: d.id,
+                title: d.name,
+                enabled: d.enabled,
+            })
+            .collect()
     }
 
     fn apply_tray_action<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
@@ -43,18 +75,31 @@ impl<I: IconProvider> AppController<I> {
     ) {
         let now = host.local_time_now();
         match action {
+            TrayAction::OpenSettings => self.open_settings_tab(host, SettingsTab::Modules),
+            TrayAction::ToggleDockModule => {
+                self.modules_cfg.dock_enabled = !self.modules_cfg.dock_enabled;
+                self.persist_modules_cfg();
+                self.sync_runtime_modules(host);
+                self.render_settings_ui(host);
+            }
+            TrayAction::ToggleWidgetsModule => {
+                self.modules_cfg.widgets_enabled = !self.modules_cfg.widgets_enabled;
+                self.persist_modules_cfg();
+                self.sync_runtime_modules(host);
+                self.render_settings_ui(host);
+            }
             TrayAction::AddDock => {
-                self.docks.add_new_dock(host, &mut self.safe_mode);
+                self.send_or_run_dock_cmd(host, SupervisorCmd::AddDock);
                 self.debug
                     .log(now, LogLevel::Info, "dock", "Трей: добавлена док-панель");
             }
             TrayAction::ToggleDock(id) => {
-                self.docks.toggle_dock(host, id, self.safe_mode);
+                self.send_or_run_dock_cmd(host, SupervisorCmd::ToggleDock(id));
                 self.debug
                     .log(now, LogLevel::Info, "dock", format!("Трей: док {id}"));
             }
             TrayAction::RemoveDock(id) => {
-                self.docks.remove_dock(host, id);
+                self.send_or_run_dock_cmd(host, SupervisorCmd::RemoveDock(id));
                 self.debug.log(
                     now,
                     LogLevel::Info,
@@ -63,33 +108,33 @@ impl<I: IconProvider> AppController<I> {
                 );
             }
             TrayAction::OpenDockConfig => {
-                let res = self.docks.open_config_file(host);
+                let res = ToolsPlatform::open_text_file(host, &self.paths.docks_cfg);
                 self.log_io_result(now, "dock", "Трей: открыт docks.cfg", res);
             }
             TrayAction::ToggleCalendarWidget => {
                 self.safe_mode = false;
-                self.calendar.toggle_visible(host, false);
-                self.debug.log(
-                    now,
-                    LogLevel::Info,
-                    "widgets",
-                    format!("Трей: календарь -> {}", self.calendar.status_summary()),
-                );
+                self.send_or_run_widgets_cmd(host, SupervisorCmd::ToggleCalendar);
+            }
+            TrayAction::RefreshCalendarWidget => {
+                self.send_or_run_widgets_cmd(host, SupervisorCmd::RefreshCalendar);
             }
             TrayAction::OpenWidgetConfig => {
-                let res = self.calendar.open_config_file(host);
+                let res = ToolsPlatform::open_text_file(host, &self.paths.widgets_cfg);
                 self.log_io_result(now, "widgets", "Трей: открыт widgets.cfg", res);
             }
             TrayAction::OpenDebugWindow => self.open_debug_window(host),
             TrayAction::OpenAboutWindow => self.open_about_window(host),
             TrayAction::Exit => {
-                self.docks.persist();
+                self.supervisor.stop_all();
+                if let Some(docks) = &self.docks {
+                    docks.persist();
+                }
                 host.request_quit();
             }
         }
     }
 
-    fn open_debug_window<H: WidgetPlatform + ToolsPlatform>(&mut self, host: &mut H) {
+    pub(crate) fn open_debug_window<H: WidgetPlatform + ToolsPlatform>(&mut self, host: &mut H) {
         let now = host.local_time_now();
         let title = format!("asrbox v{APP_VERSION} — Диагностика и логи");
         match host.open_debug_window(&title) {
@@ -102,7 +147,7 @@ impl<I: IconProvider> AppController<I> {
         }
     }
 
-    fn open_about_window<H: WidgetPlatform + ToolsPlatform>(&mut self, host: &mut H) {
+    pub(crate) fn open_about_window<H: WidgetPlatform + ToolsPlatform>(&mut self, host: &mut H) {
         let now = host.local_time_now();
         let title = format!("О программе — asrbox v{APP_VERSION}");
         let content = build_about_text(APP_VERSION, &self.paths);
@@ -190,7 +235,7 @@ impl<I: IconProvider> AppController<I> {
         );
     }
 
-    fn log_io_result(
+    pub(crate) fn log_io_result(
         &mut self,
         now: asrbox_platform_api::LocalDateTime,
         module: &'static str,

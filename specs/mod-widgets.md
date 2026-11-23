@@ -33,3 +33,5 @@
   `+` открывает `https://calendar.google.com/calendar/r/eventedit`, клик по заголовку — `https://calendar.google.com/calendar/r`, клик по событию — `https://calendar.google.com/calendar/r/day/YYYY/M/D`.
 - **WG-012 (Ограничения кода)**:
   В `crates/mod-widgets` нет `unsafe`, нет `unwrap()`/`expect()`, нет прямых вызовов WinAPI. Секретные ссылки хранятся только локально в `./data/config/widgets.cfg` (исключено `.gitignore`).
+- **WG-013 (Автодиагностика закомментированных ссылок и GUI-настройки)**:
+  Если пользователь вставил реальный `.ics` URL в закомментированную строку `# calendar=...` в `widgets.cfg`, парсер выставляет флаг `commented_calendar_hint`, виджет показывает подсказку в подвале, а вкладка «Google Календарь» в окне настроек предлагает кнопку `Включить (убрать #)` и поле для вставки ссылки без ручной правки конфига.

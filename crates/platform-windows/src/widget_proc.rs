@@ -25,6 +25,7 @@ pub(crate) const WIDGET_MINUTE_TIMER_ID: usize = 101;
 pub(crate) const WIDGET_REFRESH_TIMER_ID: usize = 102;
 
 const CMD_REFRESH: u32 = 401;
+const CMD_OPEN_SETTINGS: u32 = 400;
 const CMD_OPEN_CFG: u32 = 402;
 const CMD_LAYER_WALLPAPER: u32 = 403;
 const CMD_LAYER_NORMAL: u32 = 404;
@@ -109,11 +110,18 @@ pub(crate) fn show_widget_context_menu(
     // SAFETY: Popup menu is created, tracked, and destroyed synchronously on UI thread.
     unsafe {
         let menu = CreatePopupMenu().map_err(|err| format!("CreatePopupMenu failed: {err}"))?;
+        add_item(
+            menu,
+            CMD_OPEN_SETTINGS,
+            "Настройки календаря...",
+            false,
+            true,
+        );
         add_item(menu, CMD_REFRESH, "Обновить календарь сейчас", false, true);
         add_item(
             menu,
             CMD_OPEN_CFG,
-            "Открыть настройки (widgets.cfg)",
+            "Открыть widgets.cfg (Блокнот)",
             false,
             true,
         );
@@ -169,6 +177,7 @@ pub(crate) fn show_widget_context_menu(
         let _ = PostMessageW(Some(hwnd), WM_NULL, WPARAM(0), LPARAM(0));
         let _ = DestroyMenu(menu);
         Ok(match raw.0 as u32 {
+            CMD_OPEN_SETTINGS => Some(WidgetMenuAction::OpenSettings),
             CMD_REFRESH => Some(WidgetMenuAction::Refresh),
             CMD_OPEN_CFG => Some(WidgetMenuAction::OpenConfig),
             CMD_LAYER_WALLPAPER => Some(WidgetMenuAction::SetLayerWallpaper),

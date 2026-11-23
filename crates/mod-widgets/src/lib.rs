@@ -11,6 +11,7 @@ pub mod rrule_parse;
 pub mod storage;
 
 pub use calendar::{CalendarWidget, CALENDAR_WIDGET_ID};
+pub use calendar_view::uncomment_calendar_sources;
 pub use date::IcsDateTime;
 pub use ics::{parse_ics_bytes, CalendarEvent, ParseOptions, ParsedCalendar};
 pub use render::{

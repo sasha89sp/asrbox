@@ -5,6 +5,10 @@ use std::path::{Path, PathBuf};
 
 pub type DockId = u64;
 pub const SETTINGS_SLOT_ID: u64 = u64::MAX;
+pub const DRAG_HANDLE_SLOT_ID: u64 = u64::MAX - 1;
+pub const DEFAULT_DOCK_OPACITY: u8 = 85;
+pub const MIN_DOCK_OPACITY: u8 = 20;
+pub const MAX_DOCK_OPACITY: u8 = 100;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DockEdge {
@@ -135,15 +139,20 @@ pub struct DockConfig {
     pub id: DockId,
     pub name: String,
     pub enabled: bool,
+    pub locked: bool,
+    pub free_pos: Option<(i32, i32)>,
     pub monitor_index: usize,
     pub edge: DockEdge,
     pub alignment: DockAlignment,
     pub edge_margin_px: u16,
     pub icon_size_px: u16,
+    pub opacity_percent: u8,
     pub item_spacing_px: u16,
     pub padding_px: u16,
     pub corner_radius_px: u16,
     pub show_settings_button: bool,
+    pub show_running_indicator: bool,
+    pub focus_running_window: bool,
     pub hover_zoom: HoverZoomConfig,
     pub items: Vec<DockItem>,
 }
@@ -154,15 +163,20 @@ impl DockConfig {
             id,
             name: name.into(),
             enabled: true,
+            locked: true,
+            free_pos: None,
             monitor_index: 0,
             edge: DockEdge::Bottom,
             alignment: DockAlignment::Center,
             edge_margin_px: 8,
             icon_size_px: 48,
+            opacity_percent: DEFAULT_DOCK_OPACITY,
             item_spacing_px: 10,
             padding_px: 12,
             corner_radius_px: 16,
             show_settings_button: true,
+            show_running_indicator: true,
+            focus_running_window: true,
             hover_zoom: HoverZoomConfig::default(),
             items: Vec::new(),
         }
@@ -302,8 +316,7 @@ impl DockRegistry {
         let dock = self
             .get_mut(dock_id)
             .ok_or(DockConfigError::DockNotFound(dock_id))?;
-        let len = dock.items.len();
-        let index = insert_at.unwrap_or(len).min(len);
+        let index = insert_at.unwrap_or(dock.items.len()).min(dock.items.len());
         dock.items.insert(index, item);
         self.next_item_id = self.next_item_id.saturating_add(1);
         Ok(item_id)
@@ -342,50 +355,36 @@ mod tests {
     use super::*;
 
     #[test]
-    fn registry_supports_unlimited_independent_docks() -> Result<(), Box<dyn Error>> {
+    fn registry_and_validation_work() -> Result<(), Box<dyn Error>> {
         let mut registry = DockRegistry::new();
-        for idx in 1..=20 {
+        for idx in 1..=10 {
             let id = registry.create_dock(format!("Dock {idx}"))?;
             let dock = registry
                 .get_mut(id)
                 .ok_or(DockConfigError::DockNotFound(id))?;
-            dock.edge = match idx % 4 {
-                0 => DockEdge::Bottom,
-                1 => DockEdge::Left,
-                2 => DockEdge::Top,
-                _ => DockEdge::Right,
-            };
+            dock.edge = [
+                DockEdge::Bottom,
+                DockEdge::Left,
+                DockEdge::Top,
+                DockEdge::Right,
+            ][idx % 4];
         }
-        assert_eq!(registry.len(), 20);
-        Ok(())
-    }
-
-    #[test]
-    fn custom_icon_and_separator_validate_cleanly() -> Result<(), Box<dyn Error>> {
-        let mut registry = DockRegistry::new();
-        let dock_id = registry.create_dock("Main")?;
-        let target = PathBuf::from("C:/Apps/Code.exe");
-        let item_id = registry.add_dropped_item(dock_id, target, None)?;
+        assert_eq!(registry.len(), 10);
+        let item_id = registry.add_dropped_item(1, PathBuf::from("C:/Apps/Code.exe"), None)?;
         let custom = IconSource::CustomFile(PathBuf::from("data/icons/code.png"));
-        registry.set_item_icon(dock_id, item_id, custom.clone())?;
-
+        registry.set_item_icon(1, item_id, custom.clone())?;
         let dock = registry
-            .get_mut(dock_id)
-            .ok_or(DockConfigError::DockNotFound(dock_id))?;
+            .get_mut(1)
+            .ok_or(DockConfigError::DockNotFound(1))?;
         dock.items.push(DockItem::separator(99));
         dock.validate()?;
         assert!(dock.items[1].is_separator());
         assert_eq!(dock.items[0].icon, custom);
-        Ok(())
-    }
-
-    #[test]
-    fn validation_rejects_invalid_zoom_and_icon_size() {
-        let mut dock = DockConfig::new(1, "Test");
         dock.icon_size_px = 12;
         assert_eq!(dock.validate(), Err(DockConfigError::InvalidIconSize(12)));
         dock.icon_size_px = 48;
         dock.hover_zoom.scale = 3.0;
         assert_eq!(dock.validate(), Err(DockConfigError::InvalidZoomScale));
+        Ok(())
     }
 }

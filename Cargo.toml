@@ -15,6 +15,7 @@ members = [
     "crates/mod-widgets",
     "crates/mod-debug",
     "crates/mod-about",
+    "crates/mod-settings",
     "crates/app",
 ]
 

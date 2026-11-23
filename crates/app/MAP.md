@@ -1,9 +1,15 @@
 # MAP.md — `crates/app`
 
-Точка входа `asrbox.exe` (`#![windows_subsystem = "windows"]` в релизе), CLI (`--version`, `--selftest`, `--safe-mode`), защита одного экземпляра и оркестрация `mod-dock`, `mod-widgets`, `mod-debug` и `mod-about` через `platform-api` и `platform-windows`.
+Исполняемый бинарник `asrbox.exe`. Работает как мастер-супервизор (трей, Настройки, Диагностика, О программе) с изолированными дочерними процессами модулей (`--worker dock|widgets`) и резервным `inproc`-режимом (`--inproc`).
 
 ## Файлы
-- `src/main.rs` — точка входа, цикл событий `AppController`, маршрутизация событий док-панелей и виджета Google Календарь.
-- `src/tools.rs` — обработчики трея, окна диагностики (`mod-debug`), «О программе» (`mod-about`) и определение портативных путей.
-- `src/docks.rs` — менеджер неограниченного числа док-панелей `DockManager` (загрузка/перезагрузка/сохранение `docks.cfg`, разделители, кнопка настроек, иконки, события и ПКМ-меню).
-- `src/selftest.rs` — встроенная проверка `--selftest` для `mod-dock`, `mod-widgets`, `mod-debug` и `mod-about`.
+- `src/main.rs` — точка входа, CLI (`--version`, `--selftest`, `--safe-mode`, `--inproc`, `--worker`, `--parent-pid`) и `AppController`.
+- `src/supervisor.rs` — `ModuleSupervisor`: запуск/остановка процессов модулей в Win32 `JobObject`, stdin/stdout IPC и автоперезапуск при сбое.
+- `src/worker.rs` — изолированный цикл воркера (`--worker dock|widgets`), чтение команд `SupervisorCmd`, watchdog родительского PID и отправка логов/метрик.
+- `src/docks.rs` — `DockManager`: жизненный цикл док-панелей, индикатор запущенных приложений и `docks.cfg`.
+- `src/dock_ops.rs` — обработка меню и кликов док-панели, загрузка иконок, резолв `.exe` и отрисовка кадров.
+- `src/dock_drag.rs` — `DockDragState`: перетаскивание значков/разделителей внутри панели и между панелями, удаление за пределами панели и перемещение откреплённого дока.
+- `src/settings_ctl.rs` — мост между macOS-окном `mod-settings` и конфигами `modules.cfg`, `docks.cfg`, `widgets.cfg` (включая автоисправление `# calendar=`).
+- `src/tools.rs` — сгруппированное ПКМ-меню трея, окна «Диагностика» и «О программе».
+- `src/worker_bus.rs` — маршрутизация `SupervisorCmd`/`WorkerMsg` между супервизором и воркерами, а также `inproc`-диспетчер виджетов.
+- `src/selftest.rs` — кроссплатформенный `--selftest` (`core`, `mod-dock`, `mod-widgets`, `mod-settings`, `mod-debug`, `mod-about`).

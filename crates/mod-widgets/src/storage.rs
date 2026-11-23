@@ -100,6 +100,7 @@ pub struct CalendarWidgetConfig {
     pub period: PeriodFilter,
     pub date_format: DateFormatMode,
     pub sources: Vec<CalendarSource>,
+    pub commented_calendar_hint: bool,
 }
 
 impl Default for CalendarWidgetConfig {
@@ -118,6 +119,7 @@ impl Default for CalendarWidgetConfig {
             period: PeriodFilter::Days30,
             date_format: DateFormatMode::Normal,
             sources: Vec::new(),
+            commented_calendar_hint: false,
         }
     }
 }
@@ -145,10 +147,24 @@ pub fn save_widget_config(path: &Path, cfg: &CalendarWidgetConfig) -> Result<(),
 
 pub fn parse_widget_config(raw: &str) -> CalendarWidgetConfig {
     let mut cfg = CalendarWidgetConfig::default();
+    let mut saw_commented_real_url = false;
     let cleaned = raw.trim_start_matches('\u{FEFF}');
     for line in cleaned.lines() {
         let trimmed = line.trim().trim_start_matches('\u{FEFF}');
-        if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with(';') {
+        if trimmed.is_empty() {
+            continue;
+        }
+        if trimmed.starts_with('#') || trimmed.starts_with(';') {
+            let uncommented = trimmed.trim_start_matches(['#', ';', ' ', '\t']);
+            if let Some((k, v)) = uncommented.split_once('=') {
+                let key = k.trim();
+                if (key == "calendar" || key == "url")
+                    && !v.contains("...")
+                    && parse_calendar_source(v.trim(), 1).is_some()
+                {
+                    saw_commented_real_url = true;
+                }
+            }
             continue;
         }
         let Some((k, v)) = trimmed.split_once('=') else {
@@ -156,6 +172,7 @@ pub fn parse_widget_config(raw: &str) -> CalendarWidgetConfig {
         };
         apply_kv(&mut cfg, k.trim(), v.trim());
     }
+    cfg.commented_calendar_hint = cfg.sources.is_empty() && saw_commented_real_url;
     cfg.visible_rows = cfg.visible_rows.clamp(3, 12);
     cfg.width = cfg.width.clamp(280, 560);
     cfg.opacity_percent = cfg
@@ -169,43 +186,15 @@ pub fn parse_widget_config(raw: &str) -> CalendarWidgetConfig {
 fn apply_kv(cfg: &mut CalendarWidgetConfig, key: &str, val: &str) {
     match key {
         "visible" => cfg.visible = val == "1" || val.eq_ignore_ascii_case("true"),
-        "x" => {
-            if let Ok(n) = val.parse::<i32>() {
-                cfg.x = n;
-            }
-        }
-        "y" => {
-            if let Ok(n) = val.parse::<i32>() {
-                cfg.y = n;
-            }
-        }
-        "width" => {
-            if let Ok(n) = val.parse::<u32>() {
-                cfg.width = n;
-            }
-        }
-        "visible_rows" => {
-            if let Ok(n) = val.parse::<u8>() {
-                cfg.visible_rows = n;
-            }
-        }
+        "x" => parse_into(val, &mut cfg.x),
+        "y" => parse_into(val, &mut cfg.y),
+        "width" => parse_into(val, &mut cfg.width),
+        "visible_rows" => parse_into(val, &mut cfg.visible_rows),
         "layer" => cfg.layer = parse_layer(val),
-        "opacity" => {
-            if let Ok(n) = val.trim_end_matches('%').trim().parse::<u8>() {
-                cfg.opacity_percent = n;
-            }
-        }
+        "opacity" => parse_into(val.trim_end_matches('%').trim(), &mut cfg.opacity_percent),
         "title" if !val.is_empty() => cfg.title = strip_quotes(val).to_owned(),
-        "refresh_interval_sec" => {
-            if let Ok(n) = val.parse::<u32>() {
-                cfg.refresh_interval_sec = n;
-            }
-        }
-        "lookahead_days" => {
-            if let Ok(n) = val.parse::<u16>() {
-                cfg.lookahead_days = n;
-            }
-        }
+        "refresh_interval_sec" => parse_into(val, &mut cfg.refresh_interval_sec),
+        "lookahead_days" => parse_into(val, &mut cfg.lookahead_days),
         "period" => cfg.period = PeriodFilter::from_str_value(val),
         "date_format" => cfg.date_format = DateFormatMode::from_str_value(val),
         "calendar" | "url" => {
@@ -218,15 +207,18 @@ fn apply_kv(cfg: &mut CalendarWidgetConfig, key: &str, val: &str) {
     }
 }
 
+fn parse_into<T: std::str::FromStr>(val: &str, dst: &mut T) {
+    if let Ok(parsed) = val.parse() {
+        *dst = parsed;
+    }
+}
+
 pub fn serialize_widget_config(cfg: &CalendarWidgetConfig) -> String {
     let mut out = String::from(concat!(
         "# Настройки виджета Google Календарь (asrbox)\n",
-        "# Сохраните файл и нажмите кнопку обновления (↻) на виджете.\n",
-        "# Прозрачность фона: opacity=20..100 (по умолчанию 88)\n",
-        "# Подключение календаря (подходит любой формат):\n",
-        "#   calendar=https://calendar.google.com/.../basic.ics\n",
-        "#   calendar=main|auto|https://calendar.google.com/.../basic.ics\n",
-        "#   calendar=work|#A855F7|https://calendar.google.com/.../basic.ics\n\n",
+        "# Удобнее всего добавлять календари через окно «Настройки» (иконка в трее).\n",
+        "# При ручном редактировании добавьте строку БЕЗ знака # в начале:\n",
+        "#   calendar=https://calendar.google.com/calendar/ical/.../basic.ics\n\n",
     ));
     out.push_str(&format!("visible={}\n", if cfg.visible { 1 } else { 0 }));
     out.push_str(&format!("x={}\n", cfg.x));
@@ -274,7 +266,7 @@ pub fn save_cached_ics(cache_dir: &Path, source_id: &str, bytes: &[u8]) -> Resul
     Ok(())
 }
 
-fn parse_calendar_source(val: &str, fallback_idx: usize) -> Option<CalendarSource> {
+pub(crate) fn parse_calendar_source(val: &str, fallback_idx: usize) -> Option<CalendarSource> {
     let mut parts = val.splitn(3, '|');
     let first = strip_quotes(parts.next()?.trim());
     let second = parts.next().map(|s| strip_quotes(s.trim()));

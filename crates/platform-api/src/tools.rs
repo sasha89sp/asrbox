@@ -1,5 +1,7 @@
 use std::path::Path;
 
+use crate::{PixelRect, WidgetFrame};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct ProcessMetrics {
     pub ram_kb: u64,
@@ -27,6 +29,16 @@ pub enum AboutUiCommand {
     WindowClosed,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SettingsUiEvent {
+    PointerMove { x: i32, y: i32 },
+    MouseDown { x: i32, y: i32 },
+    MouseUp { x: i32, y: i32 },
+    Wheel { delta: i16 },
+    Resized { width: u32, height: u32 },
+    Closed,
+}
+
 pub trait ToolsPlatform {
     fn open_debug_window(&mut self, title: &str) -> Result<(), String>;
 
@@ -42,6 +54,16 @@ pub trait ToolsPlatform {
     fn is_debug_window_open(&self) -> bool;
 
     fn open_about_window(&mut self, title: &str, content: &str) -> Result<(), String>;
+
+    fn open_settings_window(&mut self, title: &str, width: u32, height: u32) -> Result<(), String>;
+
+    fn present_settings_frame(&mut self, frame: &WidgetFrame, url_box_rect: Option<PixelRect>);
+
+    fn settings_url_input_text(&self) -> String;
+
+    fn set_settings_url_input_text(&self, text: &str);
+
+    fn is_settings_window_open(&self) -> bool;
 
     fn query_process_metrics(&mut self) -> ProcessMetrics;
 

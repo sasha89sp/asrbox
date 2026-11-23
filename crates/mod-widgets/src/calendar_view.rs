@@ -9,7 +9,10 @@ use crate::format::{
 };
 use crate::ics::{parse_ics_bytes, CalendarEvent, ParseOptions};
 use crate::render::{render_calendar_widget, DisplayRow, RenderView, WidgetHitTarget};
-use crate::storage::{load_cached_ics, CalendarWidgetConfig};
+use crate::storage::{
+    load_cached_ics, parse_calendar_source, parse_widget_config, save_widget_config,
+    CalendarWidgetConfig,
+};
 
 pub fn format_status_summary(
     cfg: &CalendarWidgetConfig,
@@ -86,8 +89,11 @@ pub fn build_calendar_frame(
     let scroll_offset = st.scroll_offset.min(total.saturating_sub(max_rows));
     let rows = build_display_rows(&st.all_events, cfg, now, scroll_offset);
     let is_loading = !st.pending_requests.is_empty();
+    let effective_err = st.status_error.as_deref().or(cfg
+        .commented_calendar_hint
+        .then_some("Уберите # перед calendar= или задайте URL в Настройках"));
     let (footer_text, footer_error) = build_footer_status(
-        st.status_error.as_deref(),
+        effective_err,
         st.busy_warning,
         !cfg.sources.is_empty(),
         is_loading,
@@ -283,4 +289,35 @@ fn setup_hint_rows() -> Vec<DisplayRow> {
             tooltip: "Расписание подгрузится в фоне без блокировки UI".to_owned(),
         },
     ]
+}
+
+pub fn uncomment_calendar_sources(path: &Path) -> Result<usize, String> {
+    let raw = std::fs::read_to_string(path).map_err(|e| format!("read widgets.cfg: {e}"))?;
+    let mut cfg = parse_widget_config(&raw);
+    let mut added = 0usize;
+    for line in raw.trim_start_matches('\u{FEFF}').lines() {
+        let trimmed = line.trim();
+        if !trimmed.starts_with('#') && !trimmed.starts_with(';') {
+            continue;
+        }
+        let clean = trimmed.trim_start_matches(['#', ';', ' ', '\t']);
+        let Some((k, v)) = clean.split_once('=') else {
+            continue;
+        };
+        let key = k.trim();
+        if (key == "calendar" || key == "url") && !v.contains("...") {
+            let idx = cfg.sources.len().saturating_add(1);
+            if let Some(src) = parse_calendar_source(v.trim(), idx) {
+                if !cfg.sources.iter().any(|s| s.url == src.url) {
+                    cfg.sources.push(src);
+                    added += 1;
+                }
+            }
+        }
+    }
+    if added > 0 {
+        cfg.commented_calendar_hint = false;
+        save_widget_config(path, &cfg)?;
+    }
+    Ok(added)
 }

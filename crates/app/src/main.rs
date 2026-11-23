@@ -1,10 +1,22 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 #[cfg(windows)]
+mod dock_drag;
+#[cfg(windows)]
+mod dock_ops;
+#[cfg(windows)]
 mod docks;
 mod selftest;
 #[cfg(windows)]
+mod settings_ctl;
+#[cfg(windows)]
+mod supervisor;
+#[cfg(windows)]
 mod tools;
+#[cfg(windows)]
+mod worker;
+#[cfg(windows)]
+mod worker_bus;
 
 use std::env;
 use std::process::ExitCode;
@@ -13,13 +25,17 @@ use std::process::ExitCode;
 use std::time::Instant;
 
 #[cfg(windows)]
+use asrbox_core::{load_modules_config, IsolationMode, ModuleId, ModulesConfig};
+#[cfg(windows)]
 use asrbox_mod_about::AppPaths;
 #[cfg(windows)]
 use asrbox_mod_debug::{DebugHub, LogLevel};
 #[cfg(windows)]
 use asrbox_mod_dock::{to_dock_point, to_dock_rect, DockEvent, Rect};
 #[cfg(windows)]
-use asrbox_mod_widgets::CalendarWidget;
+use asrbox_mod_settings::{SettingsTab, SettingsUiState};
+#[cfg(windows)]
+use asrbox_mod_widgets::{CalendarWidget, CALENDAR_WIDGET_ID};
 #[cfg(windows)]
 use asrbox_platform_api::{
     DockPlatform, IconProvider, PlatformEvent, ToolsPlatform, WidgetPlatform,
@@ -27,6 +43,8 @@ use asrbox_platform_api::{
 
 #[cfg(windows)]
 use crate::docks::DockManager;
+#[cfg(windows)]
+use crate::supervisor::ModuleSupervisor;
 #[cfg(windows)]
 use crate::tools::resolve_app_paths;
 
@@ -46,19 +64,45 @@ fn main() -> ExitCode {
     }
 
     let safe_mode = args.iter().any(|arg| arg == "--safe-mode");
-    match run_app(safe_mode) {
+    let force_inproc = args.iter().any(|arg| arg == "--inproc");
+    if let Some(worker_mod) = parse_arg_value(&args, "--worker") {
+        let parent_pid = parse_arg_value(&args, "--parent-pid")
+            .and_then(|v| v.parse::<u32>().ok())
+            .unwrap_or(0);
+        return match run_worker_mode(&worker_mod, parent_pid, safe_mode) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(_) => ExitCode::FAILURE,
+        };
+    }
+
+    match run_app(safe_mode, force_inproc) {
         Ok(()) => ExitCode::SUCCESS,
         Err(_) => ExitCode::FAILURE,
     }
 }
 
+fn parse_arg_value(args: &[String], flag: &str) -> Option<String> {
+    args.windows(2).find(|w| w[0] == flag).map(|w| w[1].clone())
+}
+
 #[cfg(not(windows))]
-fn run_app(_safe_mode: bool) -> Result<(), String> {
+fn run_worker_mode(_module: &str, _parent_pid: u32, _safe_mode: bool) -> Result<(), String> {
+    Err("asrbox workers run on Windows only".to_owned())
+}
+
+#[cfg(windows)]
+fn run_worker_mode(module: &str, parent_pid: u32, safe_mode: bool) -> Result<(), String> {
+    let id = ModuleId::from_str_id(module).ok_or_else(|| format!("unknown worker: {module}"))?;
+    worker::run_worker(id, parent_pid, safe_mode)
+}
+
+#[cfg(not(windows))]
+fn run_app(_safe_mode: bool, _force_inproc: bool) -> Result<(), String> {
     Err("asrbox UI runs on Windows only".to_owned())
 }
 
 #[cfg(windows)]
-fn run_app(safe_mode: bool) -> Result<(), String> {
+fn run_app(safe_mode: bool, force_inproc: bool) -> Result<(), String> {
     use asrbox_platform_windows::{SingleInstanceGuard, WindowsDockHost, WindowsIconProvider};
 
     let Some(_guard) = SingleInstanceGuard::acquire("Local\\asrbox_single_instance_v1")? else {
@@ -68,73 +112,111 @@ fn run_app(safe_mode: bool) -> Result<(), String> {
     let mut host = WindowsDockHost::new(&tooltip)?;
     let work_area = to_dock_rect(host.primary_work_area()?);
     let paths = resolve_app_paths();
-    let icons = WindowsIconProvider::new();
-    let mut ctrl = AppController::load(paths, work_area, icons, safe_mode)?;
-    ctrl.sync_all(&mut host)?;
+    let mut modules_cfg =
+        load_modules_config(&paths.data_dir.join("config").join("modules.cfg")).unwrap_or_default();
+    if force_inproc {
+        modules_cfg.isolation = IsolationMode::InProc;
+    }
+    let hwnd_raw = host.host_hwnd_raw();
+    host.set_supervisor_timer(true);
+    let mut ctrl = AppController::new(
+        paths,
+        work_area,
+        WindowsIconProvider::new,
+        modules_cfg,
+        hwnd_raw,
+        safe_mode,
+    );
+    ctrl.sync_runtime_modules(&mut host);
 
     host.run_event_loop(|platform, event| ctrl.handle_event(platform, event));
+    ctrl.supervisor.stop_all();
     Ok(())
 }
 
 #[cfg(windows)]
 pub(crate) struct AppController<I: IconProvider> {
     pub(crate) paths: AppPaths,
-    pub(crate) docks: DockManager<I>,
-    pub(crate) calendar: CalendarWidget,
+    pub(crate) work_area: Rect,
+    pub(crate) make_icons: fn() -> I,
+    pub(crate) modules_cfg: ModulesConfig,
+    pub(crate) supervisor: ModuleSupervisor,
+    pub(crate) docks: Option<DockManager<I>>,
+    pub(crate) calendar: Option<CalendarWidget>,
+    pub(crate) settings_ui: SettingsUiState,
     pub(crate) debug: DebugHub,
     pub(crate) safe_mode: bool,
 }
 
 #[cfg(windows)]
 impl<I: IconProvider> AppController<I> {
-    fn load(
+    fn new(
         paths: AppPaths,
         work_area: Rect,
-        icon_provider: I,
+        make_icons: fn() -> I,
+        modules_cfg: ModulesConfig,
+        host_hwnd_raw: usize,
         safe_mode: bool,
-    ) -> Result<Self, String> {
-        let docks = DockManager::load(
-            paths.docks_cfg.clone(),
-            APP_VERSION,
-            work_area,
-            icon_provider,
-        )?;
-        let calendar = CalendarWidget::load(paths.widgets_cfg.clone(), paths.cache_dir.clone());
+    ) -> Self {
         let debug = DebugHub::new(paths.logs_dir.clone());
-        Ok(Self {
+        let supervisor = ModuleSupervisor::new(host_hwnd_raw, safe_mode);
+        Self {
             paths,
-            docks,
-            calendar,
+            work_area,
+            make_icons,
+            modules_cfg,
+            supervisor,
+            docks: None,
+            calendar: None,
+            settings_ui: SettingsUiState::default(),
             debug,
             safe_mode,
-        })
+        }
     }
 
-    fn sync_all<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
+    pub(crate) fn sync_runtime_modules<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
         &mut self,
         host: &mut H,
-    ) -> Result<(), String> {
+    ) {
         let now = host.local_time_now();
-        self.debug.log(
-            now,
-            LogLevel::Info,
-            "app",
-            format!(
-                "Запуск asrbox v{APP_VERSION} (portable: {}, доков: {}, календарей: {})",
-                self.paths.data_dir.display(),
-                self.docks.dock_count(),
-                self.calendar.source_count()
-            ),
-        );
-        self.docks.sync_windows(host, self.safe_mode)?;
-        self.calendar.sync_window(host, self.safe_mode)?;
-        self.debug.log(
-            now,
-            LogLevel::Info,
-            "widgets",
-            format!("Календарь: {}", self.calendar.status_summary()),
-        );
-        Ok(())
+        for msg in self.supervisor.sync_with_config(&self.modules_cfg) {
+            self.log_tagged(host, "app", msg);
+        }
+        let want_inproc_dock =
+            self.modules_cfg.isolation == IsolationMode::InProc && self.modules_cfg.dock_enabled;
+        if want_inproc_dock && self.docks.is_none() {
+            if let Ok(mut dm) = DockManager::load(
+                self.paths.docks_cfg.clone(),
+                APP_VERSION,
+                self.work_area,
+                (self.make_icons)(),
+                host,
+            ) {
+                let _ = dm.sync_windows(host, self.safe_mode);
+                self.docks = Some(dm);
+            }
+        } else if !want_inproc_dock {
+            if let Some(mut dm) = self.docks.take() {
+                dm.destroy_all_windows(host);
+            }
+        }
+
+        let want_inproc_cal =
+            self.modules_cfg.isolation == IsolationMode::InProc && self.modules_cfg.widgets_enabled;
+        if want_inproc_cal && self.calendar.is_none() {
+            let mut cal =
+                CalendarWidget::load(self.paths.widgets_cfg.clone(), self.paths.cache_dir.clone());
+            let _ = cal.sync_window(host, self.safe_mode);
+            self.debug.log(
+                now,
+                LogLevel::Info,
+                "widgets",
+                format!("Календарь (inproc): {}", cal.status_summary()),
+            );
+            self.calendar = Some(cal);
+        } else if !want_inproc_cal && self.calendar.take().is_some() {
+            let _ = host.destroy_widget_window(CALENDAR_WIDGET_ID);
+        }
     }
 
     fn handle_event<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
@@ -144,24 +226,25 @@ impl<I: IconProvider> AppController<I> {
     ) {
         match ev {
             PlatformEvent::TrayContextMenu { screen_point } => self.on_tray(host, screen_point),
+            PlatformEvent::SupervisorTick => self.poll_supervisor(host),
+            PlatformEvent::SettingsEvent(sev) => self.on_settings_event(host, sev),
             PlatformEvent::DebugWindowTick => self.refresh_debug_ui(host),
             PlatformEvent::DebugCommand(cmd) => self.on_debug_cmd(host, cmd),
             PlatformEvent::AboutCommand(cmd) => self.on_about_cmd(host, cmd),
             PlatformEvent::DisplayChanged { work_area } => {
-                self.debug.record_event("platform", "display_changed");
-                self.docks.on_display(host, work_area);
-                self.debug.log(
-                    host.local_time_now(),
-                    LogLevel::Info,
-                    "platform",
-                    format!("Изменение экрана: {}x{}", work_area.width, work_area.height),
-                );
+                self.work_area = to_dock_rect(work_area);
+                if let Some(docks) = self.docks.as_mut() {
+                    docks.on_display(host, work_area);
+                }
             }
             ev @ (PlatformEvent::PointerMove { .. }
             | PlatformEvent::PointerLeave { .. }
+            | PlatformEvent::LeftButtonDown { .. }
+            | PlatformEvent::DockDragMove { .. }
+            | PlatformEvent::LeftButtonUp { .. }
             | PlatformEvent::AnimationTick { .. }
+            | PlatformEvent::RunningPollTick
             | PlatformEvent::DropFiles { .. }
-            | PlatformEvent::LeftClick { .. }
             | PlatformEvent::RightClick { .. }) => self.handle_dock_event(host, ev),
             other => self.handle_widget_event(host, other),
         }
@@ -170,171 +253,97 @@ impl<I: IconProvider> AppController<I> {
         }
     }
 
-    fn handle_dock_event<H: DockPlatform + WidgetPlatform>(
+    fn handle_dock_event<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
         &mut self,
         host: &mut H,
         ev: PlatformEvent,
     ) {
-        match ev {
-            PlatformEvent::PointerMove { dock_id, point } => {
-                self.step_dock_timed(
-                    host,
-                    dock_id,
-                    "pointer_move",
-                    DockEvent::PointerMove(to_dock_point(point)),
-                );
-            }
-            PlatformEvent::PointerLeave { dock_id } => {
-                self.step_dock_timed(host, dock_id, "pointer_leave", DockEvent::PointerLeave);
-            }
-            PlatformEvent::AnimationTick { dock_id, dt_ms } => {
-                self.step_dock_timed(
-                    host,
-                    dock_id,
-                    "anim_tick",
-                    DockEvent::AnimationTick { dt_ms },
-                );
-            }
-            PlatformEvent::DropFiles {
-                dock_id,
-                paths,
-                point,
-            } => {
-                self.debug.record_event("dock", "drop_files");
-                let added = self
-                    .docks
-                    .on_drop(host, dock_id, paths, to_dock_point(point));
-                self.debug.log(
-                    host.local_time_now(),
-                    LogLevel::Info,
-                    "dock",
-                    format!("dock[{dock_id}] добавлено значков: {added}"),
-                );
-            }
-            PlatformEvent::LeftClick { dock_id, point } => {
-                self.debug.record_event("dock", "left_click");
-                if let Some(msg) = self
-                    .docks
-                    .on_left_click(host, dock_id, to_dock_point(point))
-                {
-                    self.log_tagged(host, "dock", msg);
-                }
-            }
-            PlatformEvent::RightClick {
-                dock_id,
-                point,
-                screen_point,
-            } => {
-                self.debug.record_event("dock", "right_click");
-                let pt = to_dock_point(point);
-                if let Some(msg) =
-                    self.docks
-                        .on_right_click(host, dock_id, pt, screen_point, &mut self.safe_mode)
-                {
-                    self.log_tagged(host, "dock", msg);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    fn step_dock_timed<H: DockPlatform>(
-        &mut self,
-        host: &mut H,
-        dock_id: u64,
-        name: &'static str,
-        ev: DockEvent,
-    ) {
         let t0 = Instant::now();
-        self.debug.record_event("dock", name);
-        if self.docks.step_dock(host, dock_id, ev) {
-            let us = u64::try_from(t0.elapsed().as_micros()).unwrap_or(0);
-            self.debug.record_frame("dock", us);
+        let mut open_settings = false;
+        let mut log_msg: Option<String> = None;
+        {
+            let Some(docks) = self.docks.as_mut() else {
+                return;
+            };
+            match ev {
+                PlatformEvent::PointerMove { dock_id, point } => {
+                    self.debug.record_event("dock", "pointer_move");
+                    if docks.step_dock(host, dock_id, DockEvent::PointerMove(to_dock_point(point)))
+                    {
+                        self.record_frame("dock", t0);
+                    }
+                }
+                PlatformEvent::PointerLeave { dock_id } => {
+                    self.debug.record_event("dock", "pointer_leave");
+                    if docks.step_dock(host, dock_id, DockEvent::PointerLeave) {
+                        self.record_frame("dock", t0);
+                    }
+                }
+                PlatformEvent::AnimationTick { dock_id, dt_ms } => {
+                    if docks.step_dock(host, dock_id, DockEvent::AnimationTick { dt_ms }) {
+                        self.record_frame("dock", t0);
+                    }
+                }
+                PlatformEvent::RunningPollTick => {
+                    if docks.refresh_running_apps(host) {
+                        self.record_frame("dock", t0);
+                    }
+                }
+                PlatformEvent::LeftButtonDown {
+                    dock_id,
+                    point,
+                    screen_point,
+                } => {
+                    docks.on_left_down(dock_id, to_dock_point(point), screen_point);
+                }
+                PlatformEvent::DockDragMove { screen_point, .. } => {
+                    docks.on_drag_move(host, screen_point);
+                }
+                PlatformEvent::LeftButtonUp { screen_point, .. } => {
+                    if let Some(m) = docks.on_left_up(host, screen_point) {
+                        if m == "open_settings" {
+                            open_settings = true;
+                        } else {
+                            log_msg = Some(m);
+                        }
+                    }
+                }
+                PlatformEvent::RightClick {
+                    dock_id,
+                    point,
+                    screen_point,
+                } => {
+                    if let Some(m) = docks.on_right_click(
+                        host,
+                        dock_id,
+                        to_dock_point(point),
+                        screen_point,
+                        &mut self.safe_mode,
+                    ) {
+                        if m == "open_settings" {
+                            open_settings = true;
+                        } else {
+                            log_msg = Some(m);
+                        }
+                    }
+                }
+                PlatformEvent::DropFiles {
+                    dock_id,
+                    paths,
+                    point,
+                } => {
+                    let added = docks.on_drop(host, dock_id, paths, to_dock_point(point));
+                    log_msg = Some(format!("dock[{dock_id}] добавлено значков: {added}"));
+                }
+                _ => {}
+            }
         }
-    }
-
-    fn handle_widget_event<H: WidgetPlatform>(&mut self, host: &mut H, ev: PlatformEvent) {
-        let t0 = Instant::now();
-        match ev {
-            PlatformEvent::WidgetPointerMove { point, .. } => {
-                self.debug.record_event("widgets", "pointer_move");
-                self.calendar.on_pointer_move(host, point);
-            }
-            PlatformEvent::WidgetPointerLeave { .. } => {
-                self.debug.record_event("widgets", "pointer_leave");
-                self.calendar.on_pointer_leave(host);
-            }
-            PlatformEvent::WidgetLeftClick { point, .. } => {
-                self.debug.record_event("widgets", "left_click");
-                let msg = self.calendar.on_left_click(host, point);
-                if !msg.is_empty() {
-                    self.log_tagged(host, "widgets", msg);
-                }
-                self.record_widget_frame(t0);
-            }
-            PlatformEvent::WidgetRightClick { screen_point, .. } => {
-                self.debug.record_event("widgets", "right_click");
-                let msg = self.calendar.on_right_click(host, screen_point);
-                if !msg.is_empty() {
-                    self.log_tagged(host, "widgets", msg);
-                }
-            }
-            PlatformEvent::WidgetWheel { delta, .. } => {
-                self.debug.record_event("widgets", "wheel");
-                self.calendar.on_wheel(host, delta);
-                self.record_widget_frame(t0);
-            }
-            PlatformEvent::WidgetMoved { x, y, .. } => {
-                self.debug.record_event("widgets", "moved");
-                self.calendar.on_moved(x, y);
-                self.debug.log(
-                    host.local_time_now(),
-                    LogLevel::Trace,
-                    "widgets",
-                    format!("Перемещён виджет: ({x}, {y})"),
-                );
-            }
-            PlatformEvent::WidgetMinuteTick { .. } => {
-                self.debug.record_event("widgets", "minute_tick");
-                self.calendar.on_minute_tick(host);
-            }
-            PlatformEvent::WidgetRefreshTick { .. } => {
-                self.debug.record_event("widgets", "refresh_tick");
-                self.calendar.on_refresh_tick(host);
-                self.debug.log(
-                    host.local_time_now(),
-                    LogLevel::Info,
-                    "http",
-                    "Автообновление .ics",
-                );
-            }
-            PlatformEvent::HttpFetchDone { request_id, result } => {
-                self.debug.record_event("http", "fetch_done");
-                if let Some((is_err, msg)) = self.calendar.on_http_done(host, request_id, result) {
-                    let lvl = if is_err {
-                        LogLevel::Error
-                    } else {
-                        LogLevel::Info
-                    };
-                    self.debug.log(host.local_time_now(), lvl, "http", msg);
-                }
-                self.record_widget_frame(t0);
-            }
-            _ => {}
+        if open_settings {
+            self.open_settings_tab(host, SettingsTab::Dock);
         }
-    }
-
-    fn record_widget_frame(&mut self, t0: Instant) {
-        let us = u64::try_from(t0.elapsed().as_micros()).unwrap_or(0);
-        self.debug.record_frame("widgets", us);
-    }
-
-    fn log_tagged<H: WidgetPlatform>(&mut self, host: &H, module: &'static str, msg: String) {
-        let lvl = if msg.starts_with("error:") {
-            LogLevel::Error
-        } else {
-            LogLevel::Info
-        };
-        self.debug.log(host.local_time_now(), lvl, module, msg);
+        if let Some(m) = log_msg {
+            self.log_tagged(host, "dock", m);
+            self.render_settings_ui(host);
+        }
     }
 }

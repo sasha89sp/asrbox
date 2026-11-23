@@ -1,11 +1,21 @@
 #[cfg(windows)]
+mod dock_menu;
+#[cfg(windows)]
 mod dock_proc;
+#[cfg(windows)]
+mod dock_win;
 #[cfg(windows)]
 mod http;
 #[cfg(windows)]
 mod icons;
 #[cfg(windows)]
+mod job;
+#[cfg(windows)]
 mod metrics;
+#[cfg(windows)]
+mod running;
+#[cfg(windows)]
+mod settings_proc;
 #[cfg(windows)]
 mod shell;
 #[cfg(windows)]
@@ -26,7 +36,9 @@ mod window;
 #[cfg(windows)]
 pub use icons::WindowsIconProvider;
 #[cfg(windows)]
-pub use window::WindowsDockHost;
+pub use job::{is_process_alive, JobObject};
+#[cfg(windows)]
+pub use window::{wake_host_window, WindowsDockHost};
 
 #[cfg(windows)]
 use std::ffi::c_void;

@@ -1,6 +1,8 @@
 pub mod config;
 pub mod layout;
+mod layout_ops;
 pub mod render;
+mod render_ops;
 pub mod state;
 pub mod storage;
 
@@ -10,11 +12,14 @@ use asrbox_platform_api::{DockMenuAction, DockMenuState, IconRequest, PixelPoint
 
 pub use config::{
     DockAlignment, DockConfig, DockConfigError, DockEdge, DockId, DockItem, DockItemKind,
-    DockRegistry, HoverZoomConfig, HoverZoomMode, IconSource, SETTINGS_SLOT_ID,
+    DockRegistry, HoverZoomConfig, HoverZoomMode, IconSource, DEFAULT_DOCK_OPACITY,
+    DRAG_HANDLE_SLOT_ID, MAX_DOCK_OPACITY, MIN_DOCK_OPACITY, SETTINGS_SLOT_ID,
 };
-pub use layout::{compute_layout, drop_insert_index, hit_test_item, hit_test_slot};
-pub use layout::{DockLayout, DockSlotLayout, HoverVisualState, Point, Rect, SlotKind};
-pub use render::render_dock_frame;
+pub use layout::{
+    apply_dragged_window_pos, compute_layout, drop_insert_index, hit_test_item, hit_test_slot,
+    DockLayout, DockSlotLayout, HoverVisualState, Point, Rect, SlotKind,
+};
+pub use render::{render_dock_frame, DockRenderOverlay};
 pub use state::{DockEvent, DockInstance, DockMetrics, DockStepEffect};
 pub use storage::{load_docks_from_file, parse_docks, save_docks_to_file, serialize_docks};
 
@@ -44,9 +49,13 @@ pub fn build_menu_state(dock: &DockInstance, pt: Point, can_remove: bool) -> Doc
     };
     DockMenuState {
         edge_code,
-        is_centered: matches!(cfg.alignment, DockAlignment::Center),
+        is_centered: matches!(cfg.alignment, DockAlignment::Center) && cfg.free_pos.is_none(),
         icon_size_px: cfg.icon_size_px,
+        opacity_percent: cfg.opacity_percent,
+        locked: cfg.locked,
         hover_zoom_enabled: cfg.hover_zoom.enabled,
+        show_running_indicator: cfg.show_running_indicator,
+        focus_running_window: cfg.focus_running_window,
         hovered_item_id,
         hovered_is_separator,
         show_settings_button: cfg.show_settings_button,
@@ -60,17 +69,40 @@ pub fn apply_menu_action(
     picked_icon: Option<PathBuf>,
 ) -> bool {
     match action {
-        DockMenuAction::SetEdgeLeft => cfg.edge = DockEdge::Left,
-        DockMenuAction::SetEdgeRight => cfg.edge = DockEdge::Right,
-        DockMenuAction::SetEdgeTop => cfg.edge = DockEdge::Top,
-        DockMenuAction::SetEdgeBottom => cfg.edge = DockEdge::Bottom,
-        DockMenuAction::AlignCenter => cfg.alignment = DockAlignment::Center,
-        DockMenuAction::OffsetMinus => shift_align(cfg, -80),
-        DockMenuAction::OffsetPlus => shift_align(cfg, 80),
+        DockMenuAction::SetEdgeLeft => {
+            cfg.edge = DockEdge::Left;
+            cfg.free_pos = None;
+        }
+        DockMenuAction::SetEdgeRight => {
+            cfg.edge = DockEdge::Right;
+            cfg.free_pos = None;
+        }
+        DockMenuAction::SetEdgeTop => {
+            cfg.edge = DockEdge::Top;
+            cfg.free_pos = None;
+        }
+        DockMenuAction::SetEdgeBottom => {
+            cfg.edge = DockEdge::Bottom;
+            cfg.free_pos = None;
+        }
+        DockMenuAction::AlignCenter => {
+            cfg.alignment = DockAlignment::Center;
+            cfg.free_pos = None;
+        }
+        DockMenuAction::ToggleLock => cfg.locked = !cfg.locked,
+        DockMenuAction::SetOpacity(pct) => {
+            cfg.opacity_percent = pct.clamp(MIN_DOCK_OPACITY, MAX_DOCK_OPACITY);
+        }
         DockMenuAction::IconSizeSmall => cfg.icon_size_px = 40,
         DockMenuAction::IconSizeMedium => cfg.icon_size_px = 48,
         DockMenuAction::IconSizeLarge => cfg.icon_size_px = 64,
         DockMenuAction::ToggleHoverZoom => cfg.hover_zoom.enabled = !cfg.hover_zoom.enabled,
+        DockMenuAction::ToggleRunningIndicator => {
+            cfg.show_running_indicator = !cfg.show_running_indicator;
+        }
+        DockMenuAction::ToggleFocusRunning => {
+            cfg.focus_running_window = !cfg.focus_running_window;
+        }
         DockMenuAction::ChooseItemIcon(id) => {
             let Some(path) = picked_icon else {
                 return false;
@@ -92,20 +124,13 @@ pub fn apply_menu_action(
         DockMenuAction::ToggleSettingsButton => {
             cfg.show_settings_button = !cfg.show_settings_button;
         }
-        DockMenuAction::OpenDockConfig
+        DockMenuAction::OpenSettings
+        | DockMenuAction::OpenDockConfig
         | DockMenuAction::ReloadDockConfig
         | DockMenuAction::AddNewDock
         | DockMenuAction::RemoveDock => return false,
     }
     true
-}
-
-fn shift_align(cfg: &mut DockConfig, delta: i32) {
-    let base = match cfg.alignment {
-        DockAlignment::Center => 400,
-        DockAlignment::Offset(px) => px,
-    };
-    cfg.alignment = DockAlignment::Offset(base.saturating_add(delta).max(0));
 }
 
 pub fn to_dock_rect(r: PixelRect) -> Rect {

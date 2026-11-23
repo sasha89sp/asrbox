@@ -1,8 +1,9 @@
 pub mod tools;
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-pub use tools::{AboutUiCommand, DebugUiCommand, ProcessMetrics, ToolsPlatform};
+pub use tools::{AboutUiCommand, DebugUiCommand, ProcessMetrics, SettingsUiEvent, ToolsPlatform};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct PixelPoint {
@@ -120,6 +121,7 @@ pub struct WidgetMenuState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WidgetMenuAction {
     Refresh,
+    OpenSettings,
     OpenConfig,
     SetLayerWallpaper,
     SetLayerNormal,
@@ -147,7 +149,11 @@ pub struct DockMenuState {
     pub edge_code: u8,
     pub is_centered: bool,
     pub icon_size_px: u16,
+    pub opacity_percent: u8,
+    pub locked: bool,
     pub hover_zoom_enabled: bool,
+    pub show_running_indicator: bool,
+    pub focus_running_window: bool,
     pub hovered_item_id: Option<u64>,
     pub hovered_is_separator: bool,
     pub show_settings_button: bool,
@@ -161,17 +167,20 @@ pub enum DockMenuAction {
     SetEdgeTop,
     SetEdgeBottom,
     AlignCenter,
-    OffsetMinus,
-    OffsetPlus,
+    ToggleLock,
+    SetOpacity(u8),
     IconSizeSmall,
     IconSizeMedium,
     IconSizeLarge,
     ToggleHoverZoom,
+    ToggleRunningIndicator,
+    ToggleFocusRunning,
     ChooseItemIcon(u64),
     ResetItemIcon(u64),
     RemoveItem(u64),
     AddSeparator,
     ToggleSettingsButton,
+    OpenSettings,
     OpenDockConfig,
     ReloadDockConfig,
     AddNewDock,
@@ -186,12 +195,23 @@ pub struct TrayMenuEntry {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TrayModuleFlags {
+    pub dock_module_enabled: bool,
+    pub widgets_module_enabled: bool,
+    pub calendar_visible: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrayAction {
+    OpenSettings,
+    ToggleDockModule,
     AddDock,
     ToggleDock(u64),
     RemoveDock(u64),
     OpenDockConfig,
+    ToggleWidgetsModule,
     ToggleCalendarWidget,
+    RefreshCalendarWidget,
     OpenWidgetConfig,
     OpenDebugWindow,
     OpenAboutWindow,
@@ -207,9 +227,20 @@ pub enum PlatformEvent {
     PointerLeave {
         dock_id: u64,
     },
-    LeftClick {
+    LeftButtonDown {
         dock_id: u64,
         point: PixelPoint,
+        screen_point: PixelPoint,
+    },
+    DockDragMove {
+        dock_id: u64,
+        point: PixelPoint,
+        screen_point: PixelPoint,
+    },
+    LeftButtonUp {
+        dock_id: u64,
+        point: PixelPoint,
+        screen_point: PixelPoint,
     },
     RightClick {
         dock_id: u64,
@@ -220,6 +251,7 @@ pub enum PlatformEvent {
         dock_id: u64,
         dt_ms: u16,
     },
+    RunningPollTick,
     DropFiles {
         dock_id: u64,
         paths: Vec<PathBuf>,
@@ -268,6 +300,8 @@ pub enum PlatformEvent {
     DebugWindowTick,
     DebugCommand(DebugUiCommand),
     AboutCommand(AboutUiCommand),
+    SettingsEvent(SettingsUiEvent),
+    SupervisorTick,
 }
 
 pub trait IconProvider {
@@ -276,51 +310,43 @@ pub trait IconProvider {
 
 pub trait DockPlatform {
     fn primary_work_area(&self) -> Result<PixelRect, String>;
-
     fn create_dock_window(
         &mut self,
         dock_id: u64,
         title: &str,
         rect: PixelRect,
     ) -> Result<(), String>;
-
     fn destroy_dock_window(&mut self, dock_id: u64) -> Result<(), String>;
-
     fn present_dock_frame(
         &mut self,
         dock_id: u64,
         rect: PixelRect,
         frame: &BgraFrame,
     ) -> Result<(), String>;
-
     fn set_animation_timer(&mut self, dock_id: u64, active: bool) -> Result<(), String>;
-
+    fn set_running_poll_timer(&mut self, active: bool) -> Result<(), String>;
+    fn query_running_exe_names(&self) -> HashSet<String>;
+    fn resolve_target_exe_name(&self, path: &Path) -> Option<String>;
     fn show_dock_menu(
         &mut self,
         dock_id: u64,
         screen_point: PixelPoint,
         state: &DockMenuState,
     ) -> Result<Option<DockMenuAction>, String>;
-
     fn show_tray_menu(
         &mut self,
         screen_point: PixelPoint,
         docks: &[TrayMenuEntry],
-        calendar_visible: bool,
+        flags: TrayModuleFlags,
     ) -> Result<Option<TrayAction>, String>;
-
     fn pick_icon_file(&mut self) -> Result<Option<PathBuf>, String>;
-
-    fn launch_target(&self, path: &Path) -> Result<(), String>;
-
+    fn activate_or_launch_target(&self, path: &Path, focus_running: bool) -> Result<bool, String>;
     fn open_text_file(&self, path: &Path) -> Result<(), String>;
-
     fn request_quit(&mut self);
 }
 
 pub trait WidgetPlatform {
     fn local_time_now(&self) -> LocalDateTime;
-
     fn create_widget_window(
         &mut self,
         widget_id: u64,
@@ -329,37 +355,28 @@ pub trait WidgetPlatform {
         layer: WidgetLayer,
         drag_header_h: i32,
     ) -> Result<(), String>;
-
     fn destroy_widget_window(&mut self, widget_id: u64) -> Result<(), String>;
-
     fn set_widget_layer(&mut self, widget_id: u64, layer: WidgetLayer) -> Result<(), String>;
-
     fn present_widget_frame(
         &mut self,
         widget_id: u64,
         rect: PixelRect,
         frame: &WidgetFrame,
     ) -> Result<(), String>;
-
     fn set_widget_tooltip(&mut self, widget_id: u64, text: Option<&str>) -> Result<(), String>;
-
     fn set_widget_timers(
         &mut self,
         widget_id: u64,
         refresh_sec: u32,
         minute_tick: bool,
     ) -> Result<(), String>;
-
     fn show_widget_menu(
         &mut self,
         widget_id: u64,
         screen_point: PixelPoint,
         state: &WidgetMenuState,
     ) -> Result<Option<WidgetMenuAction>, String>;
-
     fn start_http_get(&mut self, request_id: u64, url: &str) -> Result<(), String>;
-
     fn open_url(&self, url: &str) -> Result<(), String>;
-
     fn open_text_file(&self, path: &Path) -> Result<(), String>;
 }

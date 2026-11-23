@@ -1,20 +1,24 @@
 #![cfg(windows)]
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use asrbox_mod_dock::{
-    apply_menu_action, build_menu_state, hit_test_slot, icon_request_for_item,
-    load_docks_from_file, render_dock_frame, save_docks_to_file, to_dock_rect, to_pixel_rect,
-    DockConfig, DockEdge, DockEvent, DockInstance, Point, Rect, SlotKind,
+    build_menu_state, icon_request_for_item, load_docks_from_file, save_docks_to_file,
+    to_dock_rect, to_pixel_rect, DockConfig, DockEdge, DockEvent, DockInstance, Point, Rect,
 };
 use asrbox_platform_api::{
-    DockMenuAction, DockPlatform, IconProvider, PixelPoint, PixelRect, RgbaImage, TrayMenuEntry,
+    DockPlatform, IconProvider, PixelPoint, PixelRect, RgbaImage, TrayMenuEntry,
 };
+
+use crate::dock_drag::{DockDragState, DragReleaseOutcome};
+use crate::dock_ops::{build_runtimes, present_dock};
 
 pub struct DockRuntime {
     pub instance: DockInstance,
     pub icons: HashMap<u64, RgbaImage>,
+    pub resolved_exes: HashMap<u64, String>,
+    pub running_items: HashSet<u64>,
     pub window_open: bool,
     pub timer_active: bool,
 }
@@ -22,10 +26,12 @@ pub struct DockRuntime {
 pub struct DockManager<I: IconProvider> {
     config_path: PathBuf,
     app_version: &'static str,
-    work_area: Rect,
-    icon_provider: I,
-    docks: Vec<DockRuntime>,
+    pub(crate) work_area: Rect,
+    pub(crate) icon_provider: I,
+    pub(crate) docks: Vec<DockRuntime>,
     next_dock_id: u64,
+    pub(crate) drag: DockDragState,
+    pub(crate) running_timer_on: bool,
 }
 
 impl<I: IconProvider> DockManager<I> {
@@ -34,13 +40,14 @@ impl<I: IconProvider> DockManager<I> {
         app_version: &'static str,
         work_area: Rect,
         icon_provider: I,
+        host: &dyn DockPlatform,
     ) -> Result<Self, String> {
         let mut configs = load_docks_from_file(&config_path).unwrap_or_default();
         if configs.is_empty() {
             configs.push(DockConfig::new(1, "Док 1"));
         }
         let max_id = configs.iter().map(|c| c.id).max().unwrap_or(0);
-        let docks = build_runtimes(configs, work_area, &icon_provider)?;
+        let docks = build_runtimes(configs, work_area, &icon_provider, host)?;
         Ok(Self {
             config_path,
             app_version,
@@ -48,11 +55,27 @@ impl<I: IconProvider> DockManager<I> {
             icon_provider,
             docks,
             next_dock_id: max_id.saturating_add(1),
+            drag: DockDragState::default(),
+            running_timer_on: false,
         })
     }
 
     pub fn dock_count(&self) -> usize {
         self.docks.len()
+    }
+
+    pub fn destroy_all_windows(&mut self, host: &mut dyn DockPlatform) {
+        for dock in &mut self.docks {
+            if dock.window_open {
+                let _ = host.destroy_dock_window(dock.instance.config().id);
+                dock.window_open = false;
+                dock.timer_active = false;
+            }
+        }
+        if self.running_timer_on {
+            self.running_timer_on = false;
+            let _ = host.set_running_poll_timer(false);
+        }
     }
 
     pub fn sync_windows(
@@ -69,13 +92,15 @@ impl<I: IconProvider> DockManager<I> {
                     host.create_dock_window(id, &dock.instance.config().name, rect)?;
                     dock.window_open = true;
                 }
-                present_dock(host, dock)?;
+                present_dock(host, dock, self.drag.overlay_for(dock))?;
             } else if dock.window_open {
                 let _ = host.destroy_dock_window(id);
                 dock.window_open = false;
                 dock.timer_active = false;
             }
         }
+        self.sync_running_timer(host);
+        self.refresh_running_apps(host);
         Ok(())
     }
 
@@ -101,10 +126,39 @@ impl<I: IconProvider> DockManager<I> {
             }
         }
         let max_id = configs.iter().map(|c| c.id).max().unwrap_or(0);
-        self.docks = build_runtimes(configs, self.work_area, &self.icon_provider)?;
+        self.docks = build_runtimes(configs, self.work_area, &self.icon_provider, host)?;
         self.next_dock_id = max_id.saturating_add(1);
         self.sync_windows(host, safe_mode)?;
         Ok(self.docks.len())
+    }
+
+    pub fn refresh_running_apps(&mut self, host: &mut dyn DockPlatform) -> bool {
+        if !self
+            .docks
+            .iter()
+            .any(|d| d.window_open && d.instance.config().show_running_indicator)
+        {
+            return false;
+        }
+        let active = host.query_running_exe_names();
+        let mut changed = false;
+        for dock in &mut self.docks {
+            if !dock.window_open || !dock.instance.config().show_running_indicator {
+                continue;
+            }
+            let next: HashSet<u64> = dock
+                .resolved_exes
+                .iter()
+                .filter(|(_, exe)| active.contains(*exe))
+                .map(|(id, _)| *id)
+                .collect();
+            if next != dock.running_items {
+                dock.running_items = next;
+                let _ = present_dock(host, dock, self.drag.overlay_for(dock));
+                changed = true;
+            }
+        }
+        changed
     }
 
     pub fn step_dock(&mut self, host: &mut dyn DockPlatform, id: u64, ev: DockEvent) -> bool {
@@ -117,19 +171,57 @@ impl<I: IconProvider> DockManager<I> {
             let _ = host.set_animation_timer(id, effect.animation_active);
         }
         if effect.needs_redraw && dock.window_open {
-            let _ = present_dock(host, dock);
+            let _ = present_dock(host, dock, self.drag.overlay_for(dock));
             return true;
         }
         false
     }
 
+    pub fn on_left_down(&mut self, id: u64, local_pt: Point, screen_pt: PixelPoint) {
+        self.drag.on_left_down(&self.docks, id, local_pt, screen_pt);
+    }
+
+    pub fn on_drag_move(&mut self, host: &mut dyn DockPlatform, screen_pt: PixelPoint) {
+        if self
+            .drag
+            .on_drag_move(&mut self.docks, self.work_area, screen_pt)
+        {
+            self.redraw_open_docks(host);
+        }
+    }
+
+    pub fn on_left_up(
+        &mut self,
+        host: &mut dyn DockPlatform,
+        screen_pt: PixelPoint,
+    ) -> Option<String> {
+        match self.drag.on_left_up(&mut self.docks, host, screen_pt) {
+            DragReleaseOutcome::None => {
+                self.redraw_open_docks(host);
+                None
+            }
+            DragReleaseOutcome::Mutated(msg) => {
+                self.redraw_open_docks(host);
+                self.persist();
+                self.refresh_running_apps(host);
+                Some(msg)
+            }
+            DragReleaseOutcome::ClickSlot {
+                dock_id,
+                slot_kind,
+                item_id,
+            } => self.handle_slot_click(host, dock_id, slot_kind, item_id),
+        }
+    }
+
     pub fn on_display(&mut self, host: &mut dyn DockPlatform, area: PixelRect) {
         self.work_area = to_dock_rect(area);
         for dock in &mut self.docks {
-            let ev = DockEvent::WorkAreaChanged(self.work_area);
-            let effect = dock.instance.handle_event(ev);
+            let effect = dock
+                .instance
+                .handle_event(DockEvent::WorkAreaChanged(self.work_area));
             if effect.needs_redraw && dock.window_open {
-                let _ = present_dock(host, dock);
+                let _ = present_dock(host, dock, self.drag.overlay_for(dock));
             }
         }
     }
@@ -144,49 +236,39 @@ impl<I: IconProvider> DockManager<I> {
         let Some(dock) = self.docks.iter_mut().find(|d| d.instance.config().id == id) else {
             return 0;
         };
-        let ev = DockEvent::DropFiles {
+        let effect = dock.instance.handle_event(DockEvent::DropFiles {
             paths,
             local_point: pt,
-        };
-        let effect = dock.instance.handle_event(ev);
+        });
         let added = effect.added_item_ids.len();
         if added == 0 {
             return 0;
         }
         for item_id in &effect.added_item_ids {
-            let items = &dock.instance.config().items;
-            if let Some(item) = items.iter().find(|i| i.id == *item_id && !i.is_separator()) {
-                let req = icon_request_for_item(item);
-                if let Ok(img) = self.icon_provider.load_icon(&req, 128) {
+            if let Some(item) = dock
+                .instance
+                .config()
+                .items
+                .iter()
+                .find(|i| i.id == *item_id && !i.is_separator())
+            {
+                if let Ok(img) = self
+                    .icon_provider
+                    .load_icon(&icon_request_for_item(item), 128)
+                {
                     dock.icons.insert(*item_id, img);
+                }
+                if let Some(exe) = host.resolve_target_exe_name(&item.target) {
+                    dock.resolved_exes.insert(*item_id, exe);
                 }
             }
         }
         if effect.needs_redraw && dock.window_open {
-            let _ = present_dock(host, dock);
+            let _ = present_dock(host, dock, self.drag.overlay_for(dock));
         }
         self.persist();
+        self.refresh_running_apps(host);
         added
-    }
-
-    pub fn on_left_click(&self, host: &dyn DockPlatform, id: u64, pt: Point) -> Option<String> {
-        let dock = self.docks.iter().find(|d| d.instance.config().id == id)?;
-        let slot = hit_test_slot(dock.instance.layout(), pt)?;
-        match slot.kind {
-            SlotKind::SettingsButton => match self.open_config_file(host) {
-                Ok(()) => Some(format!("dock[{id}] click: open docks.cfg")),
-                Err(err) => Some(format!("error: dock[{id}] open docks.cfg: {err}")),
-            },
-            SlotKind::Shortcut => {
-                let items = &dock.instance.config().items;
-                let item = items.iter().find(|i| i.id == slot.item_id)?;
-                match host.launch_target(&item.target) {
-                    Ok(()) => Some(format!("dock[{id}] launch: {}", item.label)),
-                    Err(err) => Some(format!("error: dock[{id}] launch {}: {err}", item.label)),
-                }
-            }
-            SlotKind::Separator => None,
-        }
     }
 
     pub fn on_right_click(
@@ -232,6 +314,8 @@ impl<I: IconProvider> DockManager<I> {
             self.docks.push(DockRuntime {
                 instance,
                 icons: HashMap::new(),
+                resolved_exes: HashMap::new(),
+                running_items: HashSet::new(),
                 window_open: false,
                 timer_active: false,
             });
@@ -243,11 +327,8 @@ impl<I: IconProvider> DockManager<I> {
 
     pub fn toggle_dock(&mut self, host: &mut dyn DockPlatform, id: u64, safe_mode: bool) {
         if let Some(dock) = self.docks.iter_mut().find(|d| d.instance.config().id == id) {
-            let mut cfg = dock.instance.config().clone();
-            cfg.enabled = !cfg.enabled;
-            if let Ok(rebuilt) = DockInstance::new(cfg, self.work_area) {
-                dock.instance = rebuilt;
-            }
+            dock.instance.config_mut().enabled = !dock.instance.config().enabled;
+            dock.instance.refresh_layout();
         }
         let _ = self.sync_windows(host, safe_mode);
         self.persist();
@@ -263,6 +344,7 @@ impl<I: IconProvider> DockManager<I> {
                 let _ = host.destroy_dock_window(id);
             }
             self.persist();
+            self.sync_running_timer(host);
         }
     }
 
@@ -274,98 +356,4 @@ impl<I: IconProvider> DockManager<I> {
             .collect();
         let _ = save_docks_to_file(&self.config_path, &cfgs, self.app_version);
     }
-
-    fn apply_dock_action(
-        &mut self,
-        host: &mut dyn DockPlatform,
-        id: u64,
-        action: DockMenuAction,
-        safe_mode: &mut bool,
-    ) -> String {
-        match action {
-            DockMenuAction::AddNewDock => {
-                self.add_new_dock(host, safe_mode);
-                return "menu: add new dock".to_owned();
-            }
-            DockMenuAction::RemoveDock => {
-                self.remove_dock(host, id);
-                return format!("menu: remove dock {id}");
-            }
-            DockMenuAction::OpenDockConfig => {
-                return match self.open_config_file(host) {
-                    Ok(()) => "menu: open docks.cfg".to_owned(),
-                    Err(err) => format!("error: open docks.cfg: {err}"),
-                };
-            }
-            DockMenuAction::ReloadDockConfig => {
-                return match self.reload_from_disk(host, *safe_mode) {
-                    Ok(n) => format!("menu: reload docks.cfg ({n} docks)"),
-                    Err(err) => format!("error: reload docks.cfg: {err}"),
-                };
-            }
-            _ => {}
-        }
-        let picked = match action {
-            DockMenuAction::ChooseItemIcon(_) => host.pick_icon_file().ok().flatten(),
-            _ => None,
-        };
-        if let Some(dock) = self.docks.iter_mut().find(|d| d.instance.config().id == id) {
-            let mut cfg = dock.instance.config().clone();
-            if apply_menu_action(&mut cfg, action, picked) {
-                if let Ok(rebuilt) = DockInstance::new(cfg, self.work_area) {
-                    dock.icons = load_dock_icons(&self.icon_provider, rebuilt.config());
-                    dock.instance = rebuilt;
-                    if dock.timer_active {
-                        dock.timer_active = false;
-                        let _ = host.set_animation_timer(id, false);
-                    }
-                    if dock.window_open {
-                        let _ = present_dock(host, dock);
-                    }
-                    self.persist();
-                }
-            }
-        }
-        format!("dock[{id}] menu: {action:?}")
-    }
-}
-
-fn build_runtimes<I: IconProvider>(
-    configs: Vec<DockConfig>,
-    work_area: Rect,
-    icon_provider: &I,
-) -> Result<Vec<DockRuntime>, String> {
-    let mut docks = Vec::with_capacity(configs.len());
-    for cfg in configs {
-        let instance = DockInstance::new(cfg, work_area).map_err(|e| e.to_string())?;
-        let icons = load_dock_icons(icon_provider, instance.config());
-        docks.push(DockRuntime {
-            instance,
-            icons,
-            window_open: false,
-            timer_active: false,
-        });
-    }
-    Ok(docks)
-}
-
-fn load_dock_icons<I: IconProvider>(provider: &I, cfg: &DockConfig) -> HashMap<u64, RgbaImage> {
-    let mut map = HashMap::new();
-    for item in &cfg.items {
-        if item.is_separator() {
-            continue;
-        }
-        let req = icon_request_for_item(item);
-        if let Ok(img) = provider.load_icon(&req, 128) {
-            map.insert(item.id, img);
-        }
-    }
-    map
-}
-
-fn present_dock(host: &mut dyn DockPlatform, dock: &DockRuntime) -> Result<(), String> {
-    let layout = dock.instance.layout();
-    let frame = render_dock_frame(dock.instance.config(), layout, &dock.icons);
-    let rect = to_pixel_rect(layout.window_rect);
-    host.present_dock_frame(dock.instance.config().id, rect, &frame)
 }

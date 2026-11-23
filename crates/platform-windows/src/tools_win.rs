@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use asrbox_platform_api::{ProcessMetrics, ToolsPlatform};
+use asrbox_platform_api::{PixelRect, ProcessMetrics, ToolsPlatform, WidgetFrame};
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{GlobalFree, HANDLE, HWND};
 use windows::Win32::Graphics::Gdi::{
@@ -13,6 +13,10 @@ use windows::Win32::System::DataExchange::{
 use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
 use windows::Win32::UI::WindowsAndMessaging::{DestroyWindow, KillTimer};
 
+use crate::settings_proc::{
+    cleanup_settings_window, is_settings_open, open_or_focus_settings_window, present_settings,
+    read_settings_url_text, write_settings_url_text,
+};
 use crate::shell::{encode_wide_str, open_in_explorer, open_in_notepad};
 use crate::tools_proc::{
     create_about_window, create_debug_window, focus_window, scroll_edit_to_end, set_window_text,
@@ -46,6 +50,7 @@ impl ToolsWinState {
     }
 
     pub(crate) fn cleanup(&mut self) {
+        cleanup_settings_window();
         DEBUG_UI.with(|ui| {
             let mut st = ui.borrow_mut();
             if let Some(hwnd) = st.hwnd.take() {
@@ -182,6 +187,27 @@ impl ToolsPlatform for WindowsDockHost {
         }
         let (ui_font, mono_font) = self.tools.ensure_fonts();
         create_about_window(self.hinstance, title, content, ui_font, mono_font)
+    }
+
+    fn open_settings_window(&mut self, title: &str, width: u32, height: u32) -> Result<(), String> {
+        let (ui_font, _) = self.tools.ensure_fonts();
+        open_or_focus_settings_window(self.hinstance, title, width, height, ui_font)
+    }
+
+    fn present_settings_frame(&mut self, frame: &WidgetFrame, url_box_rect: Option<PixelRect>) {
+        present_settings(frame, url_box_rect);
+    }
+
+    fn settings_url_input_text(&self) -> String {
+        read_settings_url_text()
+    }
+
+    fn set_settings_url_input_text(&self, text: &str) {
+        write_settings_url_text(text);
+    }
+
+    fn is_settings_window_open(&self) -> bool {
+        is_settings_open()
     }
 
     fn query_process_metrics(&mut self) -> ProcessMetrics {

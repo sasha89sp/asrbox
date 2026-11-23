@@ -1,0 +1,12 @@
+[package]
+name = "asrbox-mod-settings"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+asrbox-core = { path = "../core" }
+asrbox-platform-api = { path = "../platform-api" }
+
+[lints]
+workspace = true

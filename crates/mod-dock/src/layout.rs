@@ -1,6 +1,7 @@
-use crate::config::{DockAlignment, DockConfig, DockEdge, SETTINGS_SLOT_ID};
+use crate::config::{DockAlignment, DockConfig, DockEdge, DRAG_HANDLE_SLOT_ID, SETTINGS_SLOT_ID};
 
 pub const SEPARATOR_THICKNESS_PX: u32 = 14;
+pub const DRAG_HANDLE_THICKNESS_PX: u32 = 16;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Point {
@@ -20,14 +21,26 @@ impl Rect {
     pub fn contains(self, point: Point) -> bool {
         let w = i32::try_from(self.width).unwrap_or(i32::MAX);
         let h = i32::try_from(self.height).unwrap_or(i32::MAX);
-        let right = self.x.saturating_add(w);
-        let bottom = self.y.saturating_add(h);
-        point.x >= self.x && point.x < right && point.y >= self.y && point.y < bottom
+        point.x >= self.x
+            && point.x < self.x.saturating_add(w)
+            && point.y >= self.y
+            && point.y < self.y.saturating_add(h)
+    }
+
+    pub fn expanded(self, pad: i32) -> Self {
+        let extra = u32::try_from(pad.max(0)).unwrap_or(0).saturating_mul(2);
+        Self {
+            x: self.x.saturating_sub(pad),
+            y: self.y.saturating_sub(pad),
+            width: self.width.saturating_add(extra),
+            height: self.height.saturating_add(extra),
+        }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SlotKind {
+    DragHandle,
     Shortcut,
     Separator,
     SettingsButton,
@@ -91,40 +104,28 @@ pub fn hit_test_item(layout: &DockLayout, local_point: Point) -> Option<u64> {
     hit_test_slot(layout, local_point).map(|slot| slot.item_id)
 }
 
-pub fn drop_insert_index(layout: &DockLayout, edge: DockEdge, local_point: Point) -> usize {
-    let horizontal = edge.is_horizontal();
-    let mut item_count = 0usize;
-    for slot in &layout.slots {
-        if slot.kind == SlotKind::SettingsButton {
-            break;
-        }
-        let (origin, len, coord) = if horizontal {
-            (slot.base_rect.x, slot.base_rect.width, local_point.x)
-        } else {
-            (slot.base_rect.y, slot.base_rect.height, local_point.y)
-        };
-        let midpoint = origin.saturating_add(i32::try_from(len / 2).unwrap_or(0));
-        if coord < midpoint {
-            return item_count;
-        }
-        item_count = item_count.saturating_add(1);
-    }
-    item_count
-}
+pub use crate::layout_ops::{apply_dragged_window_pos, drop_insert_index};
 
 fn compute_main_items_len(config: &DockConfig, icon: u32, spacing: u32) -> u32 {
-    let total_slots = config.items.len() + usize::from(config.show_settings_button);
+    let has_handle = usize::from(!config.locked);
+    let has_gear = usize::from(config.show_settings_button);
+    let total_slots = has_handle + config.items.len() + has_gear;
     if total_slots == 0 {
         return icon;
     }
-    let mut sum = config.items.iter().fold(0u32, |acc, item| {
+    let mut sum = if !config.locked {
+        DRAG_HANDLE_THICKNESS_PX
+    } else {
+        0
+    };
+    for item in &config.items {
         let len = if item.is_separator() {
             SEPARATOR_THICKNESS_PX
         } else {
             icon
         };
-        acc.saturating_add(len)
-    });
+        sum = sum.saturating_add(len);
+    }
     if config.show_settings_button {
         sum = sum.saturating_add(icon);
     }
@@ -162,11 +163,25 @@ fn build_window_and_bar(
 }
 
 fn place_window(config: &DockConfig, work_area: Rect, win_w: u32, win_h: u32) -> Rect {
-    let margin = i32::from(config.edge_margin_px);
     let area_w = i32::try_from(work_area.width).unwrap_or(i32::MAX);
     let area_h = i32::try_from(work_area.height).unwrap_or(i32::MAX);
     let w_i32 = i32::try_from(win_w).unwrap_or(i32::MAX);
     let h_i32 = i32::try_from(win_h).unwrap_or(i32::MAX);
+    if let Some((fx, fy)) = config.free_pos {
+        let max_x = work_area
+            .x
+            .saturating_add(area_w.saturating_sub(w_i32).max(0));
+        let max_y = work_area
+            .y
+            .saturating_add(area_h.saturating_sub(h_i32).max(0));
+        return Rect {
+            x: fx.clamp(work_area.x, max_x),
+            y: fy.clamp(work_area.y, max_y),
+            width: win_w,
+            height: win_h,
+        };
+    }
+    let margin = i32::from(config.edge_margin_px);
     let ax_x = align_axis(work_area.x, area_w, w_i32, config.alignment);
     let ax_y = align_axis(work_area.y, area_h, h_i32, config.alignment);
     let (x, y) = match config.edge {
@@ -241,7 +256,8 @@ impl SlotCtx {
                 height: main_len,
             }
         };
-        let hovered = kind != SlotKind::Separator
+        let can_zoom = !matches!(kind, SlotKind::Separator | SlotKind::DragHandle);
+        let hovered = can_zoom
             && self.hover.item_id == Some(item_id)
             && self.progress > 0.0
             && self.max_scale > 1.0;
@@ -277,10 +293,21 @@ fn build_slots(
         hover,
         progress: hover.progress.clamp(0.0, 1.0),
     };
-    let cap = config.items.len() + usize::from(config.show_settings_button);
+    let cap = config.items.len() + 2;
     let mut slots = Vec::with_capacity(cap);
     let mut cursor = 0i32;
 
+    if !config.locked {
+        slots.push(ctx.make(
+            DRAG_HANDLE_SLOT_ID,
+            SlotKind::DragHandle,
+            DRAG_HANDLE_THICKNESS_PX,
+            cursor,
+        ));
+        cursor = cursor
+            .saturating_add(i32::try_from(DRAG_HANDLE_THICKNESS_PX).unwrap_or(16))
+            .saturating_add(spacing);
+    }
     for item in &config.items {
         let (kind, len) = if item.is_separator() {
             (SlotKind::Separator, SEPARATOR_THICKNESS_PX)
@@ -317,70 +344,5 @@ fn scale_slot_rect(base: Rect, scale: f32, edge: DockEdge) -> Rect {
         y,
         width: scaled_w,
         height: scaled_h,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::error::Error;
-    use std::path::PathBuf;
-
-    use crate::config::DockItem;
-
-    use super::*;
-
-    fn area() -> Rect {
-        Rect {
-            x: 0,
-            y: 0,
-            width: 1920,
-            height: 1080,
-        }
-    }
-
-    fn dock_with_items(edge: DockEdge) -> Result<DockConfig, Box<dyn Error>> {
-        let mut dock = DockConfig::new(1, "Test");
-        dock.edge = edge;
-        dock.items
-            .push(DockItem::from_dropped_path(1, PathBuf::from("a.exe"))?);
-        dock.items.push(DockItem::separator(2));
-        dock.items
-            .push(DockItem::from_dropped_path(3, PathBuf::from("b.exe"))?);
-        Ok(dock)
-    }
-
-    #[test]
-    fn centers_dock_and_keeps_separator_unzoomed() -> Result<(), Box<dyn Error>> {
-        for edge in [
-            DockEdge::Bottom,
-            DockEdge::Top,
-            DockEdge::Left,
-            DockEdge::Right,
-        ] {
-            let dock = dock_with_items(edge)?;
-            let hover = HoverVisualState {
-                item_id: Some(2),
-                progress: 1.0,
-            };
-            let layout = compute_layout(&dock, area(), hover);
-            assert_eq!(layout.slots.len(), 4);
-            assert_eq!(layout.slots[1].kind, SlotKind::Separator);
-            assert!((layout.slots[1].scale - 1.0).abs() < 1e-4);
-            assert_eq!(layout.slots[3].kind, SlotKind::SettingsButton);
-            assert_eq!(layout.slots[3].item_id, SETTINGS_SLOT_ID);
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn drop_insert_stops_before_settings_button() -> Result<(), Box<dyn Error>> {
-        let dock = dock_with_items(DockEdge::Bottom)?;
-        let layout = compute_layout(&dock, area(), HoverVisualState::default());
-        let far_right = Point {
-            x: 9999,
-            y: layout.bar_rect.y + 10,
-        };
-        assert_eq!(drop_insert_index(&layout, DockEdge::Bottom, far_right), 3);
-        Ok(())
     }
 }

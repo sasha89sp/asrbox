@@ -1,27 +1,64 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
+use asrbox_core::{
+    decode_supervisor_cmd, decode_worker_msg, encode_supervisor_cmd, encode_worker_msg,
+    parse_modules_config, serialize_modules_config, IsolationMode, ModuleId, ModulesConfig,
+    SupervisorCmd, WorkerMsg,
+};
 use asrbox_mod_about::{build_about_text, AppPaths};
 use asrbox_mod_debug::{DebugHub, LogLevel};
 use asrbox_mod_dock::{
-    parse_docks, render_dock_frame, serialize_docks, DockConfig, DockInstance, DockItem, Rect,
+    parse_docks, render_dock_frame, serialize_docks, DockConfig, DockInstance, DockItem,
+    DockRenderOverlay, Rect,
+};
+use asrbox_mod_settings::{
+    AboutSettingsView, CalendarSettingsView, DebugSettingsView, DockSettingsView, ModuleStatusView,
+    SettingsSnapshot, SettingsTab, SettingsUiState,
 };
 use asrbox_mod_widgets::{
     parse_ics_bytes, parse_widget_config, render_calendar_widget, serialize_widget_config,
     CalendarWidgetConfig, DateFormatMode, DisplayRow, IcsDateTime, ParseOptions, PeriodFilter,
     RenderView, WidgetHitTarget,
 };
-use asrbox_platform_api::{LocalDateTime, ProcessMetrics};
+use asrbox_platform_api::{LocalDateTime, ProcessMetrics, WidgetLayer};
 
 pub fn run_selftest(app_version: &str) -> Result<(), String> {
+    selftest_core()?;
     selftest_dock(app_version)?;
     selftest_widgets()?;
+    selftest_settings(app_version)?;
     selftest_debug_and_about(app_version)?;
+    Ok(())
+}
+
+fn selftest_core() -> Result<(), String> {
+    let cfg = ModulesConfig {
+        isolation: IsolationMode::Process,
+        dock_enabled: true,
+        widgets_enabled: false,
+    };
+    if parse_modules_config(&serialize_modules_config(&cfg)) != cfg {
+        return Err("modules.cfg roundtrip mismatch".to_owned());
+    }
+    let cmd = SupervisorCmd::ToggleDock(7);
+    if decode_supervisor_cmd(&encode_supervisor_cmd(&cmd)) != Some(cmd) {
+        return Err("supervisor IPC roundtrip mismatch".to_owned());
+    }
+    let msg = WorkerMsg::OpenSettings {
+        tab: "calendar".to_owned(),
+    };
+    if decode_worker_msg(&encode_worker_msg(&msg)) != Some(msg) {
+        return Err("worker IPC roundtrip mismatch".to_owned());
+    }
     Ok(())
 }
 
 fn selftest_dock(app_version: &str) -> Result<(), String> {
     let mut cfg = DockConfig::new(1, "Selftest Dock");
+    cfg.locked = false;
+    cfg.opacity_percent = 65;
+    cfg.icon_size_px = 54;
     cfg.items.push(DockItem::separator(1));
     let area = Rect {
         x: 0,
@@ -30,12 +67,23 @@ fn selftest_dock(app_version: &str) -> Result<(), String> {
         height: 1080,
     };
     let dock = DockInstance::new(cfg.clone(), area).map_err(|e| e.to_string())?;
-    let frame = render_dock_frame(dock.config(), dock.layout(), &HashMap::new());
+    let overlay = DockRenderOverlay {
+        dragged_item_id: None,
+        insert_before_index: Some(0),
+    };
+    let running = HashSet::new();
+    let frame = render_dock_frame(
+        dock.config(),
+        dock.layout(),
+        &HashMap::new(),
+        &running,
+        overlay,
+    );
     if frame.pixels.is_empty() {
         return Err("rendered dock frame is empty".to_owned());
     }
     let parsed = parse_docks(&serialize_docks(&[cfg], app_version))?;
-    if parsed.len() != 1 || parsed[0].items.len() != 1 || !parsed[0].items[0].is_separator() {
+    if parsed.len() != 1 || parsed[0].opacity_percent != 65 || parsed[0].locked {
         return Err("dock config roundtrip mismatch".to_owned());
     }
     Ok(())
@@ -57,6 +105,11 @@ fn selftest_widgets() -> Result<(), String> {
     let cal = parse_ics_bytes(sample.as_bytes(), "selftest", None, opts);
     if cal.events.len() != 2 {
         return Err("widget ICS selftest failed".to_owned());
+    }
+    let commented = "# calendar=main|auto|https://example.com/cal.ics\nvisible=1\n";
+    let parsed_hint = parse_widget_config(commented);
+    if !parsed_hint.commented_calendar_hint {
+        return Err("commented_calendar_hint detection failed".to_owned());
     }
     let rows = vec![DisplayRow {
         title: cal.events[0].summary.clone(),
@@ -86,6 +139,59 @@ fn selftest_widgets() -> Result<(), String> {
     let cfg = CalendarWidgetConfig::default();
     if parse_widget_config(&serialize_widget_config(&cfg)) != cfg {
         return Err("widget config roundtrip mismatch".to_owned());
+    }
+    Ok(())
+}
+
+fn selftest_settings(app_version: &str) -> Result<(), String> {
+    let snap = SettingsSnapshot {
+        isolation: IsolationMode::Process,
+        modules: vec![ModuleStatusView {
+            id: ModuleId::Dock,
+            enabled: true,
+            running: true,
+            pid: Some(100),
+            restarts: 0,
+            note: String::new(),
+        }],
+        docks: vec![DockSettingsView {
+            id: "1".to_owned(),
+            edge_index: 0,
+            icon_size_px: 48,
+            opacity_percent: 85,
+            locked: true,
+            show_running_indicator: true,
+            focus_running_window: true,
+            item_count: 1,
+        }],
+        calendar: CalendarSettingsView {
+            visible: true,
+            opacity_percent: 88,
+            layer: WidgetLayer::Wallpaper,
+            period_index: 2,
+            visible_rows: 8,
+            commented_calendar_hint: true,
+            sources: vec![],
+        },
+        debug: DebugSettingsView {
+            verbose: false,
+            file_log: false,
+            summary_line: "ok".to_owned(),
+        },
+        about: AboutSettingsView {
+            version: app_version.to_owned(),
+            exe_path: "asrbox.exe".to_owned(),
+            data_dir: "data".to_owned(),
+            config_dir: "data/config".to_owned(),
+        },
+    };
+    let mut ui = SettingsUiState::default();
+    for tab in SettingsTab::ALL {
+        ui.active_tab = tab;
+        let (frame, _) = ui.render(&snap);
+        if frame.bgra.pixels.is_empty() || frame.texts.is_empty() {
+            return Err(format!("settings render failed on {tab:?}"));
+        }
     }
     Ok(())
 }
