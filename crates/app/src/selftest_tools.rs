@@ -8,7 +8,7 @@ use asrbox_mod_settings::{
     AboutSettingsView, AppearanceSettingsView, BackupSettingsView, BrowserTab,
     CalendarSettingsView, DiagnosticsLiveView, DockItemView, DockSettingsView, ModuleStatusView,
     OverlaySettingsView, SettingsSnapshot, SettingsTab, SettingsUiState, SysMonitorSettingsView,
-    WebDavBrowserView, WebDavServerView,
+    WebDavBrowserView, WebDavServerView, WidgetSubTab,
 };
 use asrbox_mod_webdav::{
     base64_encode, parse_propfind_xml, parse_sync_config, parse_webdav_store,
@@ -31,6 +31,14 @@ pub fn selftest_settings(app_version: &str) -> Result<(), String> {
             let (frame, _) = ui.render(&snap);
             if frame.bgra.pixels.is_empty() || frame.texts.is_empty() {
                 return Err(format!("settings render failed on {tab:?}"));
+            }
+        }
+        ui.active_tab = SettingsTab::Widgets;
+        for sub in [WidgetSubTab::Calendar, WidgetSubTab::SysMonitor] {
+            ui.selected_widget = sub;
+            let (frame, _) = ui.render(&snap);
+            if frame.bgra.pixels.is_empty() || frame.texts.is_empty() {
+                return Err(format!("settings widgets subtab render failed on {sub:?}"));
             }
         }
     }

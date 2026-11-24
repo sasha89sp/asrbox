@@ -11,6 +11,8 @@ mod dock_win;
 #[cfg(windows)]
 mod dwrite_text;
 #[cfg(windows)]
+mod dwrite_vtable;
+#[cfg(windows)]
 mod fluent_menu;
 #[cfg(windows)]
 mod fluent_menu_layout;

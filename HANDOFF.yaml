@@ -1,37 +1,33 @@
-version: 0.0.5
+version: 0.0.6
 updated: 2026-11-24
-spec_ids: [NF-001, NF-002, NF-005, NF-006, NF-007, NF-010, ST-001, ST-005, ST-007]
+spec_ids: [NF-001, NF-002, NF-005, NF-006, NF-007, NF-010, ST-001, ST-002, ST-005, ST-007]
 atlas_updated: true
 last_session:
-  goal: "Версия 0.0.5: единый Windows 11 Fluent Design (Light/Dark + 6 акцентов + плавный переход 220 мс), кастомные Fluent-меню, раздел «Общие настройки» с браузерными вкладками (Диагностика, История версий, Обзор WebDAV), неограниченные WebDAV-серверы и синхронизация файлов/папок Windows"
+  goal: "Версия 0.0.6: исправление BUG-006/BUG-007 и вёрстки настроек, шрифты Windows 11 (GDI ClearType + DirectWrite), неубиваемые ярлыки data/shortcuts/, безморганный ресайз дока, «Не запускать вторую копию», анимация запуска и 4-вкладочные настройки с ленивой диагностикой"
   done:
-    - "Версия workspace поднята до 0.0.5 (Cargo.toml + CHANGELOG.md + ADR-016 + specs + MAP.md)"
-    - "platform-api + platform-windows + mod-*: FluentPalette (Light/Dark + 6 акцентов + lerp 220 мс, 0% CPU в покое), appearance.cfg, язык RU/EN, DWMWA_USE_IMMERSIVE_DARK_MODE и IPC SetTheme во все воркеры"
-    - "platform-windows/src/fluent_menu*.rs: кастомные слоистые Fluent-меню (трей, доки, виджеты, выбор нового WebDAV-сервера) с быстрыми кнопками и подменю"
-    - "mod-settings: объединённый раздел «Общие настройки» (1. Тема/акцент, 2. Язык/автозагрузка, 3. Бэкап/WebDAV/Синхронизация, 4. Диагностика, 5. История версий, 6. Пути) + верхняя панель браузерных вкладок внутри одного окна"
-    - "mod-webdav + platform-windows + app: неограниченные серверы WebDAV (миграция v1->v2 с сохранением asrbox:webdav:mailru), PROPFIND/MKCOL-навигатор папок и периодическая синхронизация файлов/папок Windows (sync.cfg)"
-    - "Рефакторинг всех 16 файлов > 400 строк: все .rs файлы workspace строго <= 400 строк после cargo fmt"
+    - "Версия workspace поднята до 0.0.6 (Cargo.toml + CHANGELOG.md + ADR-017 + BUGS.md + specs/mod-settings.md + ATLAS.md + MAP.md)"
+    - "BUG-006 (job.rs): JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK отвязывает запущенные через док программы от Job супервизора (+ unit-тест)"
+    - "BUG-007 (fluent_menu*.rs, settings_proc.rs, tools_state.rs, main.rs): убраны реентрантные Win32 вызовы внутри RefCell + crash.log panic hook"
+    - "Шрифты Win11 (font_engine.rs, dwrite_text.rs): автоопределение Segoe UI Variable (Display/Text/Small -> Segoe UI) + выбор GDI ClearType / DirectWrite в Общих настройках"
+    - "Док-панели (dock_shortcuts.rs, docks.rs, dock_ops.rs, mod-dock, running.rs): портативные копии .lnk/.url в data/shortcuts/, обновление окон на месте без моргания, усиленный фокус «Не запускать вторую копию» и 460 мс анимация запуска с вкл/выкл"
+    - "Настройки (mod-settings, app): 4 вкладки слева (Общие, Док-панели, Виджеты [Календарь|Монитор], Оверлей), карточка МОДУЛЬ И ПРОЦЕСС в каждом модуле, Изоляция + «Перезапустить все модули» в Общих, фикс наложения чипов и строго ленивая диагностика вне своей вкладки"
   not_done:
     - "Прогон GitHub Actions (.github/workflows/ci.yml) на windows-latest"
-    - "Живая проверка на Windows 10/11: плавная смена Light/Dark, Fluent-меню, обзор/создание папок WebDAV, синхронизация файлов/папок и браузерные вкладки Диагностики/Истории версий"
+    - "Ручная проверка на Windows 10/11: BUG-006, BUG-007, GDI ClearType vs DirectWrite, ресайз дока без моргания, удаление ярлыка с рабочего стола, анимация запуска и 4-вкладочные настройки"
   verified:
     ci_build: false
     tests: true
     manual_run: false
-open_bugs: [BUG-003, BUG-004, BUG-005]
-next_step: "Запустить GitHub Actions (windows-latest), скачать asrbox.exe v0.0.5 и проверить Fluent Light/Dark + кастомные меню, Общие настройки, браузерные вкладки и WebDAV-обзор/синхронизацию"
+open_bugs: [BUG-003, BUG-004, BUG-005, BUG-006, BUG-007]
+next_step: "Запустить GitHub Actions (windows-latest), скачать asrbox.exe v0.0.6 и проверить BUG-006/BUG-007, шрифты Win11, ярлыки и 4-вкладочные настройки; после подтверждения перенести закрытые баги в docs/archive/bugs-closed.md"
 touched_files:
-  - Cargo.toml, CHANGELOG.md, ATLAS.md, ARCHITECTURE.md, DECISIONS.md, HANDOFF.yaml, specs/mod-settings.md
-  - crates/core/src/ipc.rs
-  - crates/platform-api/ (MAP.md, src/lib.rs, src/theme.rs, src/palette.rs, src/tools.rs)
-  - crates/platform-windows/ (MAP.md, src/lib.rs, src/fluent_menu*.rs, src/webdav_*.rs, src/settings_*.rs, src/tools_*.rs, src/tray*.rs, src/dock_menu.rs, src/widget_menu.rs, src/shell.rs, src/window.rs)
-  - crates/mod-webdav/ (MAP.md, src/lib.rs, src/propfind.rs, src/sync.rs)
-  - crates/mod-settings/ (MAP.md, src/lib.rs, src/events.rs, src/tests.rs, src/types.rs, src/layout*.rs, src/render*.rs, src/draw.rs)
-  - crates/mod-dock/ (MAP.md, src/render.rs, src/render_marks.rs, src/labels.rs)
-  - crates/mod-widgets/ (MAP.md, src/calendar.rs, src/calendar_view.rs, src/render.rs, src/sys_*.rs)
-  - crates/mod-overlay/src/ (lib.rs, render.rs)
-  - crates/app/ (MAP.md, src/main.rs, src/dock_events.rs, src/backup_ctl.rs, src/webdav_ctl.rs, src/settings_*.rs, src/worker*.rs, src/selftest*.rs)
+  - Cargo.toml, CHANGELOG.md, BUGS.md, DECISIONS.md, ATLAS.md, ARCHITECTURE.md, HANDOFF.yaml, specs/mod-settings.md
+  - crates/platform-api/src/ (lib.rs, theme.rs, palette.rs, menu.rs)
+  - crates/platform-windows/ (Cargo.toml, MAP.md, src/job.rs, src/font_engine.rs, src/dwrite_text.rs, src/dwrite_vtable.rs, src/widget_text.rs, src/fluent_menu*.rs, src/settings_*.rs, src/tools_state.rs, src/running.rs, src/dock_*.rs, src/widget_win.rs, src/window.rs, src/lib.rs)
+  - crates/mod-dock/ (MAP.md, src/config.rs, src/storage.rs, src/layout.rs, src/state.rs, src/lib.rs)
+  - crates/mod-settings/ (MAP.md, src/actions.rs, src/types.rs, src/lib.rs, src/events.rs, src/layout*.rs, src/render_controls.rs, src/tests.rs)
+  - crates/app/ (MAP.md, src/main.rs, src/dock_shortcuts.rs, src/docks.rs, src/dock_ops.rs, src/settings_*.rs, src/worker_bus.rs, src/selftest*.rs)
 warnings:
-  - "Ожидает сборки на GitHub Actions (windows-latest). Локально проверены Linux-тесты, --selftest, atlas-check, fmt и кросс-clippy x86_64-pc-windows-msvc"
+  - "Ожидает сборки на GitHub Actions (windows-latest). Локально проверены cargo fmt, atlas-check, cargo test --workspace, --version, --selftest, host clippy и cargo clippy --workspace --all-targets --no-deps --target x86_64-pc-windows-msvc -- -D warnings"
 ideas:
   - "Глобальный хоткей показа/скрытия игрового оверлея"

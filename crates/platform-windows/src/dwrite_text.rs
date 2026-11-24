@@ -1,26 +1,25 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::ffi::c_void;
 use std::mem;
 
 use asrbox_platform_api::{BgraFrame, TextAlign, WidgetTextCmd};
-use windows::core::{implement, PCWSTR, Ref};
-use windows::Win32::Foundation::{COLORREF, RECT};
+use windows::core::{Interface, PCWSTR};
+use windows::Win32::Foundation::RECT;
 use windows::Win32::Graphics::DirectWrite::{
     DWriteCreateFactory, IDWriteBitmapRenderTarget, IDWriteFactory, IDWriteGdiInterop,
-    IDWritePixelSnapping_Impl, IDWriteRenderingParams, IDWriteTextFormat, IDWriteTextRenderer,
-    IDWriteTextRenderer_Impl, DWRITE_FACTORY_TYPE_SHARED, DWRITE_FONT_STRETCH_NORMAL,
-    DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_WEIGHT_SEMI_BOLD,
-    DWRITE_GLYPH_RUN, DWRITE_GLYPH_RUN_DESCRIPTION, DWRITE_MATRIX, DWRITE_MEASURING_MODE,
-    DWRITE_PARAGRAPH_ALIGNMENT_CENTER, DWRITE_PIXEL_GEOMETRY_RGB,
-    DWRITE_RENDERING_MODE_CLEARTYPE_NATURAL_SYMMETRIC, DWRITE_STRIKETHROUGH,
-    DWRITE_TEXT_ALIGNMENT_CENTER, DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_TEXT_ALIGNMENT_TRAILING,
-    DWRITE_TRIMMING, DWRITE_TRIMMING_GRANULARITY_CHARACTER, DWRITE_UNDERLINE,
-    DWRITE_WORD_WRAPPING_NO_WRAP,
+    IDWriteRenderingParams, IDWriteTextFormat, IDWriteTextRenderer, DWRITE_FACTORY_TYPE_SHARED,
+    DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_WEIGHT_NORMAL,
+    DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_PARAGRAPH_ALIGNMENT_CENTER, DWRITE_PIXEL_GEOMETRY_RGB,
+    DWRITE_RENDERING_MODE_CLEARTYPE_NATURAL_SYMMETRIC, DWRITE_TEXT_ALIGNMENT_CENTER,
+    DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_TEXT_ALIGNMENT_TRAILING, DWRITE_TRIMMING,
+    DWRITE_TRIMMING_GRANULARITY_CHARACTER, DWRITE_WORD_WRAPPING_NO_WRAP,
 };
-use windows::Win32::Graphics::Gdi::{GetCurrentObject, GetObjectW, DIBSECTION, OBJ_BITMAP};
-use windows::Win32::UI::WindowsAndMessaging::FillRect;
+use windows::Win32::Graphics::Gdi::{
+    FillRect, GetCurrentObject, GetObjectW, GetStockObject, BLACK_BRUSH, DIBSECTION, HBRUSH,
+    OBJ_BITMAP,
+};
 
+use crate::dwrite_vtable::{static_renderer_raw, DrawCtx};
 use crate::font_engine::{blend_cleartype_mask, font_face_for_size};
 use crate::shell::encode_wide_str;
 
@@ -68,7 +67,7 @@ pub(crate) fn try_render_dwrite_cmd(out: &mut BgraFrame, cmd: &WidgetTextCmd) ->
         let Some(ctx) = guard.as_mut() else {
             return false;
         };
-        render_with_context(ctx, out, cmd, x0, y0, x1, y1).is_ok()
+        render_with_context(ctx, out, cmd, (x0, y0, x1, y1)).is_ok()
     })
 }
 
@@ -76,22 +75,22 @@ fn init_dwrite_context() -> Result<DWriteContext, String> {
     // SAFETY: Creating a shared DirectWrite factory and GDI interop on the UI thread.
     unsafe {
         let factory: IDWriteFactory = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED)
-            .map_err(|e| format!("DWriteCreateFactory failed: {e}"))?;
+            .map_err(|e| format!("DWriteCreateFactory: {e}"))?;
         let gdi_interop = factory
             .GetGdiInterop()
-            .map_err(|e| format!("GetGdiInterop failed: {e}"))?;
-        let base_params = factory
+            .map_err(|e| format!("GetGdiInterop: {e}"))?;
+        let base = factory
             .CreateRenderingParams()
-            .map_err(|e| format!("CreateRenderingParams failed: {e}"))?;
+            .map_err(|e| format!("RenderingParams: {e}"))?;
         let params = factory
             .CreateCustomRenderingParams(
-                base_params.GetGamma(),
-                base_params.GetEnhancedContrast(),
-                base_params.GetClearTypeLevel(),
+                base.GetGamma(),
+                base.GetEnhancedContrast(),
+                base.GetClearTypeLevel(),
                 DWRITE_PIXEL_GEOMETRY_RGB,
                 DWRITE_RENDERING_MODE_CLEARTYPE_NATURAL_SYMMETRIC,
             )
-            .unwrap_or(base_params);
+            .unwrap_or(base);
         Ok(DWriteContext {
             factory,
             gdi_interop,
@@ -137,7 +136,7 @@ fn get_or_create_format(
                 clamped as f32,
                 PCWSTR(locale_w.as_ptr()),
             )
-            .map_err(|e| format!("CreateTextFormat failed: {e}"))?;
+            .map_err(|e| format!("CreateTextFormat: {e}"))?;
         let dw_align = match align {
             TextAlign::Left => DWRITE_TEXT_ALIGNMENT_LEADING,
             TextAlign::Center => DWRITE_TEXT_ALIGNMENT_CENTER,
@@ -168,7 +167,7 @@ fn ensure_render_target(
         let rt = ctx
             .gdi_interop
             .CreateBitmapRenderTarget(None, new_w, new_h)
-            .map_err(|e| format!("CreateBitmapRenderTarget failed: {e}"))?;
+            .map_err(|e| format!("CreateBitmapRenderTarget: {e}"))?;
         let _ = rt.SetPixelsPerDip(1.0);
         ctx.target = Some((new_w, new_h, rt.clone()));
         Ok(rt)
@@ -179,13 +178,9 @@ fn render_with_context(
     ctx: &mut DWriteContext,
     out: &mut BgraFrame,
     cmd: &WidgetTextCmd,
-    x0: i32,
-    y0: i32,
-    x1: i32,
-    y1: i32,
+    (x0, y0, x1, y1): (i32, i32, i32, i32),
 ) -> Result<(), String> {
-    let bw = (x1 - x0) as u32;
-    let bh = (y1 - y0) as u32;
+    let (bw, bh) = ((x1 - x0) as u32, (y1 - y0) as u32);
     let fmt = get_or_create_format(ctx, cmd.font_size_px, cmd.bold, cmd.align)?;
     let target = ensure_render_target(ctx, bw, bh)?;
     let wide: Vec<u16> = cmd.text.encode_utf16().collect();
@@ -194,7 +189,7 @@ fn render_with_context(
         let layout = ctx
             .factory
             .CreateTextLayout(&wide, &fmt, bw as f32, bh as f32)
-            .map_err(|e| format!("CreateTextLayout failed: {e}"))?;
+            .map_err(|e| format!("CreateTextLayout: {e}"))?;
         if let Ok(sign) = ctx.factory.CreateEllipsisTrimmingSign(&fmt) {
             let trim = DWRITE_TRIMMING {
                 granularity: DWRITE_TRIMMING_GRANULARITY_CHARACTER,
@@ -203,47 +198,26 @@ fn render_with_context(
             };
             let _ = layout.SetTrimming(&trim, Some(&sign));
         }
-        let hdc = target.GetMemoryDC();
-        let hbmp = GetCurrentObject(hdc, OBJ_BITMAP);
-        let mut ds = DIBSECTION::default();
-        let got = GetObjectW(
-            hbmp,
-            mem::size_of::<DIBSECTION>() as i32,
-            Some((&mut ds as *mut DIBSECTION).cast::<c_void>()),
-        );
-        if got == 0 || ds.dsBm.bmBits.is_null() {
-            return Err("DWrite target DIB unavailable".to_owned());
-        }
-        let clear_rc = RECT {
-            left: 0,
-            top: 0,
-            right: bw as i32,
-            bottom: bh as i32,
+        let ds = clear_target_dib(&target, bw, bh)?;
+        let draw_ctx = DrawCtx {
+            target: &target,
+            params: &ctx.params,
         };
-        let _ = FillRect(
-            hdc,
-            &clear_rc,
-            windows::Win32::Graphics::Gdi::HBRUSH(
-                windows::Win32::Graphics::Gdi::GetStockObject(
-                    windows::Win32::Graphics::Gdi::BLACK_BRUSH,
-                )
-                .0,
-            ),
-        );
-        let renderer: IDWriteTextRenderer = GlyphBlitRenderer {
-            target: target.clone(),
-            params: ctx.params.clone(),
-        }
-        .into();
+        let raw_ptr = static_renderer_raw();
+        let renderer = IDWriteTextRenderer::from_raw_borrowed(&raw_ptr)
+            .ok_or_else(|| "static DWrite renderer unavailable".to_owned())?;
         layout
-            .Draw(None, &renderer, 0.0, 0.0)
-            .map_err(|e| format!("IDWriteTextLayout::Draw failed: {e}"))?;
-
+            .Draw(
+                Some((&draw_ctx as *const DrawCtx).cast()),
+                renderer,
+                0.0,
+                0.0,
+            )
+            .map_err(|e| format!("IDWriteTextLayout::Draw: {e}"))?;
         let src_h = ds.dsBm.bmHeight.unsigned_abs() as usize;
         let stride = ds.dsBm.bmWidthBytes.unsigned_abs() as usize;
+        let scratch = std::slice::from_raw_parts(ds.dsBm.bmBits.cast::<u8>(), stride * src_h);
         let top_down = ds.dsBmih.biHeight < 0;
-        let total = stride.saturating_mul(src_h);
-        let scratch = std::slice::from_raw_parts(ds.dsBm.bmBits.cast::<u8>(), total);
         blend_cleartype_mask(
             scratch,
             stride,
@@ -262,91 +236,25 @@ fn render_with_context(
     Ok(())
 }
 
-#[implement(IDWriteTextRenderer)]
-struct GlyphBlitRenderer {
-    target: IDWriteBitmapRenderTarget,
-    params: IDWriteRenderingParams,
-}
-
-impl IDWritePixelSnapping_Impl for GlyphBlitRenderer_Impl {
-    fn IsPixelSnappingDisabled(&self, _clientdrawingcontext: *const c_void) -> windows::core::Result<windows::core::BOOL> {
-        Ok(windows::core::BOOL(0))
+unsafe fn clear_target_dib(
+    target: &IDWriteBitmapRenderTarget,
+    bw: u32,
+    bh: u32,
+) -> Result<DIBSECTION, String> {
+    let hdc = target.GetMemoryDC();
+    let hbmp = GetCurrentObject(hdc, OBJ_BITMAP);
+    let mut ds = DIBSECTION::default();
+    let sz = mem::size_of::<DIBSECTION>() as i32;
+    let got = GetObjectW(hbmp, sz, Some((&mut ds as *mut DIBSECTION).cast()));
+    if got == 0 || ds.dsBm.bmBits.is_null() {
+        return Err("DWrite target DIB unavailable".to_owned());
     }
-
-    fn GetCurrentTransform(&self, _clientdrawingcontext: *const c_void) -> windows::core::Result<DWRITE_MATRIX> {
-        Ok(DWRITE_MATRIX {
-            m11: 1.0,
-            m12: 0.0,
-            m21: 0.0,
-            m22: 1.0,
-            dx: 0.0,
-            dy: 0.0,
-        })
-    }
-
-    fn GetPixelsPerDip(&self, _clientdrawingcontext: *const c_void) -> windows::core::Result<f32> {
-        Ok(1.0)
-    }
-}
-
-impl IDWriteTextRenderer_Impl for GlyphBlitRenderer_Impl {
-    fn DrawGlyphRun(
-        &self,
-        _clientdrawingcontext: *const c_void,
-        baselineoriginx: f32,
-        baselineoriginy: f32,
-        measuringmode: DWRITE_MEASURING_MODE,
-        glyphrun: *const DWRITE_GLYPH_RUN,
-        _glyphrundescription: *const DWRITE_GLYPH_RUN_DESCRIPTION,
-        _clientdrawingeffect: Ref<'_, windows::core::IUnknown>,
-    ) -> windows::core::Result<()> {
-        // SAFETY: Forwarding valid DirectWrite glyph run onto our owned bitmap render target.
-        unsafe {
-            let _ = self.target.DrawGlyphRun(
-                baselineoriginx,
-                baselineoriginy,
-                measuringmode,
-                glyphrun,
-                &self.params,
-                COLORREF(0x00FF_FFFF),
-                None,
-            )?;
-        }
-        Ok(())
-    }
-
-    fn DrawUnderline(
-        &self,
-        _clientdrawingcontext: *const c_void,
-        _baselineoriginx: f32,
-        _baselineoriginy: f32,
-        _underline: *const DWRITE_UNDERLINE,
-        _clientdrawingeffect: Ref<'_, windows::core::IUnknown>,
-    ) -> windows::core::Result<()> {
-        Ok(())
-    }
-
-    fn DrawStrikethrough(
-        &self,
-        _clientdrawingcontext: *const c_void,
-        _baselineoriginx: f32,
-        _baselineoriginy: f32,
-        _strikethrough: *const DWRITE_STRIKETHROUGH,
-        _clientdrawingeffect: Ref<'_, windows::core::IUnknown>,
-    ) -> windows::core::Result<()> {
-        Ok(())
-    }
-
-    fn DrawInlineObject(
-        &self,
-        _clientdrawingcontext: *const c_void,
-        _originx: f32,
-        _originy: f32,
-        _inlineobject: Ref<'_, windows::Win32::Graphics::DirectWrite::IDWriteInlineObject>,
-        _issideways: windows::core::BOOL,
-        _isrighttoleft: windows::core::BOOL,
-        _clientdrawingeffect: Ref<'_, windows::core::IUnknown>,
-    ) -> windows::core::Result<()> {
-        Ok(())
-    }
+    let rc = RECT {
+        left: 0,
+        top: 0,
+        right: bw as i32,
+        bottom: bh as i32,
+    };
+    let _ = FillRect(hdc, &rc, HBRUSH(GetStockObject(BLACK_BRUSH).0));
+    Ok(ds)
 }

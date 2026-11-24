@@ -1,6 +1,8 @@
 use asrbox_platform_api::{AccentPreset, PixelRect, SettingsInputRects};
 
-use crate::types::{BrowserTab, SettingsAction, SettingsSnapshot, SettingsTab, SliderKind};
+use crate::types::{
+    BrowserTab, SettingsAction, SettingsSnapshot, SettingsTab, SliderKind, WidgetSubTab,
+};
 
 pub const SIDEBAR_WIDTH: u32 = 208;
 pub const MIN_SETTINGS_WIDTH: u32 = 760;
@@ -33,6 +35,11 @@ pub enum HitKind {
         action: SettingsAction,
     },
     SelectDock(usize),
+    SelectWidgetSubTab {
+        sub: WidgetSubTab,
+        label: String,
+        active: bool,
+    },
     SelectDockItem {
         item_id: u64,
         label: String,
@@ -123,6 +130,7 @@ pub struct BuildLayoutArgs<'a> {
     pub active_browser: &'a BrowserTab,
     pub selected_dock: usize,
     pub selected_dock_item: Option<u64>,
+    pub selected_widget: WidgetSubTab,
     pub editing_server_dir: Option<&'a str>,
     pub search_query: &'a str,
     pub width: u32,

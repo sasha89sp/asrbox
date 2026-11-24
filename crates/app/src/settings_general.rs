@@ -1,12 +1,14 @@
 #![cfg(windows)]
 
-use asrbox_core::{ModuleId, ModulesConfig};
+use asrbox_core::{IsolationMode, ModuleId};
 use asrbox_mod_about::{build_about_text, build_paths_clipboard};
 use asrbox_mod_backup::BackupMode;
 use asrbox_mod_debug::LogLevel;
 use asrbox_mod_dock::{save_docks_to_file, DockConfig};
 use asrbox_mod_overlay::{save_overlay_config, OverlayConfig};
-use asrbox_mod_settings::{BrowserTab, DiagnosticsLiveView, SettingsAction, SettingsTab};
+use asrbox_mod_settings::{
+    BrowserTab, DiagnosticsLiveView, SettingsAction, SettingsTab, WidgetSubTab,
+};
 use asrbox_mod_widgets::{
     save_sysmon_config, save_widget_config, CalendarWidgetConfig, SysMonitorConfig,
 };
@@ -264,26 +266,31 @@ impl<I: IconProvider> AppController<I> {
             SettingsTab::General => {
                 self.appearance = AppearanceConfig::default();
                 self.apply_appearance_change(host, true);
-            }
-            SettingsTab::Modules => {
-                self.modules_cfg = ModulesConfig::default();
-                self.persist_modules_cfg();
-                self.sync_runtime_modules(host);
+                if self.modules_cfg.isolation != IsolationMode::Process {
+                    self.modules_cfg.isolation = IsolationMode::Process;
+                    self.persist_modules_cfg();
+                    self.sync_runtime_modules(host);
+                }
             }
             SettingsTab::Dock => {
                 let def = vec![DockConfig::new(1, "Док 1")];
                 let _ = save_docks_to_file(&self.paths.docks_cfg, &def, APP_VERSION);
                 self.reload_module_config(host, ModuleId::Dock);
             }
-            SettingsTab::Calendar => {
-                let _ =
-                    save_widget_config(&self.paths.widgets_cfg, &CalendarWidgetConfig::default());
-                self.reload_module_config(host, ModuleId::Widgets);
-            }
-            SettingsTab::SysMonitor => {
-                let _ = save_sysmon_config(&self.paths.sysmon_cfg, &SysMonitorConfig::default());
-                self.reload_module_config(host, ModuleId::Widgets);
-            }
+            SettingsTab::Widgets => match self.settings_ui.selected_widget {
+                WidgetSubTab::Calendar => {
+                    let _ = save_widget_config(
+                        &self.paths.widgets_cfg,
+                        &CalendarWidgetConfig::default(),
+                    );
+                    self.reload_module_config(host, ModuleId::Widgets);
+                }
+                WidgetSubTab::SysMonitor => {
+                    let _ =
+                        save_sysmon_config(&self.paths.sysmon_cfg, &SysMonitorConfig::default());
+                    self.reload_module_config(host, ModuleId::Widgets);
+                }
+            },
             SettingsTab::Overlay => {
                 let _ = save_overlay_config(&self.paths.overlay_cfg, &OverlayConfig::default());
                 self.reload_module_config(host, ModuleId::Overlay);

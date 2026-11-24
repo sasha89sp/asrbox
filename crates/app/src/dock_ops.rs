@@ -1,7 +1,6 @@
 #![cfg(windows)]
 
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
 
 use asrbox_mod_dock::{
     apply_menu_action, icon_request_for_item, render_dock_widget_frame, to_pixel_rect, DockConfig,
@@ -21,7 +20,10 @@ impl<I: IconProvider> DockManager<I> {
         item_id: u64,
     ) -> Option<String> {
         let (target, label, focus_running) = {
-            let dock = self.docks.iter_mut().find(|d| d.instance.config().id == id)?;
+            let dock = self
+                .docks
+                .iter_mut()
+                .find(|d| d.instance.config().id == id)?;
             match kind {
                 SlotKind::SettingsButton => return Some("open_settings".to_owned()),
                 SlotKind::Separator | SlotKind::DragHandle => return None,
@@ -33,8 +35,9 @@ impl<I: IconProvider> DockManager<I> {
                         item.label.clone(),
                         cfg.focus_running_window,
                     );
-                    if dock.window_open && dock.instance.trigger_launch_bounce(item_id) {
-                        if !dock.timer_active {
+                    let eff = dock.instance.trigger_launch_bounce(item_id);
+                    if dock.window_open && eff.needs_redraw {
+                        if eff.animation_active && !dock.timer_active {
                             dock.timer_active = true;
                             let _ = host.set_animation_timer(id, true);
                         }
@@ -154,13 +157,13 @@ pub(crate) fn update_runtime_in_place<I: IconProvider>(
     provider: &I,
     host: &dyn DockPlatform,
 ) -> Result<(), String> {
-    let old_items: HashMap<u64, (PathBuf, Option<PathBuf>)> = dock
+    let old_items: HashMap<u64, _> = dock
         .instance
         .config()
         .items
         .iter()
         .filter(|i| !i.is_separator())
-        .map(|i| (i.id, (i.target.clone(), i.custom_icon.clone())))
+        .map(|i| (i.id, (i.target.clone(), i.icon.clone())))
         .collect();
     let rebuilt = DockInstance::new(cfg, work_area).map_err(|e| e.to_string())?;
     let mut next_icons = HashMap::new();
@@ -172,7 +175,7 @@ pub(crate) fn update_runtime_in_place<I: IconProvider>(
         }
         let same_sig = old_items
             .get(&item.id)
-            .is_some_and(|(t, c)| t == &item.target && c == &item.custom_icon);
+            .is_some_and(|(t, c)| t == &item.target && c == &item.icon);
         if same_sig {
             if let Some(img) = dock.icons.remove(&item.id) {
                 next_icons.insert(item.id, img);

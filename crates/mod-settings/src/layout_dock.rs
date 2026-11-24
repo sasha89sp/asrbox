@@ -1,7 +1,8 @@
+use asrbox_core::ModuleId;
 use asrbox_platform_api::{PixelRect, WidgetLayer};
 
 use crate::layout::{ButtonTone, HitKind, LayoutBuilder};
-use crate::layout_tabs::row;
+use crate::layout_tabs::{add_module_process_card, row};
 use crate::types::{DockSettingsView, SettingsAction, SettingsSnapshot, SliderKind};
 
 pub(crate) fn build_dock_tab(
@@ -14,6 +15,7 @@ pub(crate) fn build_dock_tab(
         "Док-панели",
         "Каждая док-панель настраивается индивидуально; значки можно перетаскивать между панелями",
     );
+    add_module_process_card(b, snap, ModuleId::Dock);
     let sel_y = b.cursor_y;
     let mut px = b.content_x;
     for idx in 0..snap.docks.len() {

@@ -49,6 +49,24 @@
 - **Попытка 2**: добавлена автодиагностика закомментированных реальных `.ics` ссылок (`commented_calendar_hint` в `mod-widgets/src/storage.rs`), оранжевое предупреждение в подвале виджета, кнопка «Включить (убрать #)» и нативное поле ввода URL прямо во вкладке «Google Календарь» единого окна настроек (`mod-settings`).
 - **Статус**: правка готова, ожидает проверки CI (`windows-latest`) и ручной проверки на Windows.
 
+### BUG-006 — Программы, запущенные через док-панель, закрываются при выходе из `asrbox` / закрытии дока
+- **Версия**: `0.0.5`
+- **Крейты / файлы**: `crates/platform-windows/src/job.rs` (`JobObject::new`)
+- **Воспроизведение**: запустить любое приложение кликом по ярлыку в док-панели, затем закрыть `asrbox` (или остановить воркер `mod-dock`) — запущенное пользователем приложение также принудительно завершается.
+- **Локализация**: воркер `asrbox.exe --worker dock` помещён супервизором в Win32 `JobObject` с флагом `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` без `JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK`; все дочерние процессы, запущенные воркером через `ShellExecuteW`, наследовали этот же Job Object и уничтожались ОС при закрытии хендла Job.
+- **Попытка 1**: добавлен флаг `JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK` в `worker_job_limit_flags()` (`crates/platform-windows/src/job.rs`), благодаря чему все сторонние приложения, запускаемые из воркера дока, автоматически отвязываются от Job Object, тогда как сам воркер `--worker dock` остаётся под защитой `KILL_ON_JOB_CLOSE`. Добавлен unit-тест `worker_job_flags_enable_silent_breakaway`.
+- **Статус**: правка готова (`v0.0.6`), ожидает проверки CI (`windows-latest`) и ручной проверки на Windows.
+
+### BUG-007 — Вылет и закрытие `asrbox.exe` при открытии «Настройки asrbox» из меню системного трея
+- **Версия**: `0.0.5`
+- **Крейты / файлы**: `crates/platform-windows/src/{fluent_menu.rs, fluent_menu_win.rs, settings_proc.rs, tools_state.rs}`, `crates/app/src/main.rs`
+- **Воспроизведение**: ПКМ по иконке `asrbox` в системном трее -> клик по «Настройки asrbox» -> программа мгновенно падает и закрывается (при этом открытие настроек с кнопки `⚙` док-панели работает).
+- **Локализация**:
+  1. В `fluent_menu_win.rs` / `fluent_menu.rs` вызовы Win32 `DestroyWindow` и `CreateWindowExW` выполнялись внутри активного `RefCell::borrow_mut()` над `ACTIVE_MENU`; Windows синхронно посылала `WM_ACTIVATE` / `WM_DESTROY` / `WM_NCDESTROY` обратно в `fluent_menu_wnd_proc`, что вызывало повторный `borrow_mut()` и панику `already mutably borrowed` (аналогичный риск в `settings_proc.rs` / `tools_state.rs` при `DestroyWindow`/`InvalidateRect`).
+  2. При клике из трея окно настроек создавалось до полного уничтожения всплывающего Fluent-меню трея, усиливая реентрантный `WM_ACTIVATE`.
+- **Попытка 1**: все вызовы `DestroyWindow`/`CreateWindowExW`/`InvalidateRect` вынесены за пределы заимствований `RefCell` (передача владения `HWND` локально до вызова Win32), все обработчики в `fluent_menu_wnd_proc` и `settings_wnd_proc` переведены на безопасный `try_borrow()`/`try_borrow_mut()`, добавлена защита от осиротевших подменю, а в `crates/app/src/main.rs` установлен `std::panic::set_hook` с записью диагностики в `data/logs/crash.log`.
+- **Статус**: правка готова (`v0.0.6`), ожидает проверки CI (`windows-latest`) и ручной проверки на Windows.
+
 (Закрытые `BUG-001`, `BUG-002` перенесены в `docs/archive/bugs-closed.md`.)
 
 ---

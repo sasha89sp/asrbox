@@ -2,12 +2,10 @@ use asrbox_platform_api::{AppLanguage, PixelRect};
 
 use crate::i18n::tr;
 use crate::layout_browser_tabs::build_browser_tab;
-use crate::layout_cal::build_calendar_tab;
 use crate::layout_dock::build_dock_tab;
 use crate::layout_general::build_general_tab;
 use crate::layout_overlay::build_overlay_tab;
-use crate::layout_sys::build_sysmon_tab;
-use crate::layout_tabs::build_modules_tab;
+use crate::layout_tabs::build_widgets_tab;
 use crate::types::{BrowserTab, SettingsAction, SettingsTab, SliderKind};
 
 pub use crate::layout_types::{
@@ -37,15 +35,13 @@ pub fn build_layout(args: &BuildLayoutArgs<'_>) -> SettingsLayout {
         b.add_header_search_and_reset(args.tab);
         match args.tab {
             SettingsTab::General => build_general_tab(&mut b, args.snap, args.editing_server_dir),
-            SettingsTab::Modules => build_modules_tab(&mut b, args.snap),
             SettingsTab::Dock => build_dock_tab(
                 &mut b,
                 args.snap,
                 args.selected_dock,
                 args.selected_dock_item,
             ),
-            SettingsTab::Calendar => build_calendar_tab(&mut b, args.snap),
-            SettingsTab::SysMonitor => build_sysmon_tab(&mut b, args.snap),
+            SettingsTab::Widgets => build_widgets_tab(&mut b, args.snap, args.selected_widget),
             SettingsTab::Overlay => build_overlay_tab(&mut b, args.snap),
         }
     } else {

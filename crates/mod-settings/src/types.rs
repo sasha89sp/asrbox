@@ -10,30 +10,19 @@ use crate::i18n::tr;
 pub enum SettingsTab {
     #[default]
     General,
-    Modules,
     Dock,
-    Calendar,
-    SysMonitor,
+    Widgets,
     Overlay,
 }
 
 impl SettingsTab {
-    pub const ALL: [Self; 6] = [
-        Self::General,
-        Self::Modules,
-        Self::Dock,
-        Self::Calendar,
-        Self::SysMonitor,
-        Self::Overlay,
-    ];
+    pub const ALL: [Self; 4] = [Self::General, Self::Dock, Self::Widgets, Self::Overlay];
 
     pub fn label(self, lang: AppLanguage) -> &'static str {
         match self {
             Self::General => tr(lang, "Общие настройки", "General"),
-            Self::Modules => tr(lang, "Модули", "Modules"),
             Self::Dock => tr(lang, "Док-панели", "Dock Panels"),
-            Self::Calendar => tr(lang, "Google Календарь", "Google Calendar"),
-            Self::SysMonitor => tr(lang, "Системный монитор", "System Monitor"),
+            Self::Widgets => tr(lang, "Виджеты", "Widgets"),
             Self::Overlay => tr(lang, "Игровой оверлей", "Game Overlay"),
         }
     }
@@ -41,13 +30,18 @@ impl SettingsTab {
     pub fn icon(self) -> &'static str {
         match self {
             Self::General => "⚙",
-            Self::Modules => "◈",
             Self::Dock => "▭",
-            Self::Calendar => "▦",
-            Self::SysMonitor => "▤",
+            Self::Widgets => "▦",
             Self::Overlay => "◎",
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WidgetSubTab {
+    #[default]
+    Calendar,
+    SysMonitor,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

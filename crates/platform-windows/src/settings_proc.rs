@@ -325,7 +325,11 @@ pub(crate) unsafe extern "system" fn settings_wnd_proc(
             let hdc = HDC(wparam.0 as *mut c_void);
             let (fg, bg, br) = SETTINGS_UI.with(|ui| {
                 ui.try_borrow().map_or(
-                    (COLORREF(0x00FF_FFFF), COLORREF(0x002B_2B2B), HBRUSH::default()),
+                    (
+                        COLORREF(0x00FF_FFFF),
+                        COLORREF(0x002B_2B2B),
+                        HBRUSH::default(),
+                    ),
                     |st| (st.edit_fg, st.edit_bg, st.edit_brush.unwrap_or_default()),
                 )
             });

@@ -103,6 +103,11 @@ impl SettingsUiState {
                 self.last_dock_input_key = None;
                 (true, None)
             }
+            HitKind::SelectWidgetSubTab { sub, .. } => {
+                self.selected_widget = sub;
+                self.scroll_y = 0;
+                (true, None)
+            }
             HitKind::SelectDockItem { item_id, .. } => {
                 self.selected_dock_item = Some(item_id);
                 self.last_dock_input_key = None;

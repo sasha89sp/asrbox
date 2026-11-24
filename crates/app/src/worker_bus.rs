@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use asrbox_core::{IsolationMode, ModuleId, SupervisorCmd, WorkerMsg};
 use asrbox_mod_debug::LogLevel;
-use asrbox_mod_settings::{BrowserTab, SettingsTab};
+use asrbox_mod_settings::{BrowserTab, SettingsTab, WidgetSubTab};
 use asrbox_mod_widgets::{CALENDAR_WIDGET_ID, SYS_WIDGET_ID};
 use asrbox_platform_api::{
     DockPlatform, IconProvider, LocalDateTime, PlatformEvent, ToolsPlatform, WidgetPlatform,
@@ -24,9 +24,7 @@ impl<I: IconProvider> AppController<I> {
         for ev in events {
             match ev {
                 SupervisorEvent::WorkerMsg(msg) => {
-                    if self.handle_worker_msg(host, now, msg) {
-                        settings_dirty = true;
-                    }
+                    settings_dirty |= self.handle_worker_msg(host, now, msg);
                 }
                 SupervisorEvent::WorkerCrashed {
                     id,
@@ -39,12 +37,8 @@ impl<I: IconProvider> AppController<I> {
                     } else {
                         "остановлен"
                     };
-                    self.debug.log(
-                        now,
-                        LogLevel::Error,
-                        "app",
-                        format!("Сбой процесса {} (код {:?}) -> {act}", id.as_str(), code),
-                    );
+                    let msg = format!("Сбой процесса {} (код {:?}) -> {act}", id.as_str(), code);
+                    self.debug.log(now, LogLevel::Error, "app", msg);
                 }
                 SupervisorEvent::Error(e) => self.debug.log(now, LogLevel::Error, "app", e),
             }
@@ -72,16 +66,11 @@ impl<I: IconProvider> AppController<I> {
     ) -> bool {
         match msg {
             WorkerMsg::Ready { module, pid } => {
-                self.debug.log(
-                    now,
-                    LogLevel::Info,
-                    "app",
-                    format!("Модуль {module} готов (PID {pid})"),
-                );
+                let text = format!("Модуль {module} готов (PID {pid})");
+                self.debug.log(now, LogLevel::Info, "app", text);
                 if module == "overlay" && self.overlay_setup_mode {
-                    let _ = self
-                        .supervisor
-                        .send_cmd(ModuleId::Overlay, &SupervisorCmd::SetOverlaySetupMode(true));
+                    let cmd = SupervisorCmd::SetOverlaySetupMode(true);
+                    let _ = self.supervisor.send_cmd(ModuleId::Overlay, &cmd);
                 }
                 true
             }
@@ -96,19 +85,17 @@ impl<I: IconProvider> AppController<I> {
                     "TRACE" => LogLevel::Trace,
                     _ => LogLevel::Info,
                 };
-                let mod_tag = map_module_tag(&module);
-                self.debug.log(now, lvl, mod_tag, message);
+                self.debug.log(now, lvl, map_module_tag(&module), message);
                 false
             }
             WorkerMsg::OpenSettings { tab } => {
-                let t = match tab.as_str() {
-                    "dock" => SettingsTab::Dock,
-                    "calendar" => SettingsTab::Calendar,
-                    "sysmon" => SettingsTab::SysMonitor,
-                    "overlay" => SettingsTab::Overlay,
-                    _ => SettingsTab::Modules,
-                };
-                self.open_settings_tab(host, t);
+                match tab.as_str() {
+                    "dock" => self.open_settings_tab(host, SettingsTab::Dock),
+                    "calendar" => self.open_widgets_subtab(host, WidgetSubTab::Calendar),
+                    "sysmon" => self.open_widgets_subtab(host, WidgetSubTab::SysMonitor),
+                    "overlay" => self.open_settings_tab(host, SettingsTab::Overlay),
+                    _ => self.open_settings_tab(host, SettingsTab::General),
+                }
                 false
             }
             WorkerMsg::ConfigChanged { .. } => true,
@@ -123,18 +110,14 @@ impl<I: IconProvider> AppController<I> {
             } => {
                 let tag = map_module_tag(&module);
                 self.debug.record_event(tag, "worker_metrics");
-                self.debug.log(
-                    now,
-                    LogLevel::Trace,
-                    tag,
-                    format!(
-                        "worker[{module}]: RAM {:.1} МБ, CPU {}.{}%, ev={events}, fr={frames}, max={:.1}мс",
-                        ram_kb as f64 / 1024.0,
-                        cpu_tenths / 10,
-                        cpu_tenths % 10,
-                        max_us as f64 / 1000.0
-                    ),
+                let text = format!(
+                    "worker[{module}]: RAM {:.1} МБ, CPU {}.{}%, ev={events}, fr={frames}, max={:.1}мс",
+                    ram_kb as f64 / 1024.0,
+                    cpu_tenths / 10,
+                    cpu_tenths % 10,
+                    max_us as f64 / 1000.0
                 );
+                self.debug.log(now, LogLevel::Trace, tag, text);
                 false
             }
         }
@@ -211,7 +194,7 @@ impl<I: IconProvider> AppController<I> {
             return;
         }
         let t0 = Instant::now();
-        let mut open_tab: Option<SettingsTab> = None;
+        let mut open_tab: Option<(SettingsTab, Option<WidgetSubTab>)> = None;
         let mut msg_out: Option<(LogLevel, &'static str, String)> = None;
         match ev {
             PlatformEvent::WidgetPointerMove { widget_id, point } => {
@@ -248,8 +231,12 @@ impl<I: IconProvider> AppController<I> {
             }
             other => self.handle_widget_state_event(host, other, t0, &mut msg_out),
         }
-        if let Some(tab) = open_tab {
-            self.open_settings_tab(host, tab);
+        if let Some((tab, sub)) = open_tab {
+            if let Some(wsub) = sub {
+                self.open_widgets_subtab(host, wsub);
+            } else {
+                self.open_settings_tab(host, tab);
+            }
         }
         if let Some((lvl, tag, m)) = msg_out {
             self.debug.log(host.local_time_now(), lvl, tag, m);
@@ -383,13 +370,15 @@ fn level_for_msg(msg: &str) -> LogLevel {
 
 fn classify_widget_reply(
     msg: String,
-    open_tab: &mut Option<SettingsTab>,
+    open_tab: &mut Option<(SettingsTab, Option<WidgetSubTab>)>,
     msg_out: &mut Option<(LogLevel, &'static str, String)>,
 ) {
     match msg.as_str() {
         "" => {}
-        "open_settings" => *open_tab = Some(SettingsTab::Calendar),
-        "open_settings_sysmon" => *open_tab = Some(SettingsTab::SysMonitor),
+        "open_settings" => *open_tab = Some((SettingsTab::Widgets, Some(WidgetSubTab::Calendar))),
+        "open_settings_sysmon" => {
+            *open_tab = Some((SettingsTab::Widgets, Some(WidgetSubTab::SysMonitor)))
+        }
         _ => *msg_out = Some((level_for_msg(&msg), "widgets", msg)),
     }
 }

@@ -184,7 +184,10 @@ mod tests {
         // Delete original desktop shortcut: portable copy must survive!
         let _ = fs::remove_file(&src);
         assert!(!src.exists());
-        assert_eq!(fs::read(&localized).ok().as_deref(), Some(&b"fake-lnk-payload-v1"[..]));
+        assert_eq!(
+            fs::read(&localized).ok().as_deref(),
+            Some(&b"fake-lnk-payload-v1"[..])
+        );
 
         // Non-shortcut (.exe) is never copied.
         let exe = desktop.join("app.exe");

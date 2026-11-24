@@ -4,12 +4,8 @@ use crate::layout::{ButtonTone, LayoutBuilder};
 use crate::layout_tabs::row;
 use crate::types::{SettingsAction, SettingsSnapshot, SliderKind};
 
-pub(crate) fn build_sysmon_tab(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
+pub(crate) fn build_sysmon_body(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
     let s = &snap.sysmon;
-    b.set_header(
-        "Системный монитор",
-        "Windows 11 Fluent Design · регулируйте частоту опроса, чтобы снизить нагрузку на CPU",
-    );
 
     let main_rows = vec![
         row(0, 50, "Показывать виджет", None, None, true),

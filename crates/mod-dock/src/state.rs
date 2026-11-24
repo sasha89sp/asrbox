@@ -243,7 +243,11 @@ impl DockInstance {
             return DockStepEffect::default();
         }
         if self.is_zoom_pending() {
-            let target = if self.hovered_item.is_some() { 1.0 } else { 0.0 };
+            let target = if self.hovered_item.is_some() {
+                1.0
+            } else {
+                0.0
+            };
             let duration = f32::from(self.config.hover_zoom.duration_ms).max(1.0);
             let delta = f32::from(dt_ms) / duration;
             if target > self.zoom_progress {

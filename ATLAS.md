@@ -8,10 +8,10 @@
 | --- | --- | --- | --- | --- |
 | `xtask` | `xtask` | CLI | Служебные команды workspace (`atlas-check`). | `xtask/MAP.md` |
 | `crates/core` | `asrbox-core` | lib | Трейт `Module`, конфиг модулей (`modules.cfg`, `IsolationMode`) и протокол IPC (`SupervisorCmd`/`WorkerMsg`). | `crates/core/MAP.md` |
-| `crates/platform-api` | `asrbox-platform-api` | lib | Безопасные трейты `DockPlatform`, `WidgetPlatform`, `ToolsPlatform`, `IconProvider`, `FluentPalette`, `AppearanceConfig` и `FluentMenuSpec` (без `unsafe`). | `crates/platform-api/MAP.md` |
-| `crates/platform-windows` | `asrbox-platform-windows` | lib | Реализация `platform-api` через `windows-rs` (`JobObject`, layered-окна, Fluent `HICON` и Fluent-меню, `.lnk`/WIC/`SHGetFileInfoW` иконки, WinHTTP+WebDAV/PROPFIND/sync, Credential Manager, автозагрузка, телеметрия; единственный `unsafe`). | `crates/platform-windows/MAP.md` |
+| `crates/platform-api` | `asrbox-platform-api` | lib | Безопасные трейты `DockPlatform`, `WidgetPlatform`, `ToolsPlatform`, `IconProvider`, `FluentPalette`, `AppearanceConfig`, `FontRenderer` и `FluentMenuSpec` (без `unsafe`). | `crates/platform-api/MAP.md` |
+| `crates/platform-windows` | `asrbox-platform-windows` | lib | Реализация `platform-api` через `windows-rs` (`JobObject` с breakaway, layered-окна, Fluent `HICON` и Fluent-меню, шрифты GDI ClearType + DirectWrite / `Segoe UI Variable`, `.lnk`/WIC иконки, WinHTTP+WebDAV/PROPFIND/sync, Credential Manager, автозагрузка, телеметрия; единственный `unsafe`). | `crates/platform-windows/MAP.md` |
 | `crates/mod-keyboard` | `asrbox-mod-keyboard` | process | Переназначение клавиш и аварийное отключение хука. | `crates/mod-keyboard/MAP.md` |
-| `crates/mod-dock` | `asrbox-mod-dock` | process (1) | Неограниченное число независимых док-панелей (Windows 11 Fluent, Light/Dark): 4 индивидуальных режима имён, слой, drag-перенос/удаление, индикатор запущенных, прозрачность и размер. | `crates/mod-dock/MAP.md` |
+| `crates/mod-dock` | `asrbox-mod-dock` | process (1) | Неограниченное число независимых док-панелей (Windows 11 Fluent, Light/Dark): 4 режима имён, слой, drag-перенос/удаление, защита от второй копии, анимация запуска, прозрачность и размер. | `crates/mod-dock/MAP.md` |
 | `crates/mod-speech` | `asrbox-mod-speech` | process | Голос в текст (Whisper, ленивая загрузка + SHA-256). | `crates/mod-speech/MAP.md` |
 | `crates/mod-backup` | `asrbox-mod-backup` | on-demand | Портативные `.zip`-бэкапы настроек и программы (`data/backups/`, STORE ZIP + CRC-32) с авто/ручной выгрузкой на подключённые WebDAV-серверы. | `crates/mod-backup/MAP.md` |
 | `crates/mod-webdav` | `asrbox-mod-webdav` | on-demand | Неограниченное число WebDAV-серверов (`Яндекс.Диск`, `Mail.ru`, `Свой HTTPS`, миграция v1->v2), парсер `PROPFIND` и периодическая синхронизация файлов/папок Windows (`sync.cfg`). Пароли — только в Credential Manager. | `crates/mod-webdav/MAP.md` |
@@ -22,8 +22,8 @@
 | `crates/mod-overlay` | `asrbox-mod-overlay` | process | Игровой HUD-оверлей (FPS/1% low, GPU/VRAM, CPU, RAM, NET/PL): автозапуск в играх, FSO/Topmost, Fluent-палитра, авто-выход из setup, 100% click-through, углы/своя точка, прозрачность и ресайз. | `crates/mod-overlay/MAP.md` |
 | `crates/mod-debug` | `asrbox-mod-debug` | on-open | Отладочный модуль: живые логи по модулям, переключатель TRACE/файл, метрики RAM/CPU/GDI и диагностический отчёт (вкладка «Диагностика»). | `crates/mod-debug/MAP.md` |
 | `crates/mod-about` | `asrbox-mod-about` | on-open | Модуль истории версий и путей: портативный статус, текущие пути на диске и встроенная история версий (`CHANGELOG.md`). | `crates/mod-about/MAP.md` |
-| `crates/mod-settings` | `asrbox-mod-settings` | on-open | Единое Fluent-окно настроек с браузерными вкладками (Общие настройки, Модули, Док-панели, Календарь, Системный монитор, Игровой оверлей + вкладки Диагностика, История версий и Обзор WebDAV). | `crates/mod-settings/MAP.md` |
-| `crates/app` | `asrbox` | supervisor | Точка входа `asrbox.exe`, супервизор с `JobObject` (`--worker dock|widgets|overlay`, `--inproc`, `--safe-mode`, `--selftest`), плавная тема, бэкап/WebDAV/синхронизация, Fluent-трей. | `crates/app/MAP.md` |
+| `crates/mod-settings` | `asrbox-mod-settings` | on-open | Единое Fluent-окно настроек (4 раздела: Общие настройки, Док-панели, Виджеты [Календарь\|Монитор], Игровой оверлей + браузерные вкладки Диагностика, История версий, Обзор WebDAV). | `crates/mod-settings/MAP.md` |
+| `crates/app` | `asrbox` | supervisor | Точка входа `asrbox.exe`, crash-логгер, супервизор с `JobObject` (`--worker dock|widgets|overlay`), портативные ярлыки `data/shortcuts/`, плавная тема, бэкап/WebDAV/синхронизация, Fluent-трей. | `crates/app/MAP.md` |
 
 ## 2. Куда смотреть
 

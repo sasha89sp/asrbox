@@ -6,8 +6,8 @@ use asrbox_mod_debug::LogLevel;
 use asrbox_mod_dock::{load_docks_from_file, DockEdge};
 use asrbox_mod_settings::{
     AboutSettingsView, AppearanceSettingsView, BrowserTab, CalendarSettingsView,
-    CalendarSourceView, DockItemView, DockSettingsView, SettingsAction, SettingsSnapshot,
-    SettingsTab, SysMonitorSettingsView,
+    CalendarSourceView, DiagnosticsLiveView, DockItemView, DockSettingsView, SettingsAction,
+    SettingsSnapshot, SettingsTab, SysMonitorSettingsView, WidgetSubTab,
 };
 use asrbox_mod_widgets::{load_sysmon_config, load_widget_config, PeriodFilter};
 use asrbox_platform_api::{
@@ -39,6 +39,15 @@ impl<I: IconProvider> AppController<I> {
         self.render_settings_ui(host);
     }
 
+    pub(crate) fn open_widgets_subtab<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
+        &mut self,
+        host: &mut H,
+        sub: WidgetSubTab,
+    ) {
+        self.settings_ui.selected_widget = sub;
+        self.open_settings_tab(host, SettingsTab::Widgets);
+    }
+
     pub(crate) fn render_settings_ui<H: ToolsPlatform>(&mut self, host: &mut H) {
         if !host.is_settings_window_open() {
             return;
@@ -66,7 +75,7 @@ impl<I: IconProvider> AppController<I> {
         self.last_settings_tab = Some(cur);
         match cur {
             SettingsTab::Dock => self.settings_ui.reset_dock_input_sync(),
-            SettingsTab::Calendar => host.set_settings_input_text(0, ""),
+            SettingsTab::Widgets => host.set_settings_input_text(0, ""),
             _ => {}
         }
     }
@@ -164,7 +173,17 @@ impl<I: IconProvider> AppController<I> {
             height: sys_cfg.height,
         };
 
-        let diagnostics = self.build_diagnostics_view(host);
+        let diagnostics = if self.settings_ui.active_browser_tab == BrowserTab::Diagnostics {
+            self.build_diagnostics_view(host)
+        } else {
+            DiagnosticsLiveView {
+                monitor_enabled: self.diagnostics_monitor_enabled,
+                verbose: self.debug.verbose_trace(),
+                file_log: self.debug.file_logging(),
+                filter_label: self.debug.filter_label().to_owned(),
+                ..DiagnosticsLiveView::default()
+            }
+        };
         let changelog_lines = changelog_text()
             .lines()
             .filter(|l| !l.trim().is_empty())
@@ -259,6 +278,26 @@ impl<I: IconProvider> AppController<I> {
                     }
                 } else {
                     self.reload_module_config(host, id);
+                }
+            }
+            SettingsAction::RestartAllModules => {
+                for id in ModuleId::ALL {
+                    if !self.modules_cfg.is_enabled(id) {
+                        continue;
+                    }
+                    if self.modules_cfg.isolation == IsolationMode::Process {
+                        match self.supervisor.restart_module(id) {
+                            Ok(pid) => self.debug.log(
+                                now,
+                                LogLevel::Info,
+                                "app",
+                                format!("Перезапущен {} (PID {pid})", id.as_str()),
+                            ),
+                            Err(e) => self.debug.log(now, LogLevel::Error, "app", e),
+                        }
+                    } else {
+                        self.reload_module_config(host, id);
+                    }
                 }
             }
             SettingsAction::OpenDocksConfig => {

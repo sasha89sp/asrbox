@@ -143,7 +143,15 @@ impl WidgetPlatform for WindowsDockHost {
             unsafe {
                 if visible {
                     let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
-                    let _ = SetWindowPos(hwnd, Some(HWND_TOPMOST), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                    let _ = SetWindowPos(
+                        hwnd,
+                        Some(HWND_TOPMOST),
+                        0,
+                        0,
+                        0,
+                        0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                    );
                 } else {
                     let _ = ShowWindow(hwnd, SW_HIDE);
                 }

@@ -81,6 +81,7 @@ pub(crate) fn draw_control(
             draw_segment_or_chip(bgra, texts, r, &lbl, active, hovered, pal);
         }
         HitKind::SelectDockItem { label, active, .. }
+        | HitKind::SelectWidgetSubTab { label, active, .. }
         | HitKind::Chip { label, active, .. }
         | HitKind::Segment { label, active, .. } => {
             draw_segment_or_chip(bgra, texts, r, label, *active, hovered, pal);

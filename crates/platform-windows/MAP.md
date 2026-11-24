@@ -18,14 +18,17 @@
 - `src/dock_win.rs` — реализация `DockPlatform` для `WindowsDockHost` (окна доков, слои, рендер, Fluent-меню, тема, запуск/фокус).
 - `src/dock_proc.rs` — оконная процедура док-панели (`dock_wnd_proc`), удержание слоя `Wallpaper`, захват ЛКМ, ПКМ, анимация и `WM_DROPFILES`.
 - `src/dock_menu.rs` — Fluent ПКМ-меню док-панели (верхний ряд быстрых действий + подменю положения, слоя, имён, прозрачности и поведения).
-- `src/running.rs` — определение запущенных приложений (`EnumWindows` + `QueryFullProcessImageNameW`), резолв `.lnk` (`IShellLinkW`) и активация открытого окна по клику.
-- `src/job.rs` — Win32 `JobObject` (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`) для изоляции дочерних процессов модулей и `is_process_alive(pid)`.
-- `src/settings_proc.rs` — изменяемое Fluent-окно настроек (`AsrboxSettingsWindow`, события мыши/клавиатуры/колеса, 5 слотов `EDIT` с `EN_CHANGE`, таймер анимации темы).
-- `src/settings_helpers.rs` — вспомогательные функции окна настроек: `DWMWA_USE_IMMERSIVE_DARK_MODE`, позиционирование/стилизация полей `EDIT` и GDI-вывод кадра.
+- `src/running.rs` — определение запущенных приложений (`EnumWindows` + `QueryFullProcessImageNameW`), резолв `.lnk` (`IShellLinkW`) и усиленная активация открытого/свёрнутого окна (`AllowSetForegroundWindow`/`SW_RESTORE`/`AttachThreadInput`).
+- `src/job.rs` — Win32 `JobObject` (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK`) для изоляции дочерних процессов модулей без закрытия запущенных из дока программ.
+- `src/settings_proc.rs` — изменяемое Fluent-окно настроек (`AsrboxSettingsWindow`, защита `try_borrow`, события мыши/клавиатуры/колеса, 5 слотов `EDIT` с `EN_CHANGE`, таймер анимации темы).
+- `src/settings_helpers.rs` — вспомогательные функции окна настроек: `DWMWA_USE_IMMERSIVE_DARK_MODE`, позиционирование/стилизация полей `EDIT` (`Segoe UI Variable`) и GDI-вывод кадра.
 - `src/widget_win.rs` — реализация `WidgetPlatform` для `WindowsDockHost` (окна виджетов, ресайз, клик-сквозь, видимость, таймеры, тема, Fluent-меню и тултипы).
 - `src/widget_proc.rs` — оконная процедура виджета: клик-сквозь (`HTTRANSPARENT`/`MA_NOACTIVATE`), перетаскивание, 8-сторонний ресайз и управление слоем.
 - `src/widget_menu.rs` — Fluent ПКМ-меню виджетов (Календарь и Системный монитор с верхним рядом быстрых действий и подменю).
-- `src/widget_text.rs` — рендер кириллического текста `Segoe UI` (`DrawTextW`) на BGRA-кадр, Fluent tooltip с темой и локальное время.
+- `src/font_engine.rs` — автоопределение системного шрифта Win11 `Segoe UI Variable` (`Display`/`Text`/`Small` -> фолбэк `Segoe UI`), кэш GDI `HFONT` с `CLEARTYPE_NATURAL_QUALITY` и гамма-блендинг маски текста.
+- `src/dwrite_text.rs` — ленивый движок `DirectWrite` (`IDWriteFactory` + `IDWriteGdiInterop`) для плавного сглаживания текста на выбор пользователя.
+- `src/dwrite_vtable.rs` — статический COM vtable `IDWriteTextRenderer` без аллокаций на кадр для `dwrite_text`.
+- `src/widget_text.rs` — диспетчер рендера текста (`GDI ClearType` / `DirectWrite`) на BGRA-кадр, Fluent tooltip с темой и локальное время.
 - `src/overlay_game.rs` — детектор активных игр (D3D fullscreen / borderless покрытие монитора, чёрный список, `extra_games`, rect монитора).
 - `src/overlay_telemetry.rs` — фоновый поток телеметрии игрового оверлея (`WM_OVERLAY_DONE`, DWM FPS + 1% low / Гц, GPU/VRAM, CPU, RAM, ICMP-пинг и % потерь).
 - `src/sys_telemetry.rs` — фоновый поток сбора телеметрии (`WM_TELEMETRY_DONE`, uptime, план питания, `NtQueryTimerResolution`).

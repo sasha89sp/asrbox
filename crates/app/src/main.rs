@@ -364,4 +364,3 @@ fn install_crash_log_hook(logs_dir: &std::path::Path) {
         prev(info);
     }));
 }
-

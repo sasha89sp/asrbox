@@ -1,3 +1,4 @@
+use asrbox_core::IsolationMode;
 use asrbox_platform_api::{AccentPreset, AppLanguage, FontRenderer, PixelRect, ThemeMode};
 
 use crate::i18n::tr;
@@ -36,20 +37,19 @@ pub(crate) fn build_general_tab(
 }
 
 fn add_theme_card(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
-    let lang = b.lang;
+    let l = b.lang;
     if !b.matches_search(
         "тема оформление светлая тёмная акцент цвет шрифт directwrite cleartype theme dark light accent font",
     ) {
         return;
     }
-    let app = &snap.appearance;
     let rows = vec![
         row(
             0,
             56,
-            tr(lang, "Тема оформления", "Color theme"),
+            tr(l, "Тема оформления", "Color theme"),
             Some(tr(
-                lang,
+                l,
                 "Windows 11 Fluent Design — плавное переключение для всех окон",
                 "Windows 11 Fluent Design — smooth transition across all windows",
             )),
@@ -59,9 +59,9 @@ fn add_theme_card(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
         row(
             56,
             56,
-            tr(lang, "Акцентный цвет", "Accent color"),
+            tr(l, "Акцентный цвет", "Accent color"),
             Some(tr(
-                lang,
+                l,
                 "Цвет активных элементов, переключателей и индикаторов",
                 "Highlight color for active controls, toggles and indicators",
             )),
@@ -71,9 +71,9 @@ fn add_theme_card(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
         row(
             112,
             56,
-            tr(lang, "Рендеринг шрифтов", "Font rendering"),
+            tr(l, "Рендеринг шрифтов", "Font rendering"),
             Some(tr(
-                lang,
+                l,
                 "Segoe UI Variable (Win 11): лёгкий GDI ClearType или DirectWrite",
                 "Segoe UI Variable (Win 11): lightweight GDI ClearType or DirectWrite",
             )),
@@ -81,39 +81,41 @@ fn add_theme_card(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
             false,
         ),
     ];
-    let cy = b.add_card(
-        Some(tr(lang, "1. ОФОРМЛЕНИЕ", "1. APPEARANCE")),
-        false,
-        rows,
-    );
+    let cy = b.add_card(Some(tr(l, "1. ОФОРМЛЕНИЕ", "1. APPEARANCE")), false, rows);
+    add_theme_card_controls(b, snap, cy);
+}
+
+fn add_theme_card_controls(b: &mut LayoutBuilder, snap: &SettingsSnapshot, cy: i32) {
+    let l = b.lang;
+    let app = &snap.appearance;
     b.add_segmented_row(
         cy,
         56,
         vec![
             (
-                tr(lang, "Светлая", "Light"),
+                tr(l, "Светлая", "Light"),
                 app.theme == ThemeMode::Light,
                 SettingsAction::SetThemeMode(ThemeMode::Light),
             ),
             (
-                tr(lang, "Тёмная", "Dark"),
+                tr(l, "Тёмная", "Dark"),
                 app.theme == ThemeMode::Dark,
                 SettingsAction::SetThemeMode(ThemeMode::Dark),
             ),
         ],
     );
     let count = AccentPreset::ALL.len() as i32;
-    let step = 32i32;
-    let start_x = b.content_x + b.content_w as i32 - 14 - count * step + 4;
+    let start_x = b.content_x + b.content_w as i32 - 14 - count * 32 + 4;
     let sy = b.sy(cy + 56 + 14);
     for (idx, preset) in AccentPreset::ALL.iter().copied().enumerate() {
+        let rect = PixelRect {
+            x: start_x + (idx as i32) * 32,
+            y: sy,
+            width: 26,
+            height: 26,
+        };
         b.push_control(
-            PixelRect {
-                x: start_x + (idx as i32) * step,
-                y: sy,
-                width: 26,
-                height: 26,
-            },
+            rect,
             HitKind::AccentSwatch {
                 preset,
                 active: app.accent == preset,
@@ -139,19 +141,19 @@ fn add_theme_card(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
 }
 
 fn add_language_card(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
-    let lang = b.lang;
-    if !b.matches_search("язык интерфейс русский english автозагрузка windows language autostart")
-    {
+    let l = b.lang;
+    if !b.matches_search(
+        "язык интерфейс русский english автозагрузка windows изоляция процессы перезапуск модули language autostart isolation restart",
+    ) {
         return;
     }
-    let cur_lang = snap.appearance.language;
     let rows = vec![
         row(
             0,
             54,
-            tr(lang, "Язык интерфейса", "Interface language"),
+            tr(l, "Язык интерфейса", "Interface language"),
             Some(tr(
-                lang,
+                l,
                 "Применяется мгновенно без перезапуска программы",
                 "Applies immediately without restarting",
             )),
@@ -161,21 +163,52 @@ fn add_language_card(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
         row(
             54,
             54,
-            tr(lang, "Автозагрузка с Windows", "Launch with Windows"),
+            tr(l, "Автозагрузка с Windows", "Launch with Windows"),
             Some(tr(
-                lang,
+                l,
                 "Запускать asrbox при входе в систему (HKCU\\...\\Run)",
                 "Start asrbox automatically on Windows sign-in",
+            )),
+            None,
+            true,
+        ),
+        row(
+            108,
+            56,
+            tr(l, "Изоляция модулей", "Module isolation"),
+            Some(tr(
+                l,
+                "Отдельный процесс для каждого модуля или общий процесс",
+                "Separate worker process per module or shared process",
+            )),
+            None,
+            true,
+        ),
+        row(
+            164,
+            56,
+            tr(l, "Перезапуск всех модулей", "Restart all modules"),
+            Some(tr(
+                l,
+                "Перезагружает все включённые модули без выхода из asrbox",
+                "Restarts every enabled module without exiting asrbox",
             )),
             None,
             false,
         ),
     ];
     let cy = b.add_card(
-        Some(tr(lang, "2. ЯЗЫК И СИСТЕМА", "2. LANGUAGE & STARTUP")),
+        Some(tr(l, "2. ЯЗЫК И СИСТЕМА", "2. LANGUAGE & SYSTEM")),
         false,
         rows,
     );
+    add_language_card_controls(b, snap, cy);
+}
+
+fn add_language_card_controls(b: &mut LayoutBuilder, snap: &SettingsSnapshot, cy: i32) {
+    let l = b.lang;
+    let cur_lang = snap.appearance.language;
+    let is_proc = snap.isolation == IsolationMode::Process;
     b.add_segmented_row(
         cy,
         54,
@@ -198,6 +231,29 @@ fn add_language_card(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
         cy + 54 + 16,
         snap.autostart_enabled,
         SettingsAction::SetAutostart(!snap.autostart_enabled),
+    );
+    b.add_segmented_row(
+        cy + 108,
+        56,
+        vec![
+            (
+                tr(l, "Процессы", "Processes"),
+                is_proc,
+                SettingsAction::SetIsolation(IsolationMode::Process),
+            ),
+            (
+                tr(l, "Один процесс", "In-Process"),
+                !is_proc,
+                SettingsAction::SetIsolation(IsolationMode::InProc),
+            ),
+        ],
+    );
+    let bx = b.content_x + b.content_w as i32 - 204 - 14;
+    b.push_btn(
+        (bx, cy + 164 + 13, 204, 30),
+        tr(l, "Перезапустить все модули", "Restart All Modules"),
+        ButtonTone::Secondary,
+        SettingsAction::RestartAllModules,
     );
 }
 

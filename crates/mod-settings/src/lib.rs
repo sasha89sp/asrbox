@@ -31,7 +31,7 @@ pub use types::{
     CalendarSettingsView, CalendarSourceView, DiagnosticsLiveView, DockItemView, DockSettingsView,
     FileSyncSettingsView, ModuleStatusView, OverlaySettingsView, SettingsAction, SettingsSnapshot,
     SettingsTab, SliderKind, SyncItemView, SysMonitorSettingsView, WebDavBrowserView,
-    WebDavDraftView, WebDavServerView,
+    WebDavDraftView, WebDavServerView, WidgetSubTab,
 };
 
 use layout::SettingsLayout;
@@ -44,6 +44,7 @@ pub struct SettingsUiState {
     pub active_browser_tab: BrowserTab,
     pub selected_dock: usize,
     pub selected_dock_item: Option<u64>,
+    pub selected_widget: WidgetSubTab,
     pub editing_server_dir: Option<String>,
     pub search_query: String,
     pub width: u32,
@@ -69,6 +70,7 @@ impl Default for SettingsUiState {
             active_browser_tab: BrowserTab::Main,
             selected_dock: 0,
             selected_dock_item: None,
+            selected_widget: WidgetSubTab::Calendar,
             editing_server_dir: None,
             search_query: String::new(),
             width: 880,
@@ -218,6 +220,7 @@ impl SettingsUiState {
             active_browser: &self.active_browser_tab,
             selected_dock: self.selected_dock,
             selected_dock_item: self.selected_dock_item,
+            selected_widget: self.selected_widget,
             editing_server_dir: self.editing_server_dir.as_deref(),
             search_query: &self.search_query,
             width: self.width,

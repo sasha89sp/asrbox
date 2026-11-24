@@ -1,7 +1,7 @@
 use asrbox_core::ModuleId;
 
 use crate::layout::{ButtonTone, LayoutBuilder};
-use crate::layout_tabs::row;
+use crate::layout_tabs::{add_module_process_card, row};
 use crate::types::{OverlaySettingsView, SettingsAction, SettingsSnapshot, SliderKind};
 
 pub(crate) fn build_overlay_tab(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
@@ -10,6 +10,7 @@ pub(crate) fn build_overlay_tab(b: &mut LayoutBuilder, snap: &SettingsSnapshot) 
         "Игровой оверлей",
         "Отдельный процесс · в игре клики проходят насквозь, без перехвата фокуса и фризов",
     );
+    add_module_process_card(b, snap, ModuleId::Overlay);
     add_overlay_mode_card(b, o);
     add_overlay_pos_card(b, o);
     add_overlay_size_card(b, o);
@@ -33,14 +34,6 @@ fn add_overlay_mode_card(b: &mut LayoutBuilder, o: &OverlaySettingsView) {
     let rows = vec![
         row(
             0,
-            50,
-            "Модуль игрового оверлея",
-            Some("Запускается отдельным изолированным процессом (asrbox --worker overlay)"),
-            None,
-            true,
-        ),
-        row(
-            50,
             52,
             "Автозапуск только в играх",
             Some("Вне игры оверлей скрыт и не опрашивает датчики (0% нагрузки)"),
@@ -48,7 +41,7 @@ fn add_overlay_mode_card(b: &mut LayoutBuilder, o: &OverlaySettingsView) {
             true,
         ),
         row(
-            102,
+            52,
             54,
             "Поверх полноэкранных игр (FSO / Topmost)",
             Some("Окно без рамки и FSO Windows 10/11 (без инжекта DLL, безопасно для античитов)"),
@@ -56,7 +49,7 @@ fn add_overlay_mode_card(b: &mut LayoutBuilder, o: &OverlaySettingsView) {
             true,
         ),
         row(
-            156,
+            106,
             58,
             "Интерактивная настройка на экране",
             Some(setup_sub),
@@ -68,22 +61,13 @@ fn add_overlay_mode_card(b: &mut LayoutBuilder, o: &OverlaySettingsView) {
     let tx = b.content_x + b.content_w as i32 - 60;
     b.push_toggle(
         tx,
-        cy + 13,
-        o.module_enabled,
-        SettingsAction::SetModuleEnabled {
-            id: ModuleId::Overlay,
-            enabled: !o.module_enabled,
-        },
-    );
-    b.push_toggle(
-        tx,
-        cy + 64,
+        cy + 14,
         o.auto_games_only,
         SettingsAction::SetOverlayAutoGamesOnly(!o.auto_games_only),
     );
     b.push_toggle(
         tx,
-        cy + 117,
+        cy + 67,
         o.force_topmost_fullscreen,
         SettingsAction::SetOverlayForceTopmost(!o.force_topmost_fullscreen),
     );
@@ -95,7 +79,7 @@ fn add_overlay_mode_card(b: &mut LayoutBuilder, o: &OverlaySettingsView) {
     let btn_w = if o.setup_mode { 226 } else { 184 };
     let bx = b.content_x + b.content_w as i32 - btn_w as i32 - 16;
     b.push_btn(
-        (bx, cy + 169, btn_w, 32),
+        (bx, cy + 119, btn_w, 32),
         label,
         tone,
         SettingsAction::SetOverlaySetupMode(!o.setup_mode),

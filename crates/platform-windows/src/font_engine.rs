@@ -5,8 +5,8 @@ use asrbox_platform_api::{BgraFrame, FontRenderer};
 use windows::Win32::Foundation::LPARAM;
 use windows::Win32::Graphics::Gdi::{
     CreateFontIndirectW, DeleteObject, EnumFontFamiliesExW, GetDC, ReleaseDC,
-    CLEARTYPE_NATURAL_QUALITY, DEFAULT_CHARSET, FW_NORMAL, FW_SEMIBOLD, HFONT, LOGFONTW,
-    TEXTMETRICW,
+    CLEARTYPE_NATURAL_QUALITY, DEFAULT_CHARSET, FONT_QUALITY, FW_NORMAL, FW_SEMIBOLD, HFONT,
+    LOGFONTW, TEXTMETRICW,
 };
 
 const SEGOE_VAR_TEXT: &str = "Segoe UI Variable Text";
@@ -118,7 +118,7 @@ fn create_ui_font_handle(size_px: i32, bold: bool) -> HFONT {
             FW_NORMAL.0 as i32
         },
         lfCharSet: DEFAULT_CHARSET,
-        lfQuality: CLEARTYPE_NATURAL_QUALITY,
+        lfQuality: FONT_QUALITY(CLEARTYPE_NATURAL_QUALITY as u8),
         ..Default::default()
     };
     for (dst, src) in lf.lfFaceName.iter_mut().zip(face.encode_utf16()) {
@@ -177,10 +177,11 @@ pub(crate) fn blend_cleartype_mask(
 ) {
     let dst_stride = out.width as usize;
     let base_alpha = f32::from(rgba[3]) / 255.0;
-    let luma = (0.299 * f32::from(rgba[0]) + 0.587 * f32::from(rgba[1]) + 0.114 * f32::from(rgba[2]))
-        / 255.0;
+    let luma =
+        (0.299 * f32::from(rgba[0]) + 0.587 * f32::from(rgba[1]) + 0.114 * f32::from(rgba[2]))
+            / 255.0;
     let is_light = luma >= 0.5;
-    let (sr_c, sg_c, sb_c) = (f32::from(rgba[0]), f32::from(rgba[1]), f32::from(rgba[2]));
+    let rgb = [f32::from(rgba[0]), f32::from(rgba[1]), f32::from(rgba[2])];
 
     for y in y0..y1 {
         let sy = y - src_offset_y;
@@ -203,36 +204,37 @@ pub(crate) fn blend_cleartype_mask(
             if s_idx + 2 >= scratch.len() || d_idx + 3 >= out.pixels.len() {
                 continue;
             }
-            let (mb, mg, mr) = (scratch[s_idx], scratch[s_idx + 1], scratch[s_idx + 2]);
-            if (mb | mg | mr) == 0 {
-                continue;
-            }
-            let cr = tune_coverage(mr, is_light) * base_alpha;
-            let cg = tune_coverage(mg, is_light) * base_alpha;
-            let cb = tune_coverage(mb, is_light) * base_alpha;
-            let da = out.pixels[d_idx + 3];
-            if da == 255 {
-                let db = f32::from(out.pixels[d_idx]);
-                let dg = f32::from(out.pixels[d_idx + 1]);
-                let dr = f32::from(out.pixels[d_idx + 2]);
-                out.pixels[d_idx] = (sb_c * cb + db * (1.0 - cb)).round().clamp(0.0, 255.0) as u8;
-                out.pixels[d_idx + 1] =
-                    (sg_c * cg + dg * (1.0 - cg)).round().clamp(0.0, 255.0) as u8;
-                out.pixels[d_idx + 2] =
-                    (sr_c * cr + dr * (1.0 - cr)).round().clamp(0.0, 255.0) as u8;
-            } else {
-                let sa = (0.299 * cr + 0.587 * cg + 0.114 * cb).clamp(0.0, 1.0);
-                let inv = 1.0 - sa;
-                let db = f32::from(out.pixels[d_idx]);
-                let dg = f32::from(out.pixels[d_idx + 1]);
-                let dr = f32::from(out.pixels[d_idx + 2]);
-                out.pixels[d_idx] = (sb_c * sa + db * inv).round().clamp(0.0, 255.0) as u8;
-                out.pixels[d_idx + 1] = (sg_c * sa + dg * inv).round().clamp(0.0, 255.0) as u8;
-                out.pixels[d_idx + 2] = (sr_c * sa + dr * inv).round().clamp(0.0, 255.0) as u8;
-                out.pixels[d_idx + 3] = (sa * 255.0 + f32::from(da) * inv)
-                    .round()
-                    .clamp(0.0, 255.0) as u8;
+            let mask = [scratch[s_idx], scratch[s_idx + 1], scratch[s_idx + 2]];
+            if (mask[0] | mask[1] | mask[2]) != 0 {
+                blend_pixel(
+                    &mut out.pixels[d_idx..d_idx + 4],
+                    mask,
+                    rgb,
+                    base_alpha,
+                    is_light,
+                );
             }
         }
+    }
+}
+
+#[inline]
+fn blend_pixel(dst: &mut [u8], mask_bgr: [u8; 3], rgb: [f32; 3], base_alpha: f32, is_light: bool) {
+    let cr = tune_coverage(mask_bgr[2], is_light) * base_alpha;
+    let cg = tune_coverage(mask_bgr[1], is_light) * base_alpha;
+    let cb = tune_coverage(mask_bgr[0], is_light) * base_alpha;
+    let (db, dg, dr) = (f32::from(dst[0]), f32::from(dst[1]), f32::from(dst[2]));
+    let da = dst[3];
+    if da == 255 {
+        dst[0] = (rgb[2] * cb + db * (1.0 - cb)).round().clamp(0.0, 255.0) as u8;
+        dst[1] = (rgb[1] * cg + dg * (1.0 - cg)).round().clamp(0.0, 255.0) as u8;
+        dst[2] = (rgb[0] * cr + dr * (1.0 - cr)).round().clamp(0.0, 255.0) as u8;
+    } else {
+        let sa = (0.299 * cr + 0.587 * cg + 0.114 * cb).clamp(0.0, 1.0);
+        let inv = 1.0 - sa;
+        dst[0] = (rgb[2] * sa + db * inv).round().clamp(0.0, 255.0) as u8;
+        dst[1] = (rgb[1] * sa + dg * inv).round().clamp(0.0, 255.0) as u8;
+        dst[2] = (rgb[0] * sa + dr * inv).round().clamp(0.0, 255.0) as u8;
+        dst[3] = (sa * 255.0 + f32::from(da) * inv).round().clamp(0.0, 255.0) as u8;
     }
 }

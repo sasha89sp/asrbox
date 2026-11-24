@@ -15,6 +15,7 @@ pub enum SettingsAction {
     SetAutostart(bool),
     SetModuleEnabled { id: ModuleId, enabled: bool },
     RestartModule(ModuleId),
+    RestartAllModules,
     // Dock
     AddDock,
     RemoveDock(String),

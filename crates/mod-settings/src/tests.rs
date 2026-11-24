@@ -115,6 +115,7 @@ fn sample_snapshot() -> SettingsSnapshot {
 fn renders_all_tabs_and_browser_tabs_in_light_and_dark() {
     let snap = sample_snapshot();
     let mut ui = SettingsUiState::default();
+    assert_eq!(SettingsTab::ALL.len(), 4);
     for theme in [ThemeMode::Dark, ThemeMode::Light] {
         ui.set_palette_immediate(FluentPalette::from_theme(theme, AccentPreset::Blue));
         for tab in SettingsTab::ALL {
@@ -124,6 +125,12 @@ fn renders_all_tabs_and_browser_tabs_in_light_and_dark() {
             assert_eq!(frame.bgra.width, 880);
             assert!(!frame.texts.is_empty());
             assert!(inputs.search.is_some());
+        }
+        ui.active_tab = SettingsTab::Widgets;
+        for sub in [WidgetSubTab::Calendar, WidgetSubTab::SysMonitor] {
+            ui.selected_widget = sub;
+            let (frame, _) = ui.render(&snap);
+            assert!(!frame.texts.is_empty());
         }
     }
     ui.open_browser_tab(BrowserTab::Diagnostics);
@@ -147,8 +154,10 @@ fn renders_all_tabs_and_browser_tabs_in_light_and_dark() {
 #[test]
 fn backup_and_sync_server_chips_do_not_overlap_subtitles() {
     let snap = sample_snapshot();
-    let mut ui = SettingsUiState::default();
-    ui.active_tab = SettingsTab::General;
+    let mut ui = SettingsUiState {
+        active_tab: SettingsTab::General,
+        ..Default::default()
+    };
     let _ = ui.render(&snap);
 
     for card in &ui.layout.cards {
@@ -181,4 +190,3 @@ fn backup_and_sync_server_chips_do_not_overlap_subtitles() {
         }
     }
 }
-

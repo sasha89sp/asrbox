@@ -4,12 +4,8 @@ use crate::layout::{ButtonTone, CardRow, LayoutBuilder};
 use crate::layout_tabs::row;
 use crate::types::{CalendarSettingsView, SettingsAction, SettingsSnapshot, SliderKind};
 
-pub(crate) fn build_calendar_tab(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
+pub(crate) fn build_calendar_body(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
     let cal = &snap.calendar;
-    b.set_header(
-        "Google Календарь",
-        "Вставьте секретный адрес iCal (.ics) из настроек Google Календаря",
-    );
     if cal.commented_calendar_hint {
         let ay = b.add_card(
             None,
