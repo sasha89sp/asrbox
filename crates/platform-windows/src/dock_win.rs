@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use asrbox_platform_api::{
     BgraFrame, DockMenuAction, DockMenuState, DockPlatform, PixelPoint, PixelRect, TrayAction,
-    TrayMenuEntry, TrayModuleFlags, WidgetLayer,
+    TrayMenuEntry, TrayModuleFlags, WidgetFrame, WidgetLayer,
 };
 use windows::core::{w, PCWSTR};
 use windows::Win32::UI::Shell::DragAcceptFiles;
@@ -21,6 +21,7 @@ use crate::running::{activate_or_launch_target, query_running_exe_names, resolve
 use crate::shell::{open_in_notepad, pick_icon_dialog};
 use crate::tray::show_tray_context_menu;
 use crate::widget_proc::apply_widget_layer;
+use crate::widget_text::composite_widget_frame;
 use crate::window::{
     WindowsDockHost, ANIMATION_TICK_MS, ANIMATION_TIMER_ID, RUNNING_POLL_MS, RUNNING_POLL_TIMER_ID,
 };
@@ -101,6 +102,25 @@ impl DockPlatform for WindowsDockHost {
             .copied()
             .ok_or_else(|| format!("unknown dock window {dock_id}"))?;
         present_layered_bgra(hwnd, rect, frame)
+    }
+
+    fn present_dock_widget_frame(
+        &mut self,
+        dock_id: u64,
+        rect: PixelRect,
+        frame: &WidgetFrame,
+    ) -> Result<(), String> {
+        let hwnd = self
+            .windows
+            .get(&dock_id)
+            .copied()
+            .ok_or_else(|| format!("unknown dock window {dock_id}"))?;
+        let composited = composite_widget_frame(frame)?;
+        present_layered_bgra(hwnd, rect, &composited)
+    }
+
+    fn set_dock_tooltip(&mut self, _dock_id: u64, text: Option<&str>) -> Result<(), String> {
+        self.show_tooltip_text(text)
     }
 
     fn set_animation_timer(&mut self, dock_id: u64, active: bool) -> Result<(), String> {

@@ -1,9 +1,10 @@
 use std::error::Error;
-use std::ffi::OsStr;
 use std::fmt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use asrbox_platform_api::WidgetLayer;
+
+use crate::labels::{default_label_for_path, DockLabelMode};
 
 pub type DockId = u64;
 pub const SETTINGS_SLOT_ID: u64 = u64::MAX;
@@ -111,7 +112,7 @@ impl DockItem {
         if target.as_os_str().is_empty() {
             return Err(DockConfigError::EmptyTargetPath);
         }
-        let label = derive_label(&target);
+        let label = default_label_for_path(&target);
         Ok(Self {
             id,
             kind: DockItemKind::Shortcut,
@@ -143,6 +144,7 @@ pub struct DockConfig {
     pub enabled: bool,
     pub locked: bool,
     pub layer: WidgetLayer,
+    pub label_mode: DockLabelMode,
     pub free_pos: Option<(i32, i32)>,
     pub monitor_index: usize,
     pub edge: DockEdge,
@@ -168,6 +170,7 @@ impl DockConfig {
             enabled: true,
             locked: true,
             layer: WidgetLayer::Wallpaper,
+            label_mode: DockLabelMode::IconsOnly,
             free_pos: None,
             monitor_index: 0,
             edge: DockEdge::Bottom,
@@ -343,15 +346,6 @@ impl DockRegistry {
         item.icon = source;
         Ok(())
     }
-}
-
-fn derive_label(path: &Path) -> String {
-    path.file_stem()
-        .or_else(|| path.file_name())
-        .and_then(OsStr::to_str)
-        .filter(|name| !name.is_empty())
-        .map(str::to_owned)
-        .unwrap_or_else(|| path.to_string_lossy().into_owned())
 }
 
 #[cfg(test)]

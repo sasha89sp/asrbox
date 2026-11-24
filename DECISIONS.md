@@ -149,5 +149,17 @@
   4. Активировать в `crates/platform-windows` только фичу `Win32_Graphics_Dwm` существующего крейта `windows = "0.61"` (`docs/LICENSES.md` без изменений) для чтения статистики кадров DWM (`DwmGetCompositionTimingInfo` -> FPS и 1% low с честным фолбэком на `display_hz` при обходе композитора), а обнаружение игр выполнять в фоновом потоке (`overlay_game.rs`: `SHQueryUserNotificationState`/`QUNS_RUNNING_D3D_FULL_SCREEN` + покрытие монитора + чёрный список системных процессов + белый список `extra_games` в `overlay.cfg`).
 - **Причина**: Максимальная надёжность, нулевая нагрузка вне игр (`auto_games_only = true`), безопасность для античитов и сохранение компактного портативного бинарника.
 
+---
+
+## ADR-015: Индивидуальные режимы имён док-панелей, исправление конвейера иконок и FSO/Topmost оверлея (`v0.0.4`)
+
+- **Статус**: Принято (v0.0.4, согласовано владельцем)
+- **Решение**:
+  1. Сохранить строгую индивидуальность каждой док-панели (`DockConfig` без общих глобальных настроек): добавить независимое поле `label_mode` (`IconsOnly` / `HoverTooltip` / `IconAndLabel` / `LabelsOnly`) в `docks.cfg`, ПКМ-меню и вкладку «Док-панели», а также переименование ярлыков через нативное поле `EDIT` с кнопкой сброса.
+  2. Перевести вывод кадра док-панели на единый композитор текста `WidgetFrame` (`present_dock_widget_frame` + `set_dock_tooltip` в `DockPlatform`), переиспользуя существующий рендер `Segoe UI` и всплывающих подсказок без дублирования GDI-кода.
+  3. Усилить конвейер извлечения иконок (`crates/platform-windows/src/{icons.rs, icons_lnk.rs}`): добавить только фичу `Win32_System_Environment` существующего крейта `windows = "0.61"` (без новых внешних крейтов, `docs/LICENSES.md` без изменений) для `ExpandEnvironmentStringsW` при чтении `IShellLinkW::GetIconLocation`/`GetPath`, отсекать серую обёртку Explorer (`has_explorer_frame_box`), восстанавливать прозрачность legacy 1-битных масок `HICON` двойной растеризацией на чёрном/белом фоне и добавить фолбэк `SHGetFileInfoW(SHGFI_ICON | SHGFI_LARGEICON)`.
+  4. Добавить в `mod-overlay` опцию `force_topmost_fullscreen` (по умолчанию `true`) с `WS_EX_TOPMOST` при создании, `SWP_NOZORDER` при переключении click-through, бережным неактивирующим `HWND_TOPMOST` во время активной игры (FSO/DX12/Vulkan без DLL-инъекции) и автоматическим выходом из `setup_mode` при старте игры.
+- **Причина**: Чёткие иконки без синих заглушек и серых рамок, полная свобода отображения имён на каждой док-панели отдельно и надёжный античит-безопасный оверлей поверх FSO-игр.
+
 
 

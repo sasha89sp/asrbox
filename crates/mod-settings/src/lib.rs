@@ -2,6 +2,7 @@ pub mod draw;
 pub mod layout;
 pub mod layout_backup;
 pub mod layout_cal;
+pub mod layout_dock;
 pub mod layout_overlay;
 pub mod layout_sys;
 pub mod layout_tabs;
@@ -14,8 +15,9 @@ pub use layout::{build_layout, MIN_SETTINGS_HEIGHT, MIN_SETTINGS_WIDTH};
 pub use render::render_settings_frame;
 pub use types::{
     AboutSettingsView, BackupSettingsView, CalendarSettingsView, CalendarSourceView,
-    DebugSettingsView, DockSettingsView, ModuleStatusView, OverlaySettingsView, SettingsAction,
-    SettingsSnapshot, SettingsTab, SliderKind, SysMonitorSettingsView, WebDavSettingsView,
+    DebugSettingsView, DockItemView, DockSettingsView, ModuleStatusView, OverlaySettingsView,
+    SettingsAction, SettingsSnapshot, SettingsTab, SliderKind, SysMonitorSettingsView,
+    WebDavSettingsView,
 };
 
 use layout::{rect_contains, HitKind, SettingsLayout};
@@ -23,11 +25,13 @@ use layout::{rect_contains, HitKind, SettingsLayout};
 pub struct SettingsUiState {
     pub active_tab: SettingsTab,
     pub selected_dock: usize,
+    pub selected_dock_item: Option<u64>,
     pub width: u32,
     pub height: u32,
     pub scroll_y: i32,
     hovered_id: Option<usize>,
     dragging_slider: Option<(SliderKind, PixelRect)>,
+    last_dock_input_key: Option<(String, u64)>,
     layout: SettingsLayout,
 }
 
@@ -36,17 +40,50 @@ impl Default for SettingsUiState {
         Self {
             active_tab: SettingsTab::Modules,
             selected_dock: 0,
+            selected_dock_item: None,
             width: 840,
             height: 580,
             scroll_y: 0,
             hovered_id: None,
             dragging_slider: None,
+            last_dock_input_key: None,
             layout: SettingsLayout::default(),
         }
     }
 }
 
 impl SettingsUiState {
+    pub fn reset_dock_input_sync(&mut self) {
+        self.last_dock_input_key = None;
+    }
+
+    pub fn take_dock_input_sync(&mut self, snap: &SettingsSnapshot) -> Option<String> {
+        if self.active_tab != SettingsTab::Dock {
+            self.last_dock_input_key = None;
+            return None;
+        }
+        if !snap.docks.is_empty() && self.selected_dock >= snap.docks.len() {
+            self.selected_dock = snap.docks.len() - 1;
+        }
+        let dock = snap.docks.get(self.selected_dock)?;
+        let item = self
+            .selected_dock_item
+            .and_then(|id| dock.items.iter().find(|i| i.id == id))
+            .or_else(|| dock.items.first());
+        let Some(item) = item else {
+            self.selected_dock_item = None;
+            self.last_dock_input_key = None;
+            return None;
+        };
+        self.selected_dock_item = Some(item.id);
+        let key = (dock.id.clone(), item.id);
+        if self.last_dock_input_key.as_ref() == Some(&key) {
+            return None;
+        }
+        self.last_dock_input_key = Some(key);
+        Some(item.label.clone())
+    }
+
     pub fn render(&mut self, snap: &SettingsSnapshot) -> (WidgetFrame, SettingsInputRects) {
         if !snap.docks.is_empty() && self.selected_dock >= snap.docks.len() {
             self.selected_dock = snap.docks.len() - 1;
@@ -55,6 +92,7 @@ impl SettingsUiState {
             snap,
             self.active_tab,
             self.selected_dock,
+            self.selected_dock_item,
             self.width,
             self.height,
             self.scroll_y,
@@ -66,6 +104,7 @@ impl SettingsUiState {
                 snap,
                 self.active_tab,
                 self.selected_dock,
+                self.selected_dock_item,
                 self.width,
                 self.height,
                 self.scroll_y,
@@ -145,6 +184,13 @@ impl SettingsUiState {
             }
             HitKind::SelectDock(idx) => {
                 self.selected_dock = idx;
+                self.selected_dock_item = None;
+                self.last_dock_input_key = None;
+                (true, None)
+            }
+            HitKind::SelectDockItem { item_id, .. } => {
+                self.selected_dock_item = Some(item_id);
+                self.last_dock_input_key = None;
                 (true, None)
             }
             HitKind::Toggle { action, .. }
@@ -232,12 +278,17 @@ mod tests {
                 id: "dock-1".to_owned(),
                 edge_index: 0,
                 layer: WidgetLayer::Wallpaper,
+                label_mode_index: 0,
                 icon_size_px: 48,
                 opacity_percent: 85,
                 locked: true,
                 show_running_indicator: true,
                 focus_running_window: true,
-                item_count: 3,
+                item_count: 1,
+                items: vec![DockItemView {
+                    id: 1,
+                    label: "Browser".to_owned(),
+                }],
             }],
             calendar: CalendarSettingsView {
                 visible: true,
@@ -261,6 +312,7 @@ mod tests {
             overlay: OverlaySettingsView {
                 module_enabled: true,
                 auto_games_only: true,
+                force_topmost_fullscreen: true,
                 setup_mode: false,
                 anchor_index: 1,
                 x: 24,
@@ -291,7 +343,7 @@ mod tests {
                 summary_line: "RAM 20 MB".to_owned(),
             },
             about: AboutSettingsView {
-                version: "0.0.2".to_owned(),
+                version: "0.0.4".to_owned(),
                 exe_path: "asrbox.exe".to_owned(),
                 data_dir: "data".to_owned(),
                 config_dir: "data/config".to_owned(),
@@ -305,12 +357,13 @@ mod tests {
         let mut ui = SettingsUiState::default();
         for tab in SettingsTab::ALL {
             ui.active_tab = tab;
+            ui.scroll_y = if tab == SettingsTab::Dock { 260 } else { 0 };
             let (frame, inputs) = ui.render(&snap);
             assert_eq!(frame.bgra.width, 840);
             assert_eq!(frame.bgra.height, 580);
             assert!(!frame.texts.is_empty());
             match tab {
-                SettingsTab::Calendar => {
+                SettingsTab::Calendar | SettingsTab::Dock => {
                     assert!(inputs.primary.is_some());
                     assert!(inputs.secret.is_none());
                 }

@@ -25,7 +25,8 @@
 - `src/sys_gpu.rs` — телеметрия GPU (DXGI VRAM, частота экрана Гц, динамическая загрузка `nvml.dll` при наличии NVIDIA).
 - `src/sys_net.rs` — телеметрия сети (IPv4, детектор VPN, трафик `GetIfTable2`, ICMP-пинг шлюза и `1.1.1.1` с джиттером и потерями).
 - `src/http.rs` — фоновый WinHTTP GET-клиент с `WM_HTTP_DONE`.
-- `src/icons.rs` — извлечение иконок (`IShellItemImageFactory`, WIC, `ExtractIconExW`).
+- `src/icons.rs` — извлечение иконок (`IShellItemImageFactory`, многокадровый WIC, `PrivateExtractIconsW`/`ExtractIconExW`, восстановление альфы legacy `HICON`).
+- `src/icons_lnk.rs` — разрешение `.lnk` (`IShellLinkW::GetIconLocation`/`GetPath`, `ExpandEnvironmentStringsW`), `SHGetFileInfoW` и детектор серой рамки Explorer (`has_explorer_frame_box`).
 - `src/tray.rs` — иконка NotePlan в трее и сгруппированное по модулям ПКМ-подменю (`Док-панели`, `Виджеты`, `Игровой оверлей`, `Бэкап и Облако`, `Автозагрузка`).
 - `src/shell.rs` — диалог выбора иконки и запуск программ, URL, `notepad.exe`, `explorer.exe`.
 - `src/metrics.rs` — `ProcessMetricsSampler` (RAM, % CPU, GDI/USER, uptime).

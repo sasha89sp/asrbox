@@ -10,15 +10,15 @@ use asrbox_mod_about::{build_about_text, AppPaths};
 use asrbox_mod_backup::{parse_backup_config, serialize_backup_config, BackupConfig};
 use asrbox_mod_debug::{DebugHub, LogLevel};
 use asrbox_mod_dock::{
-    parse_docks, render_dock_frame, serialize_docks, DockConfig, DockInstance, DockItem,
-    DockRenderOverlay, Rect,
+    parse_docks, render_dock_widget_frame, serialize_docks, DockConfig, DockInstance, DockItem,
+    DockLabelMode, DockRenderOverlay, Rect,
 };
 use asrbox_mod_overlay::{
     parse_overlay_config, render_game_overlay, serialize_overlay_config, OverlayAnchor,
     OverlayConfig,
 };
 use asrbox_mod_settings::{
-    AboutSettingsView, BackupSettingsView, CalendarSettingsView, DebugSettingsView,
+    AboutSettingsView, BackupSettingsView, CalendarSettingsView, DebugSettingsView, DockItemView,
     DockSettingsView, ModuleStatusView, OverlaySettingsView, SettingsSnapshot, SettingsTab,
     SettingsUiState, SysMonitorSettingsView, WebDavSettingsView,
 };
@@ -76,7 +76,11 @@ fn selftest_dock(app_version: &str) -> Result<(), String> {
     cfg.opacity_percent = 65;
     cfg.icon_size_px = 54;
     cfg.layer = WidgetLayer::Wallpaper;
-    cfg.items.push(DockItem::separator(1));
+    cfg.label_mode = DockLabelMode::IconAndLabel;
+    let item =
+        DockItem::from_dropped_path(1, PathBuf::from("C:\\app.exe")).map_err(|e| e.to_string())?;
+    cfg.items.push(item);
+    cfg.items.push(DockItem::separator(2));
     let area = Rect {
         x: 0,
         y: 0,
@@ -84,26 +88,27 @@ fn selftest_dock(app_version: &str) -> Result<(), String> {
         height: 1080,
     };
     let dock = DockInstance::new(cfg.clone(), area).map_err(|e| e.to_string())?;
-    let overlay = DockRenderOverlay {
+    let ov = DockRenderOverlay {
         dragged_item_id: None,
         insert_before_index: Some(0),
+        hovered_item_id: Some(1),
     };
-    let running = HashSet::new();
-    let frame = render_dock_frame(
+    let frame = render_dock_widget_frame(
         dock.config(),
         dock.layout(),
         &HashMap::new(),
-        &running,
-        overlay,
+        &HashSet::new(),
+        ov,
     );
-    if frame.pixels.is_empty() {
-        return Err("rendered dock frame is empty".to_owned());
+    if frame.bgra.pixels.is_empty() || frame.texts.is_empty() {
+        return Err("rendered dock widget frame is empty".to_owned());
     }
     let parsed = parse_docks(&serialize_docks(&[cfg], app_version))?;
     if parsed.len() != 1
         || parsed[0].opacity_percent != 65
         || parsed[0].locked
         || parsed[0].layer != WidgetLayer::Wallpaper
+        || parsed[0].label_mode != DockLabelMode::IconAndLabel
     {
         return Err("dock config roundtrip mismatch".to_owned());
     }
@@ -192,16 +197,13 @@ fn selftest_widgets() -> Result<(), String> {
 
 fn selftest_overlay() -> Result<(), String> {
     let cfg = OverlayConfig {
-        auto_games_only: true,
+        force_topmost_fullscreen: false,
         anchor: OverlayAnchor::BottomRight,
-        x: 64,
-        y: 80,
-        margin_px: 16,
         width: 340,
         height: 196,
         opacity_percent: 76,
-        refresh_interval_ms: 1000,
         extra_games: vec!["cyberpunk2077.exe".to_owned()],
+        ..OverlayConfig::default()
     };
     if parse_overlay_config(&serialize_overlay_config(&cfg)) != cfg {
         return Err("overlay config roundtrip mismatch".to_owned());
@@ -222,18 +224,12 @@ fn selftest_overlay() -> Result<(), String> {
         display_hz: 144,
         gpu_temp_c: Some(65),
         gpu_usage_pct: Some(98),
-        vram_used_mb: 15_155,
-        vram_total_mb: 16_384,
-        cpu_temp_c: Some(58),
         cpu_usage_pct: 42,
-        ram_used_mb: 14_540,
-        ram_total_mb: 32_768,
-        ram_usage_pct: 44,
         net_ping_ms: Some(148),
         net_loss_tenths_pct: 24,
         game_active: true,
-        game_process: "game.exe".to_owned(),
         monitor_rect: Some(mon),
+        ..OverlayTelemetry::default()
     };
     let frame = render_game_overlay(&cfg, &snap, true);
     if frame.bgra.pixels.is_empty() || !frame.texts.iter().any(|t| t.text == "2.4% PL") {
@@ -263,7 +259,12 @@ fn selftest_settings(app_version: &str) -> Result<(), String> {
             locked: true,
             show_running_indicator: true,
             focus_running_window: true,
+            label_mode_index: 2,
             item_count: 1,
+            items: vec![DockItemView {
+                id: 1,
+                label: "App".to_owned(),
+            }],
         }],
         calendar: CalendarSettingsView {
             visible: true,
@@ -287,6 +288,7 @@ fn selftest_settings(app_version: &str) -> Result<(), String> {
         overlay: OverlaySettingsView {
             module_enabled: true,
             auto_games_only: true,
+            force_topmost_fullscreen: true,
             setup_mode: false,
             anchor_index: 1,
             x: 24,

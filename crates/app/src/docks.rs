@@ -72,6 +72,7 @@ impl<I: IconProvider> DockManager<I> {
                 dock.timer_active = false;
             }
         }
+        let _ = host.set_dock_tooltip(0, None);
         if self.running_timer_on {
             self.running_timer_on = false;
             let _ = host.set_running_poll_timer(false);
@@ -163,10 +164,20 @@ impl<I: IconProvider> DockManager<I> {
     }
 
     pub fn step_dock(&mut self, host: &mut dyn DockPlatform, id: u64, ev: DockEvent) -> bool {
+        let update_tip = matches!(ev, DockEvent::PointerMove(_) | DockEvent::PointerLeave);
         let Some(dock) = self.docks.iter_mut().find(|d| d.instance.config().id == id) else {
             return false;
         };
         let effect = dock.instance.handle_event(ev);
+        if update_tip && dock.window_open {
+            let ov = self.drag.overlay_for(dock);
+            let tip = if ov.dragged_item_id.is_some() {
+                None
+            } else {
+                dock.instance.hovered_tooltip()
+            };
+            let _ = host.set_dock_tooltip(id, tip.as_deref());
+        }
         if dock.timer_active != effect.animation_active {
             dock.timer_active = effect.animation_active;
             let _ = host.set_animation_timer(id, effect.animation_active);
@@ -187,6 +198,7 @@ impl<I: IconProvider> DockManager<I> {
             .drag
             .on_drag_move(&mut self.docks, self.work_area, screen_pt)
         {
+            let _ = host.set_dock_tooltip(0, None);
             self.redraw_open_docks(host);
         }
     }
@@ -286,6 +298,7 @@ impl<I: IconProvider> DockManager<I> {
             .iter()
             .find(|d| d.instance.config().id == id)
             .map(|d| build_menu_state(&d.instance, pt, can_del))?;
+        let _ = host.set_dock_tooltip(id, None);
         let action = host.show_dock_menu(id, screen, &state).ok().flatten()?;
         Some(self.apply_dock_action(host, id, action, safe_mode))
     }

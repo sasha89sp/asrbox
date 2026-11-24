@@ -1,15 +1,21 @@
 use std::collections::{HashMap, HashSet};
 
-use asrbox_platform_api::{BgraFrame, RgbaImage};
+use asrbox_platform_api::{BgraFrame, RgbaImage, WidgetFrame, WidgetTextCmd};
 
 use crate::config::{DockConfig, DockEdge, MAX_DOCK_OPACITY, MIN_DOCK_OPACITY};
+use crate::labels::{
+    draw_labels_only_pill, icon_and_label_rects, push_icon_label_text, DockLabelMode,
+};
 use crate::layout::{DockLayout, DockSlotLayout, Rect, SlotKind};
-use crate::render_ops::{blend_pixel, blit_scaled_icon, rounded_rect_sdf};
+use crate::render_ops::{
+    blend_pixel, blit_scaled_icon, draw_fallback_tile, draw_settings_button, rounded_rect_sdf,
+};
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct DockRenderOverlay {
     pub dragged_item_id: Option<u64>,
     pub insert_before_index: Option<usize>,
+    pub hovered_item_id: Option<u64>,
 }
 
 pub fn render_dock_frame(
@@ -19,7 +25,18 @@ pub fn render_dock_frame(
     running_items: &HashSet<u64>,
     overlay: DockRenderOverlay,
 ) -> BgraFrame {
+    render_dock_widget_frame(config, layout, icons, running_items, overlay).bgra
+}
+
+pub fn render_dock_widget_frame(
+    config: &DockConfig,
+    layout: &DockLayout,
+    icons: &HashMap<u64, RgbaImage>,
+    running_items: &HashSet<u64>,
+    overlay: DockRenderOverlay,
+) -> WidgetFrame {
     let mut frame = BgraFrame::transparent(layout.window_rect.width, layout.window_rect.height);
+    let mut texts = Vec::new();
     let radius = f32::from(config.corner_radius_px);
     let opacity_scale = f32::from(
         config
@@ -32,7 +49,7 @@ pub fn render_dock_frame(
 
     if layout.slots.is_empty() {
         draw_empty_plus(&mut frame, layout.bar_rect);
-        return frame;
+        return WidgetFrame { bgra: frame, texts };
     }
 
     for pass_zoomed in [false, true] {
@@ -42,14 +59,24 @@ pub fn render_dock_frame(
                 continue;
             }
             let dimmed = overlay.dragged_item_id == Some(slot.item_id);
+            let hovered = overlay.hovered_item_id == Some(slot.item_id);
             let running = config.show_running_indicator
                 && slot.kind == SlotKind::Shortcut
                 && running_items.contains(&slot.item_id);
+            let label = config
+                .items
+                .iter()
+                .find(|i| i.id == slot.item_id)
+                .map(|i| i.label.as_str())
+                .unwrap_or("");
             draw_slot(
                 &mut frame,
+                &mut texts,
                 *slot,
                 icons.get(&slot.item_id),
-                config.edge,
+                label,
+                config,
+                hovered,
                 dimmed,
                 running,
             );
@@ -58,7 +85,7 @@ pub fn render_dock_frame(
     if let Some(ins_idx) = overlay.insert_before_index {
         draw_insert_marker(&mut frame, layout, config.edge, ins_idx);
     }
-    frame
+    WidgetFrame { bgra: frame, texts }
 }
 
 fn draw_capsule_shadow(frame: &mut BgraFrame, bar: Rect, radius: f32, opacity: f32) {
@@ -136,34 +163,78 @@ fn draw_empty_plus(frame: &mut BgraFrame, bar: Rect) {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_slot(
     frame: &mut BgraFrame,
+    texts: &mut Vec<WidgetTextCmd>,
     slot: DockSlotLayout,
     icon: Option<&RgbaImage>,
-    edge: DockEdge,
+    label: &str,
+    config: &DockConfig,
+    hovered: bool,
     dimmed: bool,
     running: bool,
 ) {
     match slot.kind {
-        SlotKind::DragHandle => draw_drag_handle(frame, slot.base_rect, edge),
-        SlotKind::Separator => draw_separator(frame, slot.base_rect, edge, dimmed),
-        SlotKind::SettingsButton => draw_settings_button(frame, slot.visual_rect),
-        SlotKind::Shortcut => {
-            match icon {
-                Some(image) if image.width > 0 && image.height > 0 => {
-                    blit_scaled_icon(
-                        frame,
-                        slot.visual_rect,
-                        image,
-                        if dimmed { 0.35 } else { 1.0 },
-                    );
-                }
-                _ => draw_fallback_tile(frame, slot.visual_rect, if dimmed { 0.35 } else { 1.0 }),
-            }
-            if running {
-                draw_running_dot(frame, slot.base_rect, edge);
-            }
+        SlotKind::DragHandle => draw_drag_handle(frame, slot.base_rect, config.edge),
+        SlotKind::Separator => draw_separator(frame, slot.base_rect, config.edge, dimmed),
+        SlotKind::SettingsButton => {
+            let r = square_centered_rect(slot.visual_rect);
+            draw_settings_button(frame, r);
         }
+        SlotKind::Shortcut => match config.label_mode {
+            DockLabelMode::LabelsOnly => {
+                draw_labels_only_pill(
+                    frame,
+                    texts,
+                    slot.base_rect,
+                    label,
+                    hovered,
+                    dimmed,
+                    running,
+                );
+            }
+            DockLabelMode::IconAndLabel => {
+                let (icon_r, text_r) =
+                    icon_and_label_rects(slot, config.edge, u32::from(config.icon_size_px));
+                draw_icon_or_fallback(frame, icon_r, icon, dimmed);
+                push_icon_label_text(texts, text_r, label, config.edge, dimmed);
+                if running {
+                    draw_running_dot(frame, slot.base_rect, config.edge);
+                }
+            }
+            DockLabelMode::IconsOnly | DockLabelMode::HoverTooltip => {
+                draw_icon_or_fallback(frame, slot.visual_rect, icon, dimmed);
+                if running {
+                    draw_running_dot(frame, slot.base_rect, config.edge);
+                }
+            }
+        },
+    }
+}
+
+fn draw_icon_or_fallback(
+    frame: &mut BgraFrame,
+    rect: Rect,
+    icon: Option<&RgbaImage>,
+    dimmed: bool,
+) {
+    let alpha = if dimmed { 0.35 } else { 1.0 };
+    match icon {
+        Some(image) if image.width > 0 && image.height > 0 => {
+            blit_scaled_icon(frame, rect, image, alpha);
+        }
+        _ => draw_fallback_tile(frame, rect, alpha),
+    }
+}
+
+fn square_centered_rect(r: Rect) -> Rect {
+    let side = r.width.min(r.height);
+    Rect {
+        x: r.x + (r.width as i32 - side as i32) / 2,
+        y: r.y + (r.height as i32 - side as i32) / 2,
+        width: side,
+        height: side,
     }
 }
 
@@ -283,78 +354,6 @@ fn draw_separator(frame: &mut BgraFrame, rect: Rect, edge: DockEdge, dimmed: boo
     }
 }
 
-fn draw_settings_button(frame: &mut BgraFrame, rect: Rect) {
-    let radius = (rect.width.min(rect.height) as f32) * 0.24;
-    let x0 = rect.x.max(0);
-    let y0 = rect.y.max(0);
-    let x1 = (rect.x + i32::try_from(rect.width).unwrap_or(0))
-        .min(i32::try_from(frame.width).unwrap_or(0));
-    let y1 = (rect.y + i32::try_from(rect.height).unwrap_or(0))
-        .min(i32::try_from(frame.height).unwrap_or(0));
-    let cx = rect.x as f32 + (rect.width as f32) * 0.5;
-    let cy = rect.y as f32 + (rect.height as f32) * 0.5;
-    let unit = (rect.width.min(rect.height) as f32) * 0.5;
-
-    for py in y0..y1 {
-        let t = ((py - rect.y) as f32 / (rect.height.max(1) as f32)).clamp(0.0, 1.0);
-        let bg = (56.0 - 16.0 * t).round() as u8;
-        for px in x0..x1 {
-            let (fx, fy) = (px as f32 + 0.5, py as f32 + 0.5);
-            let dist = rounded_rect_sdf(fx, fy, rect, radius);
-            if dist <= 0.6 {
-                let cov = (0.6 - dist).clamp(0.0, 1.0);
-                blend_pixel(frame, px, py, [bg, bg + 2, bg + 7, (240.0 * cov) as u8]);
-                if dist > -1.3 {
-                    blend_pixel(frame, px, py, [232, 122, 72, (92.0 * cov) as u8]);
-                }
-                let gear_a = sample_gear_alpha(fx - cx, fy - cy, unit);
-                if gear_a > 0 {
-                    blend_pixel(frame, px, py, [242, 238, 234, gear_a]);
-                }
-            }
-        }
-    }
-}
-
-fn sample_gear_alpha(dx: f32, dy: f32, unit: f32) -> u8 {
-    let r = (dx * dx + dy * dy).sqrt() / unit.max(1.0);
-    let tooth = (dy.atan2(dx) * 8.0).cos();
-    let outer = if tooth > 0.2 { 0.66 } else { 0.52 };
-    let inner = 0.22;
-    if r <= outer && r >= inner {
-        let eo = ((outer - r) * unit).clamp(0.0, 1.0);
-        let ei = ((r - inner) * unit).clamp(0.0, 1.0);
-        (242.0 * eo.min(ei)).round() as u8
-    } else {
-        0
-    }
-}
-
-fn draw_fallback_tile(frame: &mut BgraFrame, rect: Rect, alpha_mul: f32) {
-    let radius = (rect.width.min(rect.height) as f32) * 0.24;
-    let x0 = rect.x.max(0);
-    let y0 = rect.y.max(0);
-    let x1 = (rect.x + i32::try_from(rect.width).unwrap_or(0))
-        .min(i32::try_from(frame.width).unwrap_or(0));
-    let y1 = (rect.y + i32::try_from(rect.height).unwrap_or(0))
-        .min(i32::try_from(frame.height).unwrap_or(0));
-
-    for py in y0..y1 {
-        let t = ((py - rect.y) as f32 / (rect.height.max(1) as f32)).clamp(0.0, 1.0);
-        let r = (66.0 - 18.0 * t).round() as u8;
-        let g = (142.0 - 28.0 * t).round() as u8;
-        let b = (242.0 - 22.0 * t).round() as u8;
-        for px in x0..x1 {
-            let dist = rounded_rect_sdf(px as f32 + 0.5, py as f32 + 0.5, rect, radius);
-            if dist <= 0.6 {
-                let cov = (0.6 - dist).clamp(0.0, 1.0);
-                let a = (238.0 * cov * alpha_mul).round() as u8;
-                blend_pixel(frame, px, py, [r, g, b, a]);
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::error::Error;
@@ -385,10 +384,14 @@ mod tests {
         let overlay = DockRenderOverlay {
             dragged_item_id: None,
             insert_before_index: Some(1),
+            hovered_item_id: None,
         };
         let frame = render_dock_frame(&config, &layout, &HashMap::new(), &running, overlay);
         assert_eq!(frame.width, layout.window_rect.width);
         assert_eq!(frame.pixels[3], 0);
+        config.label_mode = DockLabelMode::IconAndLabel;
+        let wf = render_dock_widget_frame(&config, &layout, &HashMap::new(), &running, overlay);
+        assert!(!wf.texts.is_empty());
         Ok(())
     }
 }

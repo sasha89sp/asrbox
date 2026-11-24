@@ -143,6 +143,11 @@ impl GameOverlay {
         }
         self.snapshot = snap;
 
+        if self.setup_mode && self.snapshot.game_active {
+            self.setup_mode = false;
+            let _ = host.set_widget_click_through(OVERLAY_WIDGET_ID, true);
+        }
+
         let want = self.should_display();
         let vis_changed = want != self.window_visible;
         if vis_changed {
@@ -154,12 +159,20 @@ impl GameOverlay {
             let _ = host.set_widget_refresh_ms(OVERLAY_WIDGET_ID, poll_ms);
         }
         let _ = self.apply_visibility_and_present(host);
+        if want && self.snapshot.game_active && self.cfg.force_topmost_fullscreen {
+            let _ = host.set_widget_layer(OVERLAY_WIDGET_ID, WidgetLayer::Topmost);
+        }
 
         if self.snapshot.game_active != prev_game {
             if self.snapshot.game_active {
                 return Some(format!(
-                    "Обнаружена игра: {} -> оверлей показан (click-through)",
-                    self.snapshot.game_process
+                    "Обнаружена игра: {} -> оверлей показан (click-through{})",
+                    self.snapshot.game_process,
+                    if self.cfg.force_topmost_fullscreen {
+                        ", FSO/Topmost"
+                    } else {
+                        ""
+                    }
                 ));
             }
             if !prev_proc.is_empty() {

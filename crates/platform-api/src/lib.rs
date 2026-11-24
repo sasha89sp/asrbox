@@ -252,6 +252,13 @@ pub trait DockPlatform {
         rect: PixelRect,
         frame: &BgraFrame,
     ) -> Result<(), String>;
+    fn present_dock_widget_frame(
+        &mut self,
+        dock_id: u64,
+        rect: PixelRect,
+        frame: &WidgetFrame,
+    ) -> Result<(), String>;
+    fn set_dock_tooltip(&mut self, dock_id: u64, text: Option<&str>) -> Result<(), String>;
     fn set_animation_timer(&mut self, dock_id: u64, active: bool) -> Result<(), String>;
     fn set_running_poll_timer(&mut self, active: bool) -> Result<(), String>;
     fn query_running_exe_names(&self) -> HashSet<String>;

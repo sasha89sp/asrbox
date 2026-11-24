@@ -13,6 +13,8 @@ mod http;
 #[cfg(windows)]
 mod icons;
 #[cfg(windows)]
+mod icons_lnk;
+#[cfg(windows)]
 mod job;
 #[cfg(windows)]
 mod metrics;

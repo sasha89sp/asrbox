@@ -64,16 +64,24 @@ pub struct ModuleStatusView {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DockItemView {
+    pub id: u64,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DockSettingsView {
     pub id: String,
     pub edge_index: u8,
     pub layer: WidgetLayer,
+    pub label_mode_index: u8,
     pub icon_size_px: u32,
     pub opacity_percent: u8,
     pub locked: bool,
     pub show_running_indicator: bool,
     pub focus_running_window: bool,
     pub item_count: usize,
+    pub items: Vec<DockItemView>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -109,6 +117,7 @@ pub struct SysMonitorSettingsView {
 pub struct OverlaySettingsView {
     pub module_enabled: bool,
     pub auto_games_only: bool,
+    pub force_topmost_fullscreen: bool,
     pub setup_mode: bool,
     pub anchor_index: u8,
     pub x: i32,
@@ -179,11 +188,14 @@ pub enum SettingsAction {
     AddDockSeparator(String),
     SetDockEdge { dock_id: String, edge_index: u8 },
     SetDockLayer { dock_id: String, layer: WidgetLayer },
+    SetDockLabelMode { dock_id: String, mode_index: u8 },
     SetDockIconSize { dock_id: String, size_px: u32 },
     SetDockOpacity { dock_id: String, opacity: u8 },
     SetDockLocked { dock_id: String, locked: bool },
     SetDockShowRunning { dock_id: String, enabled: bool },
     SetDockFocusRunning { dock_id: String, enabled: bool },
+    RenameDockItemFromInput { dock_id: String, item_id: u64 },
+    ResetDockItemLabel { dock_id: String, item_id: u64 },
     OpenDocksConfig,
     SetCalendarVisible(bool),
     SetCalendarOpacity(u8),
@@ -208,6 +220,7 @@ pub enum SettingsAction {
     RefreshSysMonitorNow,
     OpenSysMonitorConfig,
     SetOverlayAutoGamesOnly(bool),
+    SetOverlayForceTopmost(bool),
     SetOverlaySetupMode(bool),
     SetOverlayAnchor(u8),
     SetOverlayOpacity(u8),

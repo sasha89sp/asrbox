@@ -66,6 +66,7 @@ impl OverlayAnchor {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OverlayConfig {
     pub auto_games_only: bool,
+    pub force_topmost_fullscreen: bool,
     pub anchor: OverlayAnchor,
     pub margin_px: i32,
     pub x: i32,
@@ -81,6 +82,7 @@ impl Default for OverlayConfig {
     fn default() -> Self {
         Self {
             auto_games_only: true,
+            force_topmost_fullscreen: true,
             anchor: OverlayAnchor::TopLeft,
             margin_px: 16,
             x: 24,
@@ -156,6 +158,9 @@ pub fn parse_overlay_config(raw: &str) -> OverlayConfig {
             "auto_games_only" => {
                 cfg.auto_games_only = val == "1" || val.eq_ignore_ascii_case("true")
             }
+            "force_topmost_fullscreen" => {
+                cfg.force_topmost_fullscreen = val == "1" || val.eq_ignore_ascii_case("true")
+            }
             "anchor" => cfg.anchor = OverlayAnchor::from_str_value(val),
             "margin_px" => {
                 if let Ok(n) = val.parse::<i32>() {
@@ -213,6 +218,7 @@ pub fn serialize_overlay_config(cfg: &OverlayConfig) -> String {
             "# Доп. процессы игр в оконном режиме (по одному в строке): game_process=cs2.exe\n",
             "settings_version=1\n",
             "auto_games_only={}\n",
+            "force_topmost_fullscreen={}\n",
             "anchor={}\n",
             "margin_px={}\n",
             "x={}\n",
@@ -223,6 +229,7 @@ pub fn serialize_overlay_config(cfg: &OverlayConfig) -> String {
             "refresh_interval_ms={}\n",
         ),
         if cfg.auto_games_only { 1 } else { 0 },
+        if cfg.force_topmost_fullscreen { 1 } else { 0 },
         cfg.anchor.as_str(),
         cfg.margin_px.clamp(0, 128),
         cfg.x,
@@ -247,6 +254,7 @@ mod tests {
     fn overlay_config_roundtrip_and_corner_anchors() {
         let cfg = OverlayConfig {
             auto_games_only: false,
+            force_topmost_fullscreen: false,
             anchor: OverlayAnchor::BottomRight,
             margin_px: 20,
             x: 150,

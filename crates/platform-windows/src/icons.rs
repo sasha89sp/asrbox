@@ -21,7 +21,14 @@ use windows::Win32::UI::Shell::{
     ExtractIconExW, IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF_BIGGERSIZEOK,
     SIIGBF_ICONONLY,
 };
-use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, DrawIconEx, DI_NORMAL, HICON};
+use windows::Win32::UI::WindowsAndMessaging::{
+    DestroyIcon, DrawIconEx, PrivateExtractIconsW, DI_NORMAL, HICON,
+};
+
+use crate::icons_lnk::{
+    bgra_to_rgba, has_explorer_frame_box, has_ext, is_executable_ext, is_image_ext,
+    load_shgetfileinfo_icon, recover_alpha_from_black_white, resolve_lnk_icon_info,
+};
 
 pub struct WindowsIconProvider;
 
@@ -45,21 +52,76 @@ impl IconProvider for WindowsIconProvider {
     fn load_icon(&self, request: &IconRequest, target_px: u32) -> Result<RgbaImage, String> {
         let size = target_px.clamp(32, 256);
         match request {
-            IconRequest::AutoShell(path) => {
-                load_shell_icon(path, size).or_else(|_| load_exe_resource_icon(path, 0, size))
-            }
+            IconRequest::AutoShell(path) => load_auto_shell_icon(path, size),
             IconRequest::CustomFile(path) => {
                 if is_executable_ext(path) {
-                    load_exe_resource_icon(path, 0, size).or_else(|_| load_shell_icon(path, size))
+                    load_exe_resource_icon(path, 0, size)
+                        .or_else(|_| load_shell_icon_unboxed(path, size))
+                        .or_else(|_| load_shgetfileinfo_icon(path, size))
                 } else {
-                    load_wic_image(path).or_else(|_| load_shell_icon(path, size))
+                    load_wic_image(path, size)
+                        .or_else(|_| load_shell_icon_unboxed(path, size))
+                        .or_else(|_| load_shgetfileinfo_icon(path, size))
                 }
             }
             IconRequest::ExeResource { path, index } => {
-                load_exe_resource_icon(path, *index, size).or_else(|_| load_shell_icon(path, size))
+                let idx = i32::try_from(*index).unwrap_or(0);
+                load_exe_resource_icon(path, idx, size)
+                    .or_else(|_| load_shell_icon_unboxed(path, size))
+                    .or_else(|_| load_shgetfileinfo_icon(path, size))
             }
         }
     }
+}
+
+fn load_auto_shell_icon(path: &Path, size: u32) -> Result<RgbaImage, String> {
+    if has_ext(path, "lnk") {
+        if let Some(res) = load_lnk_icon(path, size) {
+            return Ok(res);
+        }
+    }
+    if has_ext(path, "ico") {
+        if let Ok(img) = load_wic_image(path, size) {
+            return Ok(img);
+        }
+    }
+    if is_executable_ext(path) {
+        if let Ok(img) = load_shell_icon_unboxed(path, size) {
+            return Ok(img);
+        }
+        if let Ok(img) = load_exe_resource_icon(path, 0, size) {
+            return Ok(img);
+        }
+        return load_shgetfileinfo_icon(path, size);
+    }
+    load_shell_icon_unboxed(path, size)
+        .or_else(|_| load_shgetfileinfo_icon(path, size))
+        .or_else(|_| load_exe_resource_icon(path, 0, size))
+}
+
+fn load_lnk_icon(lnk_path: &Path, size: u32) -> Option<RgbaImage> {
+    let info = resolve_lnk_icon_info(lnk_path)?;
+    if let Some(icon_path) = info.icon_path.as_deref() {
+        if has_ext(icon_path, "ico") || is_image_ext(icon_path) {
+            if let Ok(img) = load_wic_image(icon_path, size) {
+                return Some(img);
+            }
+        }
+        if let Ok(img) = load_exe_resource_icon(icon_path, info.icon_index, size) {
+            return Some(img);
+        }
+    }
+    if let Some(target) = info.target_path.as_deref() {
+        if is_executable_ext(target) {
+            if let Ok(img) = load_shell_icon_unboxed(target, size) {
+                return Some(img);
+            }
+            if let Ok(img) = load_exe_resource_icon(target, 0, size) {
+                return Some(img);
+            }
+        }
+    }
+    None
 }
 
 pub(crate) fn make_top_down_bmi(width: i32, height: i32) -> BITMAPINFO {
@@ -77,18 +139,19 @@ pub(crate) fn make_top_down_bmi(width: i32, height: i32) -> BITMAPINFO {
     }
 }
 
-fn is_executable_ext(path: &Path) -> bool {
-    path.extension()
-        .and_then(|ext| ext.to_str())
-        .map(|ext| ext.eq_ignore_ascii_case("exe") || ext.eq_ignore_ascii_case("dll"))
-        .unwrap_or(false)
-}
-
-fn to_wide(path: &Path) -> Vec<u16> {
+pub(crate) fn to_wide(path: &Path) -> Vec<u16> {
     path.as_os_str()
         .encode_wide()
         .chain(std::iter::once(0))
         .collect()
+}
+
+fn load_shell_icon_unboxed(path: &Path, size_px: u32) -> Result<RgbaImage, String> {
+    let img = load_shell_icon(path, size_px)?;
+    if has_explorer_frame_box(&img) {
+        return Err("shell icon is wrapped in explorer frame box".to_owned());
+    }
+    Ok(img)
 }
 
 fn load_shell_icon(path: &Path, size_px: u32) -> Result<RgbaImage, String> {
@@ -110,7 +173,7 @@ fn load_shell_icon(path: &Path, size_px: u32) -> Result<RgbaImage, String> {
     }
 }
 
-fn load_wic_image(path: &Path) -> Result<RgbaImage, String> {
+fn load_wic_image(path: &Path, target_px: u32) -> Result<RgbaImage, String> {
     let wide = to_wide(path);
     // SAFETY: COM is initialized; `wide` is NUL-terminated; WIC interfaces are RAII-freed.
     unsafe {
@@ -125,8 +188,9 @@ fn load_wic_image(path: &Path) -> Result<RgbaImage, String> {
                 WICDecodeMetadataCacheOnLoad,
             )
             .map_err(|err| format!("WIC decode failed: {err}"))?;
+        let frame_idx = pick_best_wic_frame(&decoder, target_px);
         let frame = decoder
-            .GetFrame(0)
+            .GetFrame(frame_idx)
             .map_err(|err| format!("WIC GetFrame failed: {err}"))?;
         let converter = factory
             .CreateFormatConverter()
@@ -142,8 +206,7 @@ fn load_wic_image(path: &Path) -> Result<RgbaImage, String> {
             )
             .map_err(|err| format!("WIC convert failed: {err}"))?;
 
-        let mut w = 0u32;
-        let mut h = 0u32;
+        let (mut w, mut h) = (0u32, 0u32);
         converter
             .GetSize(&mut w, &mut h)
             .map_err(|err| format!("WIC GetSize failed: {err}"))?;
@@ -161,25 +224,93 @@ fn load_wic_image(path: &Path) -> Result<RgbaImage, String> {
     }
 }
 
-fn load_exe_resource_icon(path: &Path, index: u32, size_px: u32) -> Result<RgbaImage, String> {
-    let wide = to_wide(path);
-    let mut large = HICON::default();
-    let idx = i32::try_from(index).unwrap_or(0);
-    // SAFETY: `wide` is NUL-terminated; `large` is valid storage and destroyed below.
-    let extracted =
-        unsafe { ExtractIconExW(PCWSTR(wide.as_ptr()), idx, Some(&mut large), None, 1) };
-    if extracted == 0 || large.is_invalid() {
-        return Err("ExtractIconExW returned no icon".to_owned());
+unsafe fn pick_best_wic_frame(
+    decoder: &windows::Win32::Graphics::Imaging::IWICBitmapDecoder,
+    target_px: u32,
+) -> u32 {
+    let count = decoder.GetFrameCount().unwrap_or(1);
+    if count <= 1 {
+        return 0;
     }
-    let result = hicon_to_rgba(large, size_px);
-    // SAFETY: `large` was returned by ExtractIconExW and has not yet been destroyed.
+    let mut best_idx = 0u32;
+    let mut best_score = 0u32;
+    for i in 0..count {
+        if let Ok(frame) = decoder.GetFrame(i) {
+            let (mut w, mut h) = (0u32, 0u32);
+            if frame.GetSize(&mut w, &mut h).is_ok() {
+                let side = w.min(h);
+                let score = if side >= target_px {
+                    10_000u32.saturating_sub(side.saturating_sub(target_px))
+                } else {
+                    side
+                };
+                if score > best_score {
+                    best_score = score;
+                    best_idx = i;
+                }
+            }
+        }
+    }
+    best_idx
+}
+
+fn load_exe_resource_icon(path: &Path, index: i32, size_px: u32) -> Result<RgbaImage, String> {
+    let wide = to_wide(path);
+    let side = i32::try_from(size_px).unwrap_or(128);
+    let mut icons = [HICON::default()];
+    let mut icon_id = 0u32;
+    let count = if wide.len() <= 260 {
+        let mut name_buf = [0u16; 260];
+        name_buf[..wide.len()].copy_from_slice(&wide);
+        // SAFETY: `name_buf` is NUL-terminated fixed [u16; 260]; HICON is destroyed below.
+        unsafe {
+            PrivateExtractIconsW(
+                &name_buf,
+                index,
+                side,
+                side,
+                Some(&mut icons),
+                Some(&mut icon_id as *mut u32),
+                0,
+            )
+        }
+    } else {
+        0
+    };
+    let hicon = if count > 0 && count != u32::MAX && !icons[0].is_invalid() {
+        icons[0]
+    } else {
+        let mut large = HICON::default();
+        // SAFETY: `wide` is NUL-terminated; `large` is valid storage and destroyed below.
+        let extracted =
+            unsafe { ExtractIconExW(PCWSTR(wide.as_ptr()), index, Some(&mut large), None, 1) };
+        if extracted == 0 || large.is_invalid() {
+            return Err("No icon resource found".to_owned());
+        }
+        large
+    };
+    let result = hicon_to_rgba(hicon, size_px);
+    // SAFETY: `hicon` was created above and has not yet been destroyed.
     unsafe {
-        let _ = DestroyIcon(large);
+        let _ = DestroyIcon(hicon);
     }
     result
 }
 
-fn hicon_to_rgba(hicon: HICON, size_px: u32) -> Result<RgbaImage, String> {
+pub(crate) fn hicon_to_rgba(hicon: HICON, size_px: u32) -> Result<RgbaImage, String> {
+    let mut raw_black = rasterize_hicon_on_bg(hicon, size_px, 0x00)?;
+    let has_alpha = raw_black.as_chunks::<4>().0.iter().any(|px| px[3] != 0);
+    if !has_alpha {
+        let raw_white = rasterize_hicon_on_bg(hicon, size_px, 0xFF)?;
+        recover_alpha_from_black_white(&mut raw_black, &raw_white);
+    }
+    for px in raw_black.as_chunks_mut::<4>().0 {
+        px.swap(0, 2);
+    }
+    RgbaImage::new(size_px, size_px, raw_black)
+}
+
+fn rasterize_hicon_on_bg(hicon: HICON, size_px: u32, fill_byte: u8) -> Result<Vec<u8>, String> {
     let side = i32::try_from(size_px).unwrap_or(64);
     let bmi = make_top_down_bmi(side, side);
     let mut bits: *mut c_void = std::ptr::null_mut();
@@ -197,11 +328,10 @@ fn hicon_to_rgba(hicon: HICON, size_px: u32) -> Result<RgbaImage, String> {
                 return Err(format!("CreateDIBSection failed: {err}"));
             }
         };
-
         let prev = SelectObject(hdc_mem, hbitmap.into());
         let byte_len = (size_px as usize) * (size_px as usize) * 4;
         if !bits.is_null() {
-            std::ptr::write_bytes(bits as *mut u8, 0, byte_len);
+            std::ptr::write_bytes(bits as *mut u8, fill_byte, byte_len);
         }
         let _ = DrawIconEx(hdc_mem, 0, 0, hicon, side, side, 0, None, DI_NORMAL);
         let mut raw = vec![0u8; byte_len];
@@ -212,9 +342,7 @@ fn hicon_to_rgba(hicon: HICON, size_px: u32) -> Result<RgbaImage, String> {
         let _ = DeleteObject(hbitmap.into());
         let _ = DeleteDC(hdc_mem);
         let _ = ReleaseDC(None, hdc_screen);
-
-        bgra_to_rgba(&mut raw);
-        RgbaImage::new(size_px, size_px, raw)
+        Ok(raw)
     }
 }
 
@@ -253,24 +381,5 @@ fn hbitmap_to_rgba(hbitmap: HBITMAP) -> Result<RgbaImage, String> {
         }
         bgra_to_rgba(&mut raw);
         RgbaImage::new(w, h, raw)
-    }
-}
-
-fn bgra_to_rgba(pixels: &mut [u8]) {
-    let mut any_alpha = false;
-    let mut any_color = false;
-    for chunk in pixels.as_chunks_mut::<4>().0 {
-        chunk.swap(0, 2);
-        if chunk[3] != 0 {
-            any_alpha = true;
-        }
-        if chunk[0] != 0 || chunk[1] != 0 || chunk[2] != 0 {
-            any_color = true;
-        }
-    }
-    if !any_alpha && any_color {
-        for chunk in pixels.as_chunks_mut::<4>().0 {
-            chunk[3] = 255;
-        }
     }
 }

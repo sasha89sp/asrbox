@@ -1,36 +1,34 @@
-version: 0.0.3
-updated: 2026-11-23
-spec_ids: [NF-001, NF-002, NF-005, NF-006, NF-007, NF-008, OV-001..OV-008]
+version: 0.0.4
+updated: 2026-11-24
+spec_ids: [NF-001, NF-002, NF-005, NF-006, NF-007, DK-019, DK-020, OV-009, ST-003]
 atlas_updated: true
 last_session:
-  goal: "Версия 0.0.3: новый изолированный модуль «Игровой оверлей» (HUD FPS/GPU/CPU/RAM/NET-PL, автозапуск в играх, углы/своя позиция, прозрачность, интерактивный ресайз до игры, 100% click-through в игре)"
+  goal: "Версия 0.0.4: FSO/Topmost + авто-выход setup в игровом оверлее, исправление конвейера иконок дока (.lnk/серая рамка/альфа), 4 индивидуальных режима имён док-панелей + переименование ярлыков в настройках"
   done:
-    - "Версия workspace поднята до 0.0.3 (Cargo.toml + CHANGELOG.md + mod-about + specs/mod-overlay.md)"
-    - "Новый крейт crates/mod-overlay (config.rs, draw.rs, render.rs, lib.rs): 5-строчный HUD в палитре NotePlan Dark с пропорциональным масштабированием, конфигом data/config/overlay.cfg и реализацией трейта Module"
-    - "Изолированный воркер asrbox.exe --worker overlay (crates/app/src/worker_overlay.rs) под Win32 JobObject с IPC-командой SetOverlaySetupMode и резервным inproc-режимом"
-    - "Win32-слой без инъекции DLL (overlay_game.rs, overlay_telemetry.rs, widget_proc.rs, widget_win.rs): детектор активных игр, 0% опроса датчиков вне игры, DWM FPS + 1% low / Hz, GPU NVML/DXGI + VRAM, CPU, RAM, ICMP-пинг + % PL, 100% click-through (HTTRANSPARENT + MA_NOACTIVATE)"
-    - "Настройки в mod-settings (вкладка «Игровой оверлей») и ПКМ-подменю трея: автозапуск только в играх, кнопка «Настроить на экране» (перетаскивание + 8-сторонний ресайз до игры, автоблокировка кликов при закрытии настроек), 4 угла + своя точка, прозрачность 20–100%, размер + пресеты, частота обновления"
-    - "Обновлены selftest, mod-debug (фильтр overlay), mod-about (путь overlay.cfg), ATLAS.md, ARCHITECTURE.md, DECISIONS.md (ADR-014)"
+    - "Версия workspace поднята до 0.0.4 (Cargo.toml + CHANGELOG.md + specs + ADR-015)"
+    - "mod-overlay + platform-windows: добавлена опция force_topmost_fullscreen (по умолчанию ВКЛ, без DLL-инъекции), WS_EX_TOPMOST при создании, SWP_NOZORDER в click-through и авто-выход из setup_mode при старте игры"
+    - "platform-windows/src/{icons.rs, icons_lnk.rs}: IShellLinkW::GetIconLocation + ExpandEnvironmentStringsW + GetPath, детектор и отсев серой рамки Explorer (has_explorer_frame_box), PrivateExtractIconsW/ExtractIconExW, восстановление прозрачности legacy 1-bit HICON, фолбэк SHGetFileInfoW"
+    - "mod-dock + platform-api + platform-windows + app: строго индивидуальный label_mode на каждую док-панель (IconsOnly, HoverTooltip, IconAndLabel, LabelsOnly), рендер через WidgetFrame (Segoe UI) и тёмные всплывающие подсказки"
+    - "mod-settings + app: вынесен layout_dock.rs, добавлен выбор 4 режимов имён и карточка переименования ярлыков выбранной док-панели (чипы, нативный EDIT, Сохранить/Сбросить)"
   not_done:
     - "Прогон GitHub Actions (.github/workflows/ci.yml) на windows-latest"
-    - "Ручная проверка игрового оверлея в реальных играх (Borderless/Windowed) на Windows 10/11"
+    - "Живая проверка на Windows 10/11: FSO-игры с оверлеем, иконки .lnk/старых утилит, 4 режима имён и переименование ярлыков"
   verified:
     ci_build: false
     tests: true
     manual_run: false
 open_bugs: [BUG-003, BUG-004, BUG-005]
-next_step: "Запустить GitHub Actions (windows-latest), скачать asrbox.exe v0.0.3 и проверить игровой оверлей: режим настройки позиции/размера, click-through в игре, автопоявление при запуске игры и отображение метрик FPS/GPU/CPU/RAM/NET"
+next_step: "Запустить GitHub Actions (windows-latest), скачать asrbox.exe v0.0.4 и проверить оверлей поверх FSO-игры, исправленные иконки дока и 4 индивидуальных режима имён с переименованием"
 touched_files:
   - Cargo.toml, CHANGELOG.md, ATLAS.md, ARCHITECTURE.md, DECISIONS.md, HANDOFF.yaml
-  - specs/README.md, specs/mod-overlay.md
-  - crates/core/src/ (modules_cfg.rs, ipc.rs)
-  - crates/platform-api/src/ (lib.rs, menu.rs, telemetry.rs)
-  - crates/mod-overlay/ (Cargo.toml, MAP.md, src/config.rs, src/draw.rs, src/render.rs, src/lib.rs)
-  - crates/platform-windows/ (Cargo.toml, MAP.md, src/lib.rs, src/overlay_game.rs, src/overlay_telemetry.rs, src/widget_proc.rs, src/widget_win.rs, src/window.rs, src/tray.rs)
-  - crates/mod-settings/ (MAP.md, src/types.rs, src/layout.rs, src/layout_overlay.rs, src/lib.rs)
-  - crates/mod-debug/src/lib.rs, crates/mod-about/src/lib.rs
-  - crates/app/ (Cargo.toml, MAP.md, src/main.rs, src/worker.rs, src/worker_overlay.rs, src/worker_bus.rs, src/settings_ctl.rs, src/tools.rs, src/selftest.rs)
+  - specs/ (mod-dock.md, mod-overlay.md, mod-settings.md)
+  - crates/platform-api/src/ (lib.rs, menu.rs)
+  - crates/mod-overlay/src/ (config.rs, lib.rs)
+  - crates/platform-windows/ (Cargo.toml, MAP.md, src/lib.rs, src/icons.rs, src/icons_lnk.rs, src/widget_win.rs, src/widget_text.rs, src/dock_win.rs, src/dock_menu.rs)
+  - crates/mod-dock/ (MAP.md, src/lib.rs, src/labels.rs, src/config.rs, src/storage.rs, src/layout.rs, src/render.rs, src/render_ops.rs, src/state.rs)
+  - crates/mod-settings/ (MAP.md, src/lib.rs, src/types.rs, src/layout.rs, src/layout_dock.rs, src/layout_tabs.rs, src/layout_overlay.rs, src/render.rs)
+  - crates/app/src/ (dock_ops.rs, docks.rs, settings_ctl.rs, worker_overlay.rs, selftest.rs)
 warnings:
-  - "Ожидает сборки и проверки на GitHub Actions (windows-latest). Из-за отсутствия DLL-инъекции (безопасно для античитов) оверлей отображается поверх Borderless/Windowed Fullscreen игр; в Exclusive Fullscreen (DX9/11) Windows скрывает обычные окна поверх игры"
+  - "Ожидает сборки на GitHub Actions (windows-latest). Эксклюзивный старый полноэкранный режим DX9/11 без FSO физически скрывает любые окна без DLL-инъекции"
 ideas:
-  - "При необходимости в будущем: опциональный глобальный хоткей показа/скрытия оверлея и расширенный мониторинг GPU-температуры для AMD/Intel"
+  - "Глобальный хоткей показа/скрытия игрового оверлея"

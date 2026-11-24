@@ -1,4 +1,5 @@
 use crate::config::{DockAlignment, DockConfig, DockEdge, DRAG_HANDLE_SLOT_ID, SETTINGS_SLOT_ID};
+use crate::labels::{settings_btn_main_len, shortcut_main_len, slot_cross_len, DockLabelMode};
 
 pub const SEPARATOR_THICKNESS_PX: u32 = 14;
 pub const DRAG_HANDLE_THICKNESS_PX: u32 = 16;
@@ -72,23 +73,34 @@ pub fn compute_layout(config: &DockConfig, work_area: Rect, hover: HoverVisualSt
     let icon = u32::from(config.icon_size_px);
     let spacing = u32::from(config.item_spacing_px);
     let padding = u32::from(config.padding_px);
+    let cross_slot = slot_cross_len(config.label_mode, config.edge, icon);
 
     let main_items_len = compute_main_items_len(config, icon, spacing);
     let bar_main = main_items_len.saturating_add(padding.saturating_mul(2));
-    let bar_cross = icon.saturating_add(padding.saturating_mul(2));
+    let bar_cross = cross_slot.saturating_add(padding.saturating_mul(2));
 
-    let max_scale = config.hover_zoom.effective_scale();
+    let max_scale = effective_mode_scale(config);
     let zoom_extra = ((icon as f32) * (max_scale - 1.0)).ceil().max(0.0) as u32;
     let side_pad = zoom_extra / 2;
 
     let (win_w, win_h, bar_rect) =
         build_window_and_bar(config.edge, bar_main, bar_cross, zoom_extra, side_pad);
     let window_rect = place_window(config, work_area, win_w, win_h);
-    let slots = build_slots(config, bar_rect, max_scale, hover);
+    let slots = build_slots(config, bar_rect, cross_slot, max_scale, hover);
     DockLayout {
         window_rect,
         bar_rect,
         slots,
+    }
+}
+
+fn effective_mode_scale(config: &DockConfig) -> f32 {
+    match config.label_mode {
+        DockLabelMode::LabelsOnly => 1.0,
+        DockLabelMode::IconAndLabel => config.hover_zoom.effective_scale().min(1.16),
+        DockLabelMode::IconsOnly | DockLabelMode::HoverTooltip => {
+            config.hover_zoom.effective_scale()
+        }
     }
 }
 
@@ -122,12 +134,12 @@ fn compute_main_items_len(config: &DockConfig, icon: u32, spacing: u32) -> u32 {
         let len = if item.is_separator() {
             SEPARATOR_THICKNESS_PX
         } else {
-            icon
+            shortcut_main_len(config.label_mode, config.edge, icon, &item.label)
         };
         sum = sum.saturating_add(len);
     }
     if config.show_settings_button {
-        sum = sum.saturating_add(icon);
+        sum = sum.saturating_add(settings_btn_main_len(config.label_mode, config.edge, icon));
     }
     let gaps = u32::try_from(total_slots.saturating_sub(1)).unwrap_or(0);
     sum.saturating_add(gaps.saturating_mul(spacing))
@@ -279,6 +291,7 @@ impl SlotCtx {
 fn build_slots(
     config: &DockConfig,
     bar_rect: Rect,
+    cross_slot: u32,
     max_scale: f32,
     hover: HoverVisualState,
 ) -> Vec<DockSlotLayout> {
@@ -287,7 +300,7 @@ fn build_slots(
     let ctx = SlotCtx {
         bar_rect,
         pad: i32::from(config.padding_px),
-        cross_len: icon,
+        cross_len: cross_slot,
         edge: config.edge,
         max_scale,
         hover,
@@ -312,7 +325,10 @@ fn build_slots(
         let (kind, len) = if item.is_separator() {
             (SlotKind::Separator, SEPARATOR_THICKNESS_PX)
         } else {
-            (SlotKind::Shortcut, icon)
+            (
+                SlotKind::Shortcut,
+                shortcut_main_len(config.label_mode, config.edge, icon, &item.label),
+            )
         };
         slots.push(ctx.make(item.id, kind, len, cursor));
         cursor = cursor
@@ -320,7 +336,8 @@ fn build_slots(
             .saturating_add(spacing);
     }
     if config.show_settings_button {
-        slots.push(ctx.make(SETTINGS_SLOT_ID, SlotKind::SettingsButton, icon, cursor));
+        let btn_len = settings_btn_main_len(config.label_mode, config.edge, icon);
+        slots.push(ctx.make(SETTINGS_SLOT_ID, SlotKind::SettingsButton, btn_len, cursor));
     }
     slots
 }

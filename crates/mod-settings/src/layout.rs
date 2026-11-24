@@ -1,11 +1,10 @@
 use asrbox_platform_api::{PixelRect, SettingsInputRects};
 
 use crate::layout_backup::build_backup_tab;
+use crate::layout_dock::build_dock_tab;
 use crate::layout_overlay::build_overlay_tab;
 use crate::layout_sys::build_sysmon_tab;
-use crate::layout_tabs::{
-    build_about_tab, build_calendar_tab, build_debug_tab, build_dock_tab, build_modules_tab,
-};
+use crate::layout_tabs::{build_about_tab, build_calendar_tab, build_debug_tab, build_modules_tab};
 use crate::types::{SettingsAction, SettingsSnapshot, SettingsTab, SliderKind};
 
 pub const SIDEBAR_WIDTH: u32 = 212;
@@ -24,6 +23,11 @@ pub enum ButtonTone {
 pub enum HitKind {
     Tab(SettingsTab),
     SelectDock(usize),
+    SelectDockItem {
+        item_id: u64,
+        label: String,
+        active: bool,
+    },
     Toggle {
         on: bool,
         action: SettingsAction,
@@ -87,6 +91,7 @@ pub fn build_layout(
     snap: &SettingsSnapshot,
     tab: SettingsTab,
     selected_dock: usize,
+    selected_dock_item: Option<u64>,
     width: u32,
     height: u32,
     scroll_y: i32,
@@ -97,7 +102,7 @@ pub fn build_layout(
     b.add_sidebar_tabs();
     match tab {
         SettingsTab::Modules => build_modules_tab(&mut b, snap),
-        SettingsTab::Dock => build_dock_tab(&mut b, snap, selected_dock),
+        SettingsTab::Dock => build_dock_tab(&mut b, snap, selected_dock, selected_dock_item),
         SettingsTab::Calendar => build_calendar_tab(&mut b, snap),
         SettingsTab::SysMonitor => build_sysmon_tab(&mut b, snap),
         SettingsTab::Overlay => build_overlay_tab(&mut b, snap),

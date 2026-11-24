@@ -236,3 +236,27 @@ fn fill_tooltip_bg(frame: &mut BgraFrame) {
         }
     }
 }
+
+pub(crate) fn compute_tooltip_rect(
+    cursor_x: i32,
+    cursor_y: i32,
+    width: u32,
+    height: u32,
+    area: asrbox_platform_api::PixelRect,
+) -> asrbox_platform_api::PixelRect {
+    let max_x = area.x + area.width as i32 - width as i32 - 8;
+    let x = (cursor_x + 14).clamp(area.x + 8, max_x.max(area.x + 8));
+    let below = cursor_y + 20;
+    let max_y = area.y + area.height as i32 - height as i32 - 8;
+    let y = if below > max_y {
+        (cursor_y - height as i32 - 14).max(area.y + 8)
+    } else {
+        below.max(area.y + 8)
+    };
+    asrbox_platform_api::PixelRect {
+        x,
+        y,
+        width,
+        height,
+    }
+}

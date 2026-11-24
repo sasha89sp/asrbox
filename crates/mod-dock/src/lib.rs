@@ -1,4 +1,5 @@
 pub mod config;
+pub mod labels;
 pub mod layout;
 mod layout_ops;
 pub mod render;
@@ -17,11 +18,12 @@ pub use config::{
     DockRegistry, HoverZoomConfig, HoverZoomMode, IconSource, DEFAULT_DOCK_OPACITY,
     DRAG_HANDLE_SLOT_ID, MAX_DOCK_OPACITY, MIN_DOCK_OPACITY, SETTINGS_SLOT_ID,
 };
+pub use labels::{default_label_for_path, DockLabelMode};
 pub use layout::{
     apply_dragged_window_pos, compute_layout, drop_insert_index, hit_test_item, hit_test_slot,
     DockLayout, DockSlotLayout, HoverVisualState, Point, Rect, SlotKind,
 };
-pub use render::{render_dock_frame, DockRenderOverlay};
+pub use render::{render_dock_frame, render_dock_widget_frame, DockRenderOverlay};
 pub use state::{DockEvent, DockInstance, DockMetrics, DockStepEffect};
 pub use storage::{load_docks_from_file, parse_docks, save_docks_to_file, serialize_docks};
 
@@ -52,6 +54,7 @@ pub fn build_menu_state(dock: &DockInstance, pt: Point, can_remove: bool) -> Doc
     DockMenuState {
         edge_code,
         layer: cfg.layer,
+        label_mode_code: cfg.label_mode.to_index(),
         is_centered: matches!(cfg.alignment, DockAlignment::Center) && cfg.free_pos.is_none(),
         icon_size_px: cfg.icon_size_px,
         opacity_percent: cfg.opacity_percent,
@@ -91,6 +94,7 @@ pub fn apply_menu_action(
         DockMenuAction::SetLayerWallpaper => cfg.layer = WidgetLayer::Wallpaper,
         DockMenuAction::SetLayerNormal => cfg.layer = WidgetLayer::Normal,
         DockMenuAction::SetLayerTopmost => cfg.layer = WidgetLayer::Topmost,
+        DockMenuAction::SetLabelMode(idx) => cfg.label_mode = DockLabelMode::from_index(idx),
         DockMenuAction::AlignCenter => {
             cfg.alignment = DockAlignment::Center;
             cfg.free_pos = None;

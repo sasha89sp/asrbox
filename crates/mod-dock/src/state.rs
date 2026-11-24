@@ -83,6 +83,21 @@ impl DockInstance {
         self.hovered_item
     }
 
+    pub fn hovered_tooltip(&self) -> Option<String> {
+        if self.config.label_mode != crate::labels::DockLabelMode::HoverTooltip {
+            return None;
+        }
+        let id = self.hovered_item?;
+        if id == crate::config::SETTINGS_SLOT_ID {
+            return Some("Настройки asrbox".to_owned());
+        }
+        self.config
+            .items
+            .iter()
+            .find(|i| i.id == id && !i.is_separator())
+            .map(|i| i.label.clone())
+    }
+
     pub fn refresh_layout(&mut self) {
         self.recompute_layout();
         self.record_redraw();

@@ -2,6 +2,10 @@
 
 use asrbox_core::{ModuleId, SupervisorCmd};
 use asrbox_mod_debug::LogLevel;
+use asrbox_mod_dock::{
+    default_label_for_path, load_docks_from_file, save_docks_to_file, DockConfig, DockEdge,
+    DockItem, DockLabelMode,
+};
 use asrbox_mod_settings::SettingsAction;
 use asrbox_mod_widgets::{
     load_sysmon_config, load_widget_config, rows_for_height, save_sysmon_config,
@@ -11,7 +15,7 @@ use asrbox_mod_widgets::{
 };
 use asrbox_platform_api::{DockPlatform, IconProvider, ToolsPlatform, WidgetPlatform};
 
-use crate::AppController;
+use crate::{AppController, APP_VERSION};
 
 impl<I: IconProvider> AppController<I> {
     pub(crate) fn apply_widget_setting<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
@@ -224,4 +228,136 @@ impl<I: IconProvider> AppController<I> {
         }
         true
     }
+
+    pub(crate) fn apply_dock_setting<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
+        &mut self,
+        host: &mut H,
+        action: &SettingsAction,
+    ) -> bool {
+        let mut cfgs = load_docks_from_file(&self.paths.docks_cfg).unwrap_or_default();
+        if cfgs.is_empty() {
+            cfgs.push(DockConfig::new(1, "Док 1"));
+        }
+        let changed = match action {
+            SettingsAction::RenameDockItemFromInput { dock_id, item_id } => {
+                let text = host.settings_input_text(0).trim().to_owned();
+                if text.is_empty() {
+                    false
+                } else {
+                    self.settings_ui.reset_dock_input_sync();
+                    edit_dock_item(&mut cfgs, dock_id, *item_id, |it| it.label = text)
+                }
+            }
+            SettingsAction::ResetDockItemLabel { dock_id, item_id } => {
+                self.settings_ui.reset_dock_input_sync();
+                edit_dock_item(&mut cfgs, dock_id, *item_id, |it| {
+                    it.label = default_label_for_path(&it.target);
+                })
+            }
+            other => match apply_dock_prop(&mut cfgs, other) {
+                Some(v) => v,
+                None => return false,
+            },
+        };
+        if changed && save_docks_to_file(&self.paths.docks_cfg, &cfgs, APP_VERSION).is_ok() {
+            self.reload_module_config(host, ModuleId::Dock);
+        }
+        true
+    }
+}
+
+fn apply_dock_prop(cfgs: &mut Vec<DockConfig>, action: &SettingsAction) -> Option<bool> {
+    let changed = match action {
+        SettingsAction::AddDock => {
+            let next_id = cfgs.iter().map(|c| c.id).max().unwrap_or(0) + 1;
+            let mut c = DockConfig::new(next_id, format!("Док {next_id}"));
+            c.edge = match cfgs.len() % 4 {
+                0 => DockEdge::Bottom,
+                1 => DockEdge::Left,
+                2 => DockEdge::Right,
+                _ => DockEdge::Top,
+            };
+            cfgs.push(c);
+            true
+        }
+        SettingsAction::RemoveDock(id_s) if cfgs.len() > 1 => {
+            let id = id_s.parse::<u64>().unwrap_or(0);
+            let before = cfgs.len();
+            cfgs.retain(|c| c.id != id);
+            cfgs.len() != before
+        }
+        SettingsAction::AddDockSeparator(id_s) => edit_dock(cfgs, id_s, |c| {
+            let nid = c.next_item_id();
+            c.items.push(DockItem::separator(nid));
+        }),
+        SettingsAction::SetDockEdge {
+            dock_id,
+            edge_index,
+        } => edit_dock(cfgs, dock_id, |c| {
+            c.edge = match edge_index {
+                1 => DockEdge::Top,
+                2 => DockEdge::Left,
+                3 => DockEdge::Right,
+                _ => DockEdge::Bottom,
+            };
+            c.free_pos = None;
+        }),
+        SettingsAction::SetDockLayer { dock_id, layer } => {
+            edit_dock(cfgs, dock_id, |c| c.layer = *layer)
+        }
+        SettingsAction::SetDockIconSize { dock_id, size_px } => edit_dock(cfgs, dock_id, |c| {
+            c.icon_size_px = (*size_px).clamp(24, 128) as u16
+        }),
+        SettingsAction::SetDockOpacity { dock_id, opacity } => edit_dock(cfgs, dock_id, |c| {
+            c.opacity_percent = (*opacity).clamp(20, 100)
+        }),
+        SettingsAction::SetDockLocked { dock_id, locked } => {
+            edit_dock(cfgs, dock_id, |c| c.locked = *locked)
+        }
+        SettingsAction::SetDockShowRunning { dock_id, enabled } => {
+            edit_dock(cfgs, dock_id, |c| c.show_running_indicator = *enabled)
+        }
+        SettingsAction::SetDockFocusRunning { dock_id, enabled } => {
+            edit_dock(cfgs, dock_id, |c| c.focus_running_window = *enabled)
+        }
+        SettingsAction::SetDockLabelMode {
+            dock_id,
+            mode_index,
+        } => edit_dock(cfgs, dock_id, |c| {
+            c.label_mode = DockLabelMode::from_index(*mode_index)
+        }),
+        _ => return None,
+    };
+    Some(changed)
+}
+
+fn edit_dock<F: FnOnce(&mut DockConfig)>(cfgs: &mut [DockConfig], id_s: &str, f: F) -> bool {
+    let Ok(id) = id_s.parse::<u64>() else {
+        return false;
+    };
+    let Some(cfg) = cfgs.iter_mut().find(|c| c.id == id) else {
+        return false;
+    };
+    f(cfg);
+    true
+}
+
+fn edit_dock_item<F: FnOnce(&mut DockItem)>(
+    cfgs: &mut [DockConfig],
+    id_s: &str,
+    item_id: u64,
+    f: F,
+) -> bool {
+    let Ok(id) = id_s.parse::<u64>() else {
+        return false;
+    };
+    let Some(item) = cfgs.iter_mut().find(|c| c.id == id).and_then(|c| {
+        c.items
+            .iter_mut()
+            .find(|i| i.id == item_id && !i.is_separator())
+    }) else {
+        return false;
+    };
+    f(item);
+    true
 }

@@ -49,6 +49,14 @@ fn add_overlay_mode_card(b: &mut LayoutBuilder, o: &OverlaySettingsView) {
         ),
         row(
             102,
+            54,
+            "Поверх полноэкранных игр (FSO / Topmost)",
+            Some("Окно без рамки и FSO Windows 10/11 (без инжекта DLL, безопасно для античитов)"),
+            None,
+            true,
+        ),
+        row(
+            156,
             58,
             "Интерактивная настройка на экране",
             Some(setup_sub),
@@ -73,6 +81,12 @@ fn add_overlay_mode_card(b: &mut LayoutBuilder, o: &OverlaySettingsView) {
         o.auto_games_only,
         SettingsAction::SetOverlayAutoGamesOnly(!o.auto_games_only),
     );
+    b.push_toggle(
+        tx,
+        cy + 117,
+        o.force_topmost_fullscreen,
+        SettingsAction::SetOverlayForceTopmost(!o.force_topmost_fullscreen),
+    );
     let (label, tone) = if o.setup_mode {
         ("Готово (заблокировать клики)", ButtonTone::Amber)
     } else {
@@ -81,7 +95,7 @@ fn add_overlay_mode_card(b: &mut LayoutBuilder, o: &OverlaySettingsView) {
     let btn_w = if o.setup_mode { 226 } else { 184 };
     let bx = b.content_x + b.content_w as i32 - btn_w as i32 - 16;
     b.push_btn(
-        (bx, cy + 115, btn_w, 32),
+        (bx, cy + 169, btn_w, 32),
         label,
         tone,
         SettingsAction::SetOverlaySetupMode(!o.setup_mode),

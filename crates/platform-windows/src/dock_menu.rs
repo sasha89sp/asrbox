@@ -37,6 +37,10 @@ const CMD_RELOAD_DOCK_CFG: u32 = 148;
 const CMD_OPEN_SETTINGS: u32 = 149;
 const CMD_ADD_DOCK: u32 = 150;
 const CMD_REMOVE_DOCK: u32 = 151;
+const CMD_LABEL_ICONS: u32 = 160;
+const CMD_LABEL_HOVER: u32 = 161;
+const CMD_LABEL_ICON_TEXT: u32 = 162;
+const CMD_LABEL_ONLY: u32 = 163;
 
 pub(crate) fn show_dock_context_menu(
     hwnd: HWND,
@@ -150,6 +154,37 @@ unsafe fn populate_dock_submenus(menu: HMENU, state: &DockMenuState) {
         );
         add_submenu(menu, layer_sub, "Слой отображения");
     }
+    if let Ok(lbl_sub) = CreatePopupMenu() {
+        add_item(
+            lbl_sub,
+            CMD_LABEL_ICONS,
+            "Только иконки",
+            state.label_mode_code == 0,
+            true,
+        );
+        add_item(
+            lbl_sub,
+            CMD_LABEL_HOVER,
+            "При наведении (подсказка)",
+            state.label_mode_code == 1,
+            true,
+        );
+        add_item(
+            lbl_sub,
+            CMD_LABEL_ICON_TEXT,
+            "Иконка + имя",
+            state.label_mode_code == 2,
+            true,
+        );
+        add_item(
+            lbl_sub,
+            CMD_LABEL_ONLY,
+            "Только имена",
+            state.label_mode_code == 3,
+            true,
+        );
+        add_submenu(menu, lbl_sub, "Отображение имён");
+    }
     if let Ok(op_sub) = CreatePopupMenu() {
         let p = closest_opacity(state.opacity_percent);
         add_item(op_sub, CMD_OPACITY_100, "100% (плотный)", p == 100, true);
@@ -219,6 +254,10 @@ fn decode_dock_command(cmd: u32, hovered: Option<u64>) -> Option<DockMenuAction>
         CMD_LAYER_WALLPAPER => Some(DockMenuAction::SetLayerWallpaper),
         CMD_LAYER_NORMAL => Some(DockMenuAction::SetLayerNormal),
         CMD_LAYER_TOPMOST => Some(DockMenuAction::SetLayerTopmost),
+        CMD_LABEL_ICONS => Some(DockMenuAction::SetLabelMode(0)),
+        CMD_LABEL_HOVER => Some(DockMenuAction::SetLabelMode(1)),
+        CMD_LABEL_ICON_TEXT => Some(DockMenuAction::SetLabelMode(2)),
+        CMD_LABEL_ONLY => Some(DockMenuAction::SetLabelMode(3)),
         CMD_TOGGLE_LOCK => Some(DockMenuAction::ToggleLock),
         CMD_OPACITY_100 => Some(DockMenuAction::SetOpacity(100)),
         CMD_OPACITY_85 => Some(DockMenuAction::SetOpacity(85)),

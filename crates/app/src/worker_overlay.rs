@@ -242,6 +242,11 @@ impl<I: IconProvider> AppController<I> {
                     self.debug
                         .log(host.local_time_now(), LogLevel::Info, "overlay", msg);
                 }
+                let live_setup = ov.is_setup_mode();
+                if live_setup != self.overlay_setup_mode {
+                    self.overlay_setup_mode = live_setup;
+                    self.render_settings_ui(host);
+                }
                 self.record_frame("overlay", t0);
                 true
             }
@@ -278,6 +283,7 @@ impl<I: IconProvider> AppController<I> {
         OverlaySettingsView {
             module_enabled: self.modules_cfg.overlay_enabled,
             auto_games_only: cfg.auto_games_only,
+            force_topmost_fullscreen: cfg.force_topmost_fullscreen,
             setup_mode: self.overlay_setup_mode,
             anchor_index: cfg.anchor.to_index(),
             x: cfg.x,
@@ -305,6 +311,7 @@ impl<I: IconProvider> AppController<I> {
         let mut cfg = load_overlay_config(&self.paths.overlay_cfg).unwrap_or_default();
         match action {
             SettingsAction::SetOverlayAutoGamesOnly(v) => cfg.auto_games_only = *v,
+            SettingsAction::SetOverlayForceTopmost(v) => cfg.force_topmost_fullscreen = *v,
             SettingsAction::SetOverlayAnchor(idx) => cfg.anchor = OverlayAnchor::from_index(*idx),
             SettingsAction::SetOverlayOpacity(v) => cfg.opacity_percent = (*v).clamp(20, 100),
             SettingsAction::SetOverlayWidth(w) => {

@@ -32,6 +32,7 @@ pub enum WidgetMenuAction {
 pub struct DockMenuState {
     pub edge_code: u8,
     pub layer: WidgetLayer,
+    pub label_mode_code: u8,
     pub is_centered: bool,
     pub icon_size_px: u16,
     pub opacity_percent: u8,
@@ -54,6 +55,7 @@ pub enum DockMenuAction {
     SetLayerWallpaper,
     SetLayerNormal,
     SetLayerTopmost,
+    SetLabelMode(u8),
     AlignCenter,
     ToggleLock,
     SetOpacity(u8),

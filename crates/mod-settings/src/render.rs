@@ -283,6 +283,32 @@ fn draw_control(
                 TextAlign::Center,
             );
         }
+        HitKind::SelectDockItem { label, active, .. } => {
+            let bg = if *active {
+                [232, 122, 72, 54]
+            } else if hovered {
+                [52, 56, 68, 255]
+            } else {
+                [42, 45, 54, 255]
+            };
+            fill_rounded_rect(bgra, r, 7, bg);
+            if *active {
+                stroke_rounded_rect(bgra, r, 7, [232, 122, 72, 190]);
+            }
+            push_text(
+                texts,
+                pr(r.x + 8, r.y, r.width.saturating_sub(16), r.height),
+                label,
+                12,
+                *active,
+                if *active {
+                    [255, 224, 206, 255]
+                } else {
+                    TEXT_PRIMARY
+                },
+                TextAlign::Center,
+            );
+        }
         HitKind::Toggle { on, .. } => draw_toggle(bgra, r, *on, hovered),
         HitKind::Slider {
             value, min, max, ..

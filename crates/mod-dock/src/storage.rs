@@ -7,6 +7,7 @@ use crate::config::{
     DockAlignment, DockConfig, DockEdge, DockItem, DockItemKind, HoverZoomConfig, HoverZoomMode,
     IconSource, MAX_DOCK_OPACITY, MIN_DOCK_OPACITY,
 };
+use crate::labels::DockLabelMode;
 
 const SETTINGS_VERSION: u32 = 2;
 
@@ -24,6 +25,7 @@ pub fn serialize_docks(docks: &[DockConfig], app_version: &str) -> String {
         out.push_str(&format!("enabled={}\n", dock.enabled));
         out.push_str(&format!("locked={}\n", dock.locked));
         out.push_str(&format!("layer={}\n", layer_to_str(dock.layer)));
+        out.push_str(&format!("label_mode={}\n", dock.label_mode.as_str()));
         if let Some((x, y)) = dock.free_pos {
             out.push_str(&format!("free_pos={x},{y}\n"));
         }
@@ -127,6 +129,7 @@ fn apply_field(dock: &mut DockConfig, key: &str, val: &str) -> Result<(), String
         "enabled" => dock.enabled = parse_bool(val),
         "locked" => dock.locked = parse_bool(val),
         "layer" => dock.layer = str_to_layer(val),
+        "label_mode" => dock.label_mode = DockLabelMode::from_str_value(val),
         "free_pos" => {
             if let Some((xs, ys)) = val.split_once(',') {
                 if let (Ok(x), Ok(y)) = (xs.trim().parse::<i32>(), ys.trim().parse::<i32>()) {
@@ -343,6 +346,7 @@ mod tests {
         let mut first = DockConfig::new(1, "Основная | Панель");
         first.locked = false;
         first.layer = WidgetLayer::Normal;
+        first.label_mode = DockLabelMode::IconAndLabel;
         first.free_pos = Some((320, 48));
         first.opacity_percent = 65;
         first.icon_size_px = 54;

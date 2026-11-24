@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 
 use asrbox_mod_dock::{
-    apply_menu_action, icon_request_for_item, render_dock_frame, to_pixel_rect, DockConfig,
+    apply_menu_action, icon_request_for_item, render_dock_widget_frame, to_pixel_rect, DockConfig,
     DockInstance, DockRenderOverlay, Rect, SlotKind,
 };
 use asrbox_platform_api::{DockMenuAction, DockPlatform, IconProvider, RgbaImage};
@@ -161,17 +161,20 @@ pub(crate) fn load_dock_icons<I: IconProvider>(
 pub(crate) fn present_dock(
     host: &mut dyn DockPlatform,
     dock: &DockRuntime,
-    overlay: DockRenderOverlay,
+    mut overlay: DockRenderOverlay,
 ) -> Result<(), String> {
+    if overlay.dragged_item_id.is_none() {
+        overlay.hovered_item_id = dock.instance.hovered_item();
+    }
     let layout = dock.instance.layout();
-    let frame = render_dock_frame(
+    let frame = render_dock_widget_frame(
         dock.instance.config(),
         layout,
         &dock.icons,
         &dock.running_items,
         overlay,
     );
-    host.present_dock_frame(
+    host.present_dock_widget_frame(
         dock.instance.config().id,
         to_pixel_rect(layout.window_rect),
         &frame,

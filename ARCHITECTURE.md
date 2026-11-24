@@ -1,6 +1,6 @@
 # ARCHITECTURE.md — Архитектура `asrbox`
 
-Версия: `0.0.3` (рабочие модули `mod-dock`, `mod-widgets`, `mod-overlay`, `mod-settings`, `mod-backup`, `mod-webdav`, `mod-debug`, `mod-about` + мультипроцессный супервизор в `crates/app`, единый дизайн macOS NotePlan Dark).
+Версия: `0.0.4` (рабочие модули `mod-dock`, `mod-widgets`, `mod-overlay`, `mod-settings`, `mod-backup`, `mod-webdav`, `mod-debug`, `mod-about` + мультипроцессный супервизор в `crates/app`, единый дизайн macOS NotePlan Dark).
 
 ## 1. Правило зависимостей (строго вниз)
 

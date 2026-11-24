@@ -2,9 +2,9 @@
 
 use asrbox_core::{save_modules_config, IsolationMode, ModuleId};
 use asrbox_mod_debug::LogLevel;
-use asrbox_mod_dock::{load_docks_from_file, save_docks_to_file, DockConfig, DockEdge, DockItem};
+use asrbox_mod_dock::{load_docks_from_file, DockEdge};
 use asrbox_mod_settings::{
-    AboutSettingsView, CalendarSettingsView, CalendarSourceView, DebugSettingsView,
+    AboutSettingsView, CalendarSettingsView, CalendarSourceView, DebugSettingsView, DockItemView,
     DockSettingsView, SettingsAction, SettingsSnapshot, SettingsTab, SysMonitorSettingsView,
 };
 use asrbox_mod_widgets::{load_sysmon_config, load_widget_config, PeriodFilter};
@@ -40,6 +40,9 @@ impl<I: IconProvider> AppController<I> {
         }
         self.sync_settings_tab_inputs(host);
         let snap = self.build_settings_snapshot(host);
+        if let Some(txt) = self.settings_ui.take_dock_input_sync(&snap) {
+            host.set_settings_input_text(0, &txt);
+        }
         let (frame, inputs) = self.settings_ui.render(&snap);
         host.present_settings_frame(&frame, inputs);
     }
@@ -51,14 +54,13 @@ impl<I: IconProvider> AppController<I> {
         }
         self.last_settings_tab = Some(cur);
         match cur {
+            SettingsTab::Dock => self.settings_ui.reset_dock_input_sync(),
             SettingsTab::Backup => {
                 host.set_settings_input_text(0, self.backup.webdav_username());
                 host.set_settings_input_text(1, "");
                 host.set_settings_input_text(2, self.backup.webdav_custom_url());
             }
-            SettingsTab::Calendar => {
-                host.set_settings_input_text(0, "");
-            }
+            SettingsTab::Calendar => host.set_settings_input_text(0, ""),
             _ => {}
         }
     }
@@ -102,7 +104,17 @@ impl<I: IconProvider> AppController<I> {
                 locked: d.locked,
                 show_running_indicator: d.show_running_indicator,
                 focus_running_window: d.focus_running_window,
+                label_mode_index: d.label_mode.to_index(),
                 item_count: d.items.len(),
+                items: d
+                    .items
+                    .iter()
+                    .filter(|i| !i.is_separator())
+                    .map(|i| DockItemView {
+                        id: i.id,
+                        label: i.label.clone(),
+                    })
+                    .collect(),
             })
             .collect();
 
@@ -264,93 +276,8 @@ impl<I: IconProvider> AppController<I> {
         }
     }
 
-    fn apply_dock_setting<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
-        &mut self,
-        host: &mut H,
-        action: &SettingsAction,
-    ) -> bool {
-        let mut cfgs = load_docks_from_file(&self.paths.docks_cfg).unwrap_or_default();
-        if cfgs.is_empty() {
-            cfgs.push(DockConfig::new(1, "Док 1"));
-        }
-        let changed = match action {
-            SettingsAction::AddDock => {
-                let next_id = cfgs.iter().map(|c| c.id).max().unwrap_or(0) + 1;
-                let mut c = DockConfig::new(next_id, format!("Док {next_id}"));
-                c.edge = match cfgs.len() % 4 {
-                    0 => DockEdge::Bottom,
-                    1 => DockEdge::Left,
-                    2 => DockEdge::Right,
-                    _ => DockEdge::Top,
-                };
-                cfgs.push(c);
-                true
-            }
-            SettingsAction::RemoveDock(id_s) if cfgs.len() > 1 => {
-                let id = id_s.parse::<u64>().unwrap_or(0);
-                let before = cfgs.len();
-                cfgs.retain(|c| c.id != id);
-                cfgs.len() != before
-            }
-            SettingsAction::AddDockSeparator(id_s) => edit_dock(&mut cfgs, id_s, |c| {
-                let nid = c.next_item_id();
-                c.items.push(DockItem::separator(nid));
-            }),
-            SettingsAction::SetDockEdge {
-                dock_id,
-                edge_index,
-            } => edit_dock(&mut cfgs, dock_id, |c| {
-                c.edge = match edge_index {
-                    1 => DockEdge::Top,
-                    2 => DockEdge::Left,
-                    3 => DockEdge::Right,
-                    _ => DockEdge::Bottom,
-                };
-                c.free_pos = None;
-            }),
-            SettingsAction::SetDockLayer { dock_id, layer } => {
-                edit_dock(&mut cfgs, dock_id, |c| c.layer = *layer)
-            }
-            SettingsAction::SetDockIconSize { dock_id, size_px } => {
-                edit_dock(&mut cfgs, dock_id, |c| {
-                    c.icon_size_px = (*size_px).clamp(24, 128) as u16;
-                })
-            }
-            SettingsAction::SetDockOpacity { dock_id, opacity } => {
-                edit_dock(&mut cfgs, dock_id, |c| {
-                    c.opacity_percent = (*opacity).clamp(20, 100);
-                })
-            }
-            SettingsAction::SetDockLocked { dock_id, locked } => {
-                edit_dock(&mut cfgs, dock_id, |c| c.locked = *locked)
-            }
-            SettingsAction::SetDockShowRunning { dock_id, enabled } => {
-                edit_dock(&mut cfgs, dock_id, |c| c.show_running_indicator = *enabled)
-            }
-            SettingsAction::SetDockFocusRunning { dock_id, enabled } => {
-                edit_dock(&mut cfgs, dock_id, |c| c.focus_running_window = *enabled)
-            }
-            _ => return false,
-        };
-        if changed && save_docks_to_file(&self.paths.docks_cfg, &cfgs, APP_VERSION).is_ok() {
-            self.reload_module_config(host, ModuleId::Dock);
-        }
-        true
-    }
-
     pub(crate) fn persist_modules_cfg(&self) {
         let path = self.paths.data_dir.join("config").join("modules.cfg");
         let _ = save_modules_config(&path, &self.modules_cfg);
     }
-}
-
-fn edit_dock<F: FnOnce(&mut DockConfig)>(cfgs: &mut [DockConfig], id_s: &str, f: F) -> bool {
-    let Ok(id) = id_s.parse::<u64>() else {
-        return false;
-    };
-    let Some(cfg) = cfgs.iter_mut().find(|c| c.id == id) else {
-        return false;
-    };
-    f(cfg);
-    true
 }

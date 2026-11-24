@@ -85,3 +85,75 @@ pub(crate) fn blend_pixel(frame: &mut BgraFrame, x: i32, y: i32, src: [u8; 4]) {
         .round()
         .clamp(0.0, 255.0) as u8;
 }
+
+pub(crate) fn draw_settings_button(frame: &mut BgraFrame, rect: Rect) {
+    let radius = (rect.width.min(rect.height) as f32) * 0.24;
+    let x0 = rect.x.max(0);
+    let y0 = rect.y.max(0);
+    let x1 = (rect.x + i32::try_from(rect.width).unwrap_or(0))
+        .min(i32::try_from(frame.width).unwrap_or(0));
+    let y1 = (rect.y + i32::try_from(rect.height).unwrap_or(0))
+        .min(i32::try_from(frame.height).unwrap_or(0));
+    let cx = rect.x as f32 + (rect.width as f32) * 0.5;
+    let cy = rect.y as f32 + (rect.height as f32) * 0.5;
+    let unit = (rect.width.min(rect.height) as f32) * 0.5;
+
+    for py in y0..y1 {
+        let t = ((py - rect.y) as f32 / (rect.height.max(1) as f32)).clamp(0.0, 1.0);
+        let bg = (56.0 - 16.0 * t).round() as u8;
+        for px in x0..x1 {
+            let (fx, fy) = (px as f32 + 0.5, py as f32 + 0.5);
+            let dist = rounded_rect_sdf(fx, fy, rect, radius);
+            if dist <= 0.6 {
+                let cov = (0.6 - dist).clamp(0.0, 1.0);
+                blend_pixel(frame, px, py, [bg, bg + 2, bg + 7, (240.0 * cov) as u8]);
+                if dist > -1.3 {
+                    blend_pixel(frame, px, py, [232, 122, 72, (92.0 * cov) as u8]);
+                }
+                let gear_a = sample_gear_alpha(fx - cx, fy - cy, unit);
+                if gear_a > 0 {
+                    blend_pixel(frame, px, py, [242, 238, 234, gear_a]);
+                }
+            }
+        }
+    }
+}
+
+fn sample_gear_alpha(dx: f32, dy: f32, unit: f32) -> u8 {
+    let r = (dx * dx + dy * dy).sqrt() / unit.max(1.0);
+    let tooth = (dy.atan2(dx) * 8.0).cos();
+    let outer = if tooth > 0.2 { 0.66 } else { 0.52 };
+    let inner = 0.22;
+    if r <= outer && r >= inner {
+        let eo = ((outer - r) * unit).clamp(0.0, 1.0);
+        let ei = ((r - inner) * unit).clamp(0.0, 1.0);
+        (242.0 * eo.min(ei)).round() as u8
+    } else {
+        0
+    }
+}
+
+pub(crate) fn draw_fallback_tile(frame: &mut BgraFrame, rect: Rect, alpha_mul: f32) {
+    let radius = (rect.width.min(rect.height) as f32) * 0.24;
+    let x0 = rect.x.max(0);
+    let y0 = rect.y.max(0);
+    let x1 = (rect.x + i32::try_from(rect.width).unwrap_or(0))
+        .min(i32::try_from(frame.width).unwrap_or(0));
+    let y1 = (rect.y + i32::try_from(rect.height).unwrap_or(0))
+        .min(i32::try_from(frame.height).unwrap_or(0));
+
+    for py in y0..y1 {
+        let t = ((py - rect.y) as f32 / (rect.height.max(1) as f32)).clamp(0.0, 1.0);
+        let r = (66.0 - 18.0 * t).round() as u8;
+        let g = (142.0 - 28.0 * t).round() as u8;
+        let b = (242.0 - 22.0 * t).round() as u8;
+        for px in x0..x1 {
+            let dist = rounded_rect_sdf(px as f32 + 0.5, py as f32 + 0.5, rect, radius);
+            if dist <= 0.6 {
+                let cov = (0.6 - dist).clamp(0.0, 1.0);
+                let a = (238.0 * cov * alpha_mul).round() as u8;
+                blend_pixel(frame, px, py, [r, g, b, a]);
+            }
+        }
+    }
+}

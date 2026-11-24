@@ -10,8 +10,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DestroyWindow, GetCursorPos, GetWindowLongPtrW, KillTimer, SetTimer,
     SetWindowLongPtrW, SetWindowPos, ShowWindow, GWLP_USERDATA, GWL_EXSTYLE, HWND_TOPMOST,
     IDC_ARROW, IDC_SIZENESW, IDC_SIZENS, IDC_SIZENWSE, IDC_SIZEWE, SWP_FRAMECHANGED,
-    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SW_HIDE, SW_SHOWNOACTIVATE, WS_EX_LAYERED,
-    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
+    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_HIDE, SW_SHOWNOACTIVATE,
+    WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
 };
 
 use crate::http::spawn_http_get;
@@ -25,7 +25,9 @@ use crate::widget_proc::{
     set_widget_click_through_meta, update_widget_layer_meta, WIDGET_MINUTE_TIMER_ID,
     WIDGET_REFRESH_TIMER_ID,
 };
-use crate::widget_text::{composite_widget_frame, query_local_time, render_tooltip_frame};
+use crate::widget_text::{
+    composite_widget_frame, compute_tooltip_rect, query_local_time, render_tooltip_frame,
+};
 use crate::window::WindowsDockHost;
 
 impl WidgetPlatform for WindowsDockHost {
@@ -45,7 +47,10 @@ impl WidgetPlatform for WindowsDockHost {
             return Ok(());
         }
         let title_w: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
-        let ex_style = WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
+        let mut ex_style = WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
+        if layer == WidgetLayer::Topmost {
+            ex_style |= WS_EX_TOPMOST;
+        }
         // SAFETY: Creating a layered popup widget window on the UI thread.
         unsafe {
             let hwnd = CreateWindowExW(
@@ -124,7 +129,7 @@ impl WidgetPlatform for WindowsDockHost {
                     0,
                     0,
                     0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
                 );
             }
         }
@@ -179,34 +184,7 @@ impl WidgetPlatform for WindowsDockHost {
     }
 
     fn set_widget_tooltip(&mut self, _widget_id: u64, text: Option<&str>) -> Result<(), String> {
-        let Some(tip) = text.filter(|s| !s.trim().is_empty()) else {
-            if let Some(hwnd) = self.tooltip_hwnd {
-                // SAFETY: Hiding the owned tooltip window.
-                unsafe {
-                    let _ = ShowWindow(hwnd, SW_HIDE);
-                }
-            }
-            return Ok(());
-        };
-        let tip_hwnd = self.ensure_tooltip_window()?;
-        let frame = render_tooltip_frame(tip)?;
-        let mut cursor = POINT::default();
-        // SAFETY: Querying cursor position for non-activating tooltip placement.
-        unsafe {
-            let _ = GetCursorPos(&mut cursor);
-        }
-        let rect = PixelRect {
-            x: cursor.x + 14,
-            y: cursor.y + 18,
-            width: frame.width,
-            height: frame.height,
-        };
-        present_layered_bgra(tip_hwnd, rect, &frame)?;
-        // SAFETY: Showing non-activating topmost tooltip popup.
-        unsafe {
-            let _ = ShowWindow(tip_hwnd, SW_SHOWNOACTIVATE);
-        }
-        Ok(())
+        self.show_tooltip_text(text)
     }
 
     fn set_widget_timers(
@@ -286,6 +264,38 @@ impl WidgetPlatform for WindowsDockHost {
 }
 
 impl WindowsDockHost {
+    pub(crate) fn show_tooltip_text(&mut self, text: Option<&str>) -> Result<(), String> {
+        let Some(tip) = text.filter(|s| !s.trim().is_empty()) else {
+            if let Some(hwnd) = self.tooltip_hwnd {
+                // SAFETY: Hiding the owned tooltip window.
+                unsafe {
+                    let _ = ShowWindow(hwnd, SW_HIDE);
+                }
+            }
+            return Ok(());
+        };
+        let tip_hwnd = self.ensure_tooltip_window()?;
+        let frame = render_tooltip_frame(tip)?;
+        let mut cursor = POINT::default();
+        // SAFETY: Querying cursor position for non-activating tooltip placement.
+        unsafe {
+            let _ = GetCursorPos(&mut cursor);
+        }
+        let area = crate::query_primary_work_area().unwrap_or(PixelRect {
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 1080,
+        });
+        let rect = compute_tooltip_rect(cursor.x, cursor.y, frame.width, frame.height, area);
+        present_layered_bgra(tip_hwnd, rect, &frame)?;
+        // SAFETY: Showing non-activating topmost tooltip popup.
+        unsafe {
+            let _ = ShowWindow(tip_hwnd, SW_SHOWNOACTIVATE);
+        }
+        Ok(())
+    }
+
     fn ensure_tooltip_window(&mut self) -> Result<HWND, String> {
         if let Some(hwnd) = self.tooltip_hwnd {
             return Ok(hwnd);
@@ -326,17 +336,10 @@ pub(crate) fn hit_resize_edges(pt: PixelPoint, w: i32, h: i32) -> u8 {
     if pt.x < 0 || pt.y < 0 || pt.x >= w || pt.y >= h {
         return 0;
     }
-    if pt.x >= w - RESIZE_CORNER_PX && pt.y >= h - RESIZE_CORNER_PX {
-        return EDGE_RIGHT | EDGE_BOTTOM;
-    }
-    if pt.x < RESIZE_CORNER_PX && pt.y >= h - RESIZE_CORNER_PX {
-        return EDGE_LEFT | EDGE_BOTTOM;
-    }
-    if pt.x >= w - RESIZE_CORNER_PX && pt.y < RESIZE_CORNER_PX {
-        return EDGE_RIGHT | EDGE_TOP;
-    }
-    if pt.x < RESIZE_CORNER_PX && pt.y < RESIZE_CORNER_PX {
-        return EDGE_LEFT | EDGE_TOP;
+    let (l_c, r_c) = (pt.x < RESIZE_CORNER_PX, pt.x >= w - RESIZE_CORNER_PX);
+    let (t_c, b_c) = (pt.y < RESIZE_CORNER_PX, pt.y >= h - RESIZE_CORNER_PX);
+    if (l_c || r_c) && (t_c || b_c) {
+        return if l_c { EDGE_LEFT } else { EDGE_RIGHT } | if t_c { EDGE_TOP } else { EDGE_BOTTOM };
     }
     let mut edges = 0u8;
     if pt.x < RESIZE_BORDER_PX {
