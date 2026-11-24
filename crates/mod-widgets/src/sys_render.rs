@@ -1,5 +1,5 @@
 use asrbox_platform_api::{
-    BgraFrame, LocalDateTime, PixelPoint, SysTelemetry, TextAlign, WidgetFrame,
+    BgraFrame, FluentPalette, LocalDateTime, PixelPoint, SysTelemetry, TextAlign, WidgetFrame,
 };
 
 use crate::date::{days_from_civil, weekday_mon0};
@@ -11,14 +11,6 @@ use crate::sys_sections::{
 };
 
 pub const SYSMON_HEADER_H: i32 = 34;
-
-pub(crate) const TEXT_BRIGHT: [u8; 4] = [238, 240, 244, 255];
-pub(crate) const TEXT_MAIN: [u8; 4] = [218, 222, 230, 255];
-pub(crate) const TEXT_MUTED: [u8; 4] = [148, 155, 168, 255];
-pub(crate) const TEXT_TAG: [u8; 4] = [140, 147, 160, 220];
-pub(crate) const TEXT_CYAN: [u8; 4] = [242, 146, 100, 255];
-pub(crate) const TEXT_GREEN: [u8; 4] = [104, 199, 148, 255];
-pub(crate) const TEXT_AMBER: [u8; 4] = [234, 179, 84, 255];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SysHitTarget {
@@ -37,6 +29,7 @@ pub struct SysRenderInput<'a> {
     pub now: LocalDateTime,
     pub data: &'a SysTelemetry,
     pub hovered: SysHitTarget,
+    pub palette: FluentPalette,
 }
 
 pub fn hit_test_sysmon(pt: PixelPoint, width: u32, height: u32) -> SysHitTarget {
@@ -62,15 +55,18 @@ pub fn render_sysmon_widget(inp: &SysRenderInput<'_>) -> WidgetFrame {
     let (wi, hi) = (w as i32, h as i32);
     let mut bgra = BgraFrame::transparent(w, h);
     let mut texts = Vec::with_capacity(64);
+    let pal = &inp.palette;
 
     let pct = u16::from(inp.opacity_percent.clamp(20, 100));
-    let div = [255, 255, 255, ((pct * 30) / 100).clamp(14, 38) as u8];
+    let div_a = ((pct * 220) / 100).clamp(60, 235) as u8;
+    let div = [pal.divider[0], pal.divider[1], pal.divider[2], div_a];
 
-    fill_macos_glass_card(&mut bgra, inp.opacity_percent);
+    fill_macos_glass_card(&mut bgra, inp.opacity_percent, pal);
     {
         let mut c = Canvas {
             frame: &mut bgra,
             texts: &mut texts,
+            pal,
         };
         draw_top_bar(&mut c, inp, wi);
         draw_hline(c.frame, SYSMON_HEADER_H, div);
@@ -97,7 +93,7 @@ pub fn render_sysmon_widget(inp: &SysRenderInput<'_>) -> WidgetFrame {
         draw_live_procs(&mut c, inp, wi, y_live, hi - y_live - 6, div);
     }
 
-    draw_resize_grip(&mut bgra);
+    draw_resize_grip(&mut bgra, pal);
     WidgetFrame { bgra, texts }
 }
 
@@ -121,12 +117,20 @@ fn draw_top_bar(c: &mut Canvas<'_>, inp: &SysRenderInput<'_>, w: i32) {
         "{:02}.{:02}.{:04} • {wd} • W{wk:02} • {:02}:{:02} • Up: {up} • [{plan}]{watts} • Err: {}",
         dt.day, dt.month, dt.year, dt.hour, dt.minute, inp.data.err_count
     );
+    let main_col = c.pal.text_primary;
+    let muted_col = c.pal.text_secondary;
+    let hov_bg = [
+        c.pal.menu_hover[0],
+        c.pal.menu_hover[1],
+        c.pal.menu_hover[2],
+        200,
+    ];
     c.text(
         [14, 7, w - 76, 20],
         line,
         12,
         false,
-        TEXT_MAIN,
+        main_col,
         TextAlign::Left,
     );
 
@@ -137,9 +141,9 @@ fn draw_top_bar(c: &mut Canvas<'_>, inp: &SysRenderInput<'_>, w: i32) {
     for (target, bx, glyph) in btns {
         let hov = inp.hovered == target;
         if hov {
-            fill_rounded_rect(c.frame, bx, 6, 22, 22, 6.0, [255, 255, 255, 28]);
+            fill_rounded_rect(c.frame, bx, 6, 22, 22, 6.0, hov_bg);
         }
-        let col = if hov { TEXT_BRIGHT } else { TEXT_TAG };
+        let col = if hov { main_col } else { muted_col };
         c.text([bx, 6, 22, 22], glyph, 13, false, col, TextAlign::Center);
     }
 }
@@ -152,6 +156,8 @@ fn draw_live_procs(
     h: i32,
     div: [u8; 4],
 ) {
+    let tag_col = c.pal.text_muted;
+    let bright_col = c.pal.text_primary;
     c.hdr(w, y, "ТОП-5 ПРОЦЕССОВ В МОМЕНТЕ", "LIVE");
     let mid = w / 2 - 6;
     let hy = y + 23;
@@ -160,7 +166,7 @@ fn draw_live_procs(
         "CPU",
         11,
         false,
-        TEXT_TAG,
+        tag_col,
         TextAlign::Right,
     );
     c.text(
@@ -168,7 +174,7 @@ fn draw_live_procs(
         "ОЗУ",
         11,
         false,
-        TEXT_TAG,
+        tag_col,
         TextAlign::Right,
     );
 
@@ -187,7 +193,7 @@ fn draw_live_procs(
                 format!("{}%", p.cpu_pct),
                 12,
                 false,
-                TEXT_BRIGHT,
+                bright_col,
                 TextAlign::Right,
             );
         }
@@ -198,7 +204,7 @@ fn draw_live_procs(
                 fmt_mem(p.mem_mb),
                 12,
                 false,
-                TEXT_BRIGHT,
+                bright_col,
                 TextAlign::Right,
             );
         }
@@ -305,6 +311,7 @@ mod tests {
                 now,
                 data: &data,
                 hovered: SysHitTarget::None,
+                palette: FluentPalette::default(),
             });
             assert_eq!(frame.bgra.width, w);
             assert_eq!(frame.bgra.height, h);

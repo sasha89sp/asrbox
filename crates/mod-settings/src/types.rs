@@ -1,54 +1,89 @@
 use asrbox_core::{IsolationMode, ModuleId};
-use asrbox_platform_api::WidgetLayer;
+use asrbox_platform_api::{AccentPreset, AppLanguage, ThemeMode, WebDavDirEntry, WidgetLayer};
+
+use crate::i18n::tr;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SettingsTab {
     #[default]
+    General,
     Modules,
     Dock,
     Calendar,
     SysMonitor,
     Overlay,
-    Backup,
-    Debug,
-    About,
 }
 
 impl SettingsTab {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 6] = [
+        Self::General,
         Self::Modules,
         Self::Dock,
         Self::Calendar,
         Self::SysMonitor,
         Self::Overlay,
-        Self::Backup,
-        Self::Debug,
-        Self::About,
     ];
 
-    pub fn label(self) -> &'static str {
+    pub fn label(self, lang: AppLanguage) -> &'static str {
         match self {
-            Self::Modules => "Модули",
-            Self::Dock => "Док-панели",
-            Self::Calendar => "Google Календарь",
-            Self::SysMonitor => "Системный монитор",
-            Self::Overlay => "Игровой оверлей",
-            Self::Backup => "Бэкап и Облако",
-            Self::Debug => "Диагностика",
-            Self::About => "О программе",
+            Self::General => tr(lang, "Общие настройки", "General"),
+            Self::Modules => tr(lang, "Модули", "Modules"),
+            Self::Dock => tr(lang, "Док-панели", "Dock Panels"),
+            Self::Calendar => tr(lang, "Google Календарь", "Google Calendar"),
+            Self::SysMonitor => tr(lang, "Системный монитор", "System Monitor"),
+            Self::Overlay => tr(lang, "Игровой оверлей", "Game Overlay"),
         }
     }
 
     pub fn icon(self) -> &'static str {
         match self {
+            Self::General => "⚙",
             Self::Modules => "◈",
             Self::Dock => "▭",
             Self::Calendar => "▦",
             Self::SysMonitor => "▤",
             Self::Overlay => "◎",
-            Self::Backup => "☁",
-            Self::Debug => "◉",
-            Self::About => "ⓘ",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum BrowserTab {
+    #[default]
+    Main,
+    Diagnostics,
+    VersionHistory,
+    WebDavBrowser {
+        server_id: String,
+        server_name: String,
+    },
+}
+
+impl BrowserTab {
+    pub fn title(&self, lang: AppLanguage) -> String {
+        match self {
+            Self::Main => tr(lang, "⚙  Настройки", "⚙  Settings").to_owned(),
+            Self::Diagnostics => tr(lang, "◉  Диагностика", "◉  Diagnostics").to_owned(),
+            Self::VersionHistory => tr(lang, "ⓘ  История версий", "ⓘ  Version History").to_owned(),
+            Self::WebDavBrowser { server_name, .. } => format!("☁  {server_name}"),
+        }
+    }
+    pub fn closable(&self) -> bool {
+        !matches!(self, Self::Main)
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AppearanceSettingsView {
+    pub theme: ThemeMode,
+    pub accent: AccentPreset,
+    pub language: AppLanguage,
+}
+impl Default for AppearanceSettingsView {
+    fn default() -> Self {
+        Self {
+            theme: ThemeMode::Dark,
+            accent: AccentPreset::Blue,
+            language: AppLanguage::Ru,
         }
     }
 }
@@ -129,17 +164,10 @@ pub struct OverlaySettingsView {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BackupSettingsView {
-    pub auto_upload_cloud: bool,
-    pub last_backup_file: String,
-    pub last_backup_time: String,
-    pub cloud_status: String,
-    pub busy: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WebDavSettingsView {
-    pub provider_index: u8,
+pub struct WebDavServerView {
+    pub id: String,
+    pub name: String,
+    pub provider_label: String,
     pub effective_url: String,
     pub username: String,
     pub remote_dir: String,
@@ -148,22 +176,82 @@ pub struct WebDavSettingsView {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DebugSettingsView {
-    pub verbose: bool,
-    pub file_log: bool,
-    pub summary_line: String,
+pub struct WebDavDraftView {
+    pub provider_index: u8,
+    pub provider_label: String,
+    pub effective_url: String,
+    pub is_custom: bool,
+    pub status_text: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WebDavBrowserView {
+    pub server_id: String,
+    pub server_name: String,
+    pub current_dir: String,
+    pub entries: Vec<WebDavDirEntry>,
+    pub loading: bool,
+    pub status_text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SyncItemView {
+    pub id: String,
+    pub local_path: String,
+    pub is_dir: bool,
+    pub remote_subdir: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct FileSyncSettingsView {
+    pub items: Vec<SyncItemView>,
+    pub target_server_ids: Vec<String>,
+    pub interval_minutes: u32,
+    pub last_sync_time: String,
+    pub status_text: String,
+    pub busy: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct BackupSettingsView {
+    pub auto_upload_cloud: bool,
+    pub target_server_ids: Vec<String>,
+    pub last_backup_file: String,
+    pub last_backup_time: String,
+    pub cloud_status: String,
+    pub busy: bool,
+    pub servers: Vec<WebDavServerView>,
+    pub draft: Option<WebDavDraftView>,
+    pub browser: Option<WebDavBrowserView>,
+    pub sync: FileSyncSettingsView,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct DiagnosticsLiveView {
+    pub monitor_enabled: bool,
+    pub verbose: bool,
+    pub file_log: bool,
+    pub filter_label: String,
+    pub summary_line: String,
+    pub metrics_lines: Vec<String>,
+    pub module_lines: Vec<String>,
+    pub log_lines: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct AboutSettingsView {
     pub version: String,
     pub exe_path: String,
     pub data_dir: String,
     pub config_dir: String,
+    pub backups_dir: String,
+    pub logs_dir: String,
+    pub changelog_lines: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SettingsSnapshot {
+    pub appearance: AppearanceSettingsView,
     pub isolation: IsolationMode,
     pub autostart_enabled: bool,
     pub modules: Vec<ModuleStatusView>,
@@ -172,17 +260,22 @@ pub struct SettingsSnapshot {
     pub sysmon: SysMonitorSettingsView,
     pub overlay: OverlaySettingsView,
     pub backup: BackupSettingsView,
-    pub webdav: WebDavSettingsView,
-    pub debug: DebugSettingsView,
+    pub diagnostics: DiagnosticsLiveView,
     pub about: AboutSettingsView,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SettingsAction {
+    // Appearance & general
+    SetThemeMode(ThemeMode),
+    SetAccentPreset(AccentPreset),
+    SetLanguage(AppLanguage),
+    ResetSection(SettingsTab),
     SetIsolation(IsolationMode),
     SetAutostart(bool),
     SetModuleEnabled { id: ModuleId, enabled: bool },
     RestartModule(ModuleId),
+    // Dock
     AddDock,
     RemoveDock(String),
     AddDockSeparator(String),
@@ -197,6 +290,7 @@ pub enum SettingsAction {
     RenameDockItemFromInput { dock_id: String, item_id: u64 },
     ResetDockItemLabel { dock_id: String, item_id: u64 },
     OpenDocksConfig,
+    // Calendar
     SetCalendarVisible(bool),
     SetCalendarOpacity(u8),
     SetCalendarLayer(WidgetLayer),
@@ -210,6 +304,7 @@ pub enum SettingsAction {
     UncommentCalendarSources,
     RefreshCalendarNow,
     OpenWidgetsConfig,
+    // System Monitor
     SetSysMonitorVisible(bool),
     SetSysMonitorOpacity(u8),
     SetSysMonitorLayer(WidgetLayer),
@@ -219,6 +314,7 @@ pub enum SettingsAction {
     MatchSysMonitorToCalendar,
     RefreshSysMonitorNow,
     OpenSysMonitorConfig,
+    // Game Overlay
     SetOverlayAutoGamesOnly(bool),
     SetOverlayForceTopmost(bool),
     SetOverlaySetupMode(bool),
@@ -229,20 +325,44 @@ pub enum SettingsAction {
     SetOverlaySizePreset(u32, u32),
     SetOverlayRefreshMs(u32),
     OpenOverlayConfig,
+    // Backup, Multi-server WebDAV & Sync
     BackupSettingsNow,
     BackupFullNow,
     UploadLatestBackupNow,
     OpenBackupsFolder,
     SetAutoUploadBackup(bool),
-    SetWebDavProvider(u8),
-    SaveWebDavSettings,
-    TestWebDavConnection,
-    DeleteWebDavPassword,
+    ToggleBackupTargetServer(String),
+    OpenAddWebDavMenu,
+    TestWebDavDraft,
+    SaveWebDavDraft,
+    CancelWebDavDraft,
+    TestWebDavServer(String),
+    DeleteWebDavServer(String),
+    SaveWebDavServerRemoteDir(String),
+    OpenWebDavBrowser(String),
+    WebDavBrowseDir { server_id: String, path: String },
+    WebDavBrowseUp(String),
+    WebDavCreateFolderFromInput(String),
+    WebDavSelectCurrentFolder(String),
+    PickSyncFiles,
+    PickSyncFolder,
+    RemoveSyncItem(String),
+    ToggleSyncServer(String),
+    SetSyncIntervalMin(u32),
+    SyncFilesNow,
+    // Diagnostics & Version History (browser tabs) & Paths
+    OpenDiagnosticsTab,
+    SetDiagnosticsMonitorEnabled(bool),
     SetDebugVerbose(bool),
     SetDebugFileLog(bool),
-    OpenDebugWindow,
-    OpenAboutWindow,
+    CycleDebugFilter,
+    ClearDebugLogs,
+    CopyDebugReport,
+    SaveDebugReport,
+    OpenVersionHistoryTab,
+    CopyVersionInfo,
     OpenDataFolder,
+    CopyPathsToClipboard,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

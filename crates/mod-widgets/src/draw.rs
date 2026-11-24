@@ -1,25 +1,35 @@
-use asrbox_platform_api::{BgraFrame, TextAlign, WidgetTextCmd};
+use asrbox_platform_api::{BgraFrame, FluentPalette, TextAlign, WidgetTextCmd};
 
-pub const CARD_RADIUS: f32 = 16.0;
+pub const CARD_RADIUS: f32 = 10.0;
 
-pub fn fill_macos_glass_card(frame: &mut BgraFrame, opacity_percent: u8) {
+pub fn fill_macos_glass_card(frame: &mut BgraFrame, opacity_percent: u8, pal: &FluentPalette) {
     let w = frame.width as i32;
     let h = frame.height as i32;
     if w <= 0 || h <= 0 {
         return;
     }
     let pct = u16::from(opacity_percent.clamp(20, 100));
-    let base_alpha = ((pct * 244) / 100).clamp(48, 248) as u8;
-    let rim_alpha = ((u16::from(base_alpha) * 46) / 255).clamp(22, 60) as u8;
-    let top_glow = ((u16::from(base_alpha) * 26) / 255).clamp(12, 34) as u8;
+    let base_alpha = ((pct * 246) / 100).clamp(52, 250) as u8;
+    let rim_alpha = if pal.is_dark {
+        ((u16::from(base_alpha) * 195) / 255).clamp(48, 220) as u8
+    } else {
+        ((u16::from(base_alpha) * 235) / 255).clamp(90, 245) as u8
+    };
+    let bg = pal.window_bg;
+    let border = pal.card_border;
 
     let wf = w as f32;
     let hf = h as f32;
     for y in 0..h {
         let t = (y as f32) / hf.max(1.0);
-        let r = (28.0 - t * 6.0) as u8;
-        let g = (29.0 - t * 6.0) as u8;
-        let b = (34.0 - t * 6.0) as u8;
+        let shift = if pal.is_dark {
+            ((1.0 - t) * 4.0) as u8
+        } else {
+            ((1.0 - t) * 3.0) as u8
+        };
+        let r = bg[0].saturating_add(shift);
+        let g = bg[1].saturating_add(shift);
+        let b = bg[2].saturating_add(shift);
         for x in 0..w {
             let d = rounded_rect_sdf(x as f32 + 0.5, y as f32 + 0.5, wf, hf, CARD_RADIUS);
             let cov = (0.5 - d).clamp(0.0, 1.0);
@@ -28,36 +38,39 @@ pub fn fill_macos_glass_card(frame: &mut BgraFrame, opacity_percent: u8) {
             }
             let a = (f32::from(base_alpha) * cov).round() as u8;
             blend_pixel(frame, x, y, [r, g, b, a]);
-            if d > -1.35 && d < 0.45 {
-                let extra = if y < 22 { top_glow / 2 } else { 0 };
-                let ba = (f32::from(rim_alpha.saturating_add(extra)) * cov).round() as u8;
-                blend_pixel(frame, x, y, [242, 236, 230, ba]);
+            if d > -1.25 && d < 0.45 {
+                let ba = (f32::from(rim_alpha) * cov).round() as u8;
+                blend_pixel(frame, x, y, [border[0], border[1], border[2], ba]);
             }
         }
     }
 }
 
-pub fn fill_glow_bar(frame: &mut BgraFrame, rx: i32, ry: i32, rw: i32, rh: i32, pct: u8) {
+pub fn fill_glow_bar(
+    frame: &mut BgraFrame,
+    rx: i32,
+    ry: i32,
+    rw: i32,
+    rh: i32,
+    pct: u8,
+    pal: &FluentPalette,
+) {
     if rw < 10 || rh < 4 {
         return;
     }
     let rad = (rh as f32) * 0.5;
-    fill_rounded_rect(frame, rx, ry, rw, rh, rad, [255, 255, 255, 32]);
+    let track = if pal.is_dark {
+        [255, 255, 255, 34]
+    } else {
+        [0, 0, 0, 24]
+    };
+    fill_rounded_rect(frame, rx, ry, rw, rh, rad, track);
     let fill_w = ((i32::from(pct.min(100)) * rw) / 100).max(if pct > 0 { rh.min(rw) } else { 0 });
     if fill_w <= 0 {
         return;
     }
-    // Soft NotePlan coral-amber outer halo
-    fill_rounded_rect(
-        frame,
-        rx - 1,
-        ry - 1,
-        fill_w + 2,
-        rh + 2,
-        rad + 1.0,
-        [232, 122, 72, 54],
-    );
-    // Crisp horizontal NotePlan coral-to-amber gradient pill fill
+    let acc = pal.accent;
+    let hov = pal.accent_hover;
     let fw = fill_w as f32;
     let fh = rh as f32;
     for dy in 0..rh {
@@ -68,22 +81,30 @@ pub fn fill_glow_bar(frame: &mut BgraFrame, rx: i32, ry: i32, rw: i32, rh: i32, 
                 continue;
             }
             let t = (dx as f32) / fw.max(1.0);
-            let cr = (224.0 + t * 24.0) as u8;
-            let cg = (112.0 + t * 62.0) as u8;
-            let cb = (68.0 + t * 26.0) as u8;
+            let cr = (f32::from(acc[0]) + (f32::from(hov[0]) - f32::from(acc[0])) * t) as u8;
+            let cg = (f32::from(acc[1]) + (f32::from(hov[1]) - f32::from(acc[1])) * t) as u8;
+            let cb = (f32::from(acc[2]) + (f32::from(hov[2]) - f32::from(acc[2])) * t) as u8;
             let ca = (245.0 * cov).round() as u8;
             blend_pixel(frame, rx + dx, ry + dy, [cr, cg, cb, ca]);
         }
     }
 }
 
-pub fn fill_pill_badge(frame: &mut BgraFrame, rx: i32, ry: i32, rw: i32, rh: i32) {
+pub fn fill_pill_badge(
+    frame: &mut BgraFrame,
+    rx: i32,
+    ry: i32,
+    rw: i32,
+    rh: i32,
+    pal: &FluentPalette,
+) {
     if rw < 8 || rh < 8 {
         return;
     }
-    let rad = 7.0f32.min((rh as f32) * 0.45);
+    let rad = 6.0f32.min((rh as f32) * 0.45);
     let wf = rw as f32;
     let hf = rh as f32;
+    let acc = pal.accent;
     for dy in 0..rh {
         for dx in 0..rw {
             let d = rounded_rect_sdf(dx as f32 + 0.5, dy as f32 + 0.5, wf, hf, rad);
@@ -91,20 +112,21 @@ pub fn fill_pill_badge(frame: &mut BgraFrame, rx: i32, ry: i32, rw: i32, rh: i32
             if cov <= 0.0 {
                 continue;
             }
-            let bg_a = (42.0 * cov).round() as u8;
-            blend_pixel(frame, rx + dx, ry + dy, [232, 122, 72, bg_a]);
-            if d > -1.2 && d < 0.4 {
-                let rim_a = (86.0 * cov).round() as u8;
-                blend_pixel(frame, rx + dx, ry + dy, [240, 146, 98, rim_a]);
+            let bg_a = ((if pal.is_dark { 46.0 } else { 28.0 }) * cov).round() as u8;
+            blend_pixel(frame, rx + dx, ry + dy, [acc[0], acc[1], acc[2], bg_a]);
+            if d > -1.15 && d < 0.4 {
+                let rim_a = (110.0 * cov).round() as u8;
+                blend_pixel(frame, rx + dx, ry + dy, [acc[0], acc[1], acc[2], rim_a]);
             }
         }
     }
 }
 
-pub fn draw_resize_grip(frame: &mut BgraFrame) {
+pub fn draw_resize_grip(frame: &mut BgraFrame, pal: &FluentPalette) {
     let w = frame.width as i32;
     let h = frame.height as i32;
-    let col = [210, 224, 240, 82];
+    let m = pal.text_muted;
+    let col = [m[0], m[1], m[2], 125];
     for i in 0..3 {
         let off = 7 + i * 4;
         fill_rect(frame, w - off, h - 7, 2, 2, col);
@@ -115,11 +137,16 @@ pub fn draw_resize_grip(frame: &mut BgraFrame) {
     fill_rect(frame, w - 7, h - 15, 2, 2, col);
 }
 
-pub fn draw_calendar_badge(frame: &mut BgraFrame, x: i32, y: i32) {
-    fill_rounded_rect(frame, x, y, 22, 22, 6.0, [242, 238, 234, 250]);
-    fill_rounded_rect(frame, x, y, 22, 7, 4.0, [232, 122, 72, 255]);
-    fill_rect(frame, x, y + 4, 22, 4, [232, 122, 72, 255]);
-    let dot = [54, 57, 68, 255];
+pub fn draw_calendar_badge(frame: &mut BgraFrame, x: i32, y: i32, pal: &FluentPalette) {
+    let body = if pal.is_dark {
+        [244, 246, 250, 250]
+    } else {
+        [255, 255, 255, 255]
+    };
+    fill_rounded_rect(frame, x, y, 22, 22, 6.0, body);
+    fill_rounded_rect(frame, x, y, 22, 7, 4.0, pal.accent);
+    fill_rect(frame, x, y + 4, 22, 4, pal.accent);
+    let dot = [64, 68, 78, 255];
     fill_rect(frame, x + 5, y + 11, 4, 3, dot);
     fill_rect(frame, x + 13, y + 11, 4, 3, dot);
     fill_rect(frame, x + 5, y + 16, 4, 3, dot);
@@ -229,10 +256,10 @@ pub fn push_txt(
     });
 }
 
-pub fn arrow_color(enabled: bool, hovered: bool) -> [u8; 4] {
+pub fn arrow_color(enabled: bool, hovered: bool, pal: &FluentPalette) -> [u8; 4] {
     match (enabled, hovered) {
-        (false, _) => [86, 92, 104, 140],
-        (true, true) => [243, 244, 246, 255],
-        (true, false) => [156, 163, 175, 255],
+        (false, _) => [pal.text_muted[0], pal.text_muted[1], pal.text_muted[2], 110],
+        (true, true) => pal.text_primary,
+        (true, false) => pal.text_secondary,
     }
 }

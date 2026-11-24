@@ -8,7 +8,7 @@ use std::time::Instant;
 
 use asrbox_core::{decode_supervisor_cmd, encode_worker_msg, ModuleId, SupervisorCmd, WorkerMsg};
 use asrbox_mod_dock::{to_dock_point, to_dock_rect, DockEvent};
-use asrbox_platform_api::{DockPlatform, PlatformEvent, ToolsPlatform};
+use asrbox_platform_api::{load_appearance_config, DockPlatform, PlatformEvent, ToolsPlatform};
 use asrbox_platform_windows::{
     is_process_alive, wake_host_window, WindowsDockHost, WindowsIconProvider,
 };
@@ -63,9 +63,13 @@ fn run_dock_worker(
     mut safe_mode: bool,
 ) -> Result<(), String> {
     let paths = resolve_app_paths();
+    let appearance_cfg = paths.appearance_cfg.clone();
+    let pal = load_appearance_config(&appearance_cfg).palette();
+    DockPlatform::set_theme(host, pal);
     let work_area = to_dock_rect(host.primary_work_area()?);
     let icons = WindowsIconProvider::new();
     let mut docks = DockManager::load(paths.docks_cfg, APP_VERSION, work_area, icons, host)?;
+    docks.palette = pal;
     docks.sync_windows(host, safe_mode)?;
     emit_log(
         "INFO",
@@ -83,6 +87,9 @@ fn run_dock_worker(
             for cmd in drain_cmds(&cmds) {
                 match cmd {
                     SupervisorCmd::ReloadConfig => {
+                        let next_pal = load_appearance_config(&appearance_cfg).palette();
+                        DockPlatform::set_theme(platform, next_pal);
+                        docks.palette = next_pal;
                         if let Ok(n) = docks.reload_from_disk(platform, safe_mode) {
                             emit_log("INFO", "dock", format!("Перечитан docks.cfg ({n})"));
                         }

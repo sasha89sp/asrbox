@@ -1,4 +1,6 @@
-use asrbox_platform_api::{BgraFrame, OverlayTelemetry, TextAlign, WidgetFrame, WidgetTextCmd};
+use asrbox_platform_api::{
+    BgraFrame, FluentPalette, OverlayTelemetry, TextAlign, WidgetFrame, WidgetTextCmd,
+};
 
 use crate::config::{
     OverlayConfig, MAX_OVERLAY_HEIGHT, MAX_OVERLAY_WIDTH, MIN_OVERLAY_HEIGHT, MIN_OVERLAY_WIDTH,
@@ -81,15 +83,16 @@ pub fn render_game_overlay(
     cfg: &OverlayConfig,
     snap: &OverlayTelemetry,
     setup_mode: bool,
+    pal: &FluentPalette,
 ) -> WidgetFrame {
     let w = cfg.width.clamp(MIN_OVERLAY_WIDTH, MAX_OVERLAY_WIDTH);
     let h = cfg.height.clamp(MIN_OVERLAY_HEIGHT, MAX_OVERLAY_HEIGHT);
     let mut bgra = BgraFrame::transparent(w, h);
     let mut texts = Vec::with_capacity(20);
-    fill_overlay_card(&mut bgra, cfg.opacity_percent, setup_mode);
+    fill_overlay_card(&mut bgra, cfg.opacity_percent, setup_mode, pal);
 
     let sc = LayoutScale::from_size(w, h);
-    draw_fps_row(&mut bgra, &mut texts, &sc, snap, setup_mode);
+    draw_fps_row(&mut bgra, &mut texts, &sc, snap, setup_mode, pal);
     draw_gpu_row(&mut bgra, &mut texts, &sc, snap);
     draw_cpu_row(&mut bgra, &mut texts, &sc, snap);
     draw_ram_row(&mut bgra, &mut texts, &sc, snap);
@@ -103,6 +106,7 @@ fn draw_fps_row(
     sc: &LayoutScale,
     snap: &OverlayTelemetry,
     setup_mode: bool,
+    pal: &FluentPalette,
 ) {
     let (y, h) = (sc.top_y, sc.row_h);
     sc.lbl(texts, y, h, "FPS", COL_MUTED);
@@ -128,13 +132,14 @@ fn draw_fps_row(
         let bw = (sc.font_sm * 6).clamp(62, 110);
         let bh = (sc.font_sm + 6).clamp(16, 26);
         let (bx, by) = (sc.w - sc.pad_x - bw, y + (h - bh) / 2);
-        fill_rounded_rect(frame, (bx, by, bw, bh), 5.0, [232, 122, 72, 62]);
+        let acc = pal.accent;
+        fill_rounded_rect(frame, (bx, by, bw, bh), 5.0, [acc[0], acc[1], acc[2], 70]);
         push_txt(
             texts,
             (bx, by, bw, bh),
             "Настройка",
             ((sc.font_sm - 2).max(9), true),
-            COL_CORAL_TXT,
+            acc,
             TextAlign::Center,
         );
     } else {

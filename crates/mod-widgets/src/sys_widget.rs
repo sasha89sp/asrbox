@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
 use asrbox_platform_api::{
-    PixelPoint, PixelRect, SysTelemetry, WidgetLayer, WidgetMenuAction, WidgetMenuState,
-    WidgetPlatform, WidgetSizeBounds,
+    FluentPalette, PixelPoint, PixelRect, SysTelemetry, WidgetLayer, WidgetMenuAction,
+    WidgetMenuState, WidgetPlatform, WidgetSizeBounds,
 };
 
 use crate::storage::{MAX_OPACITY_PERCENT, MIN_OPACITY_PERCENT};
@@ -23,6 +23,7 @@ pub struct SysMonitorWidget {
     hovered: SysHitTarget,
     last_tooltip: Option<String>,
     telemetry: SysTelemetry,
+    palette: FluentPalette,
 }
 
 impl SysMonitorWidget {
@@ -35,6 +36,14 @@ impl SysMonitorWidget {
             hovered: SysHitTarget::None,
             last_tooltip: None,
             telemetry: SysTelemetry::default(),
+            palette: FluentPalette::default(),
+        }
+    }
+
+    pub fn set_palette(&mut self, host: &mut dyn WidgetPlatform, palette: FluentPalette) {
+        self.palette = palette;
+        if self.window_open {
+            self.redraw(host);
         }
     }
 
@@ -260,6 +269,7 @@ impl SysMonitorWidget {
             now: host.local_time_now(),
             data: &self.telemetry,
             hovered: self.hovered,
+            palette: self.palette,
         });
         let _ = host.present_widget_frame(SYS_WIDGET_ID, self.window_rect(), &frame);
     }

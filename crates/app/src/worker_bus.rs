@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use asrbox_core::{IsolationMode, ModuleId, SupervisorCmd, WorkerMsg};
 use asrbox_mod_debug::LogLevel;
-use asrbox_mod_settings::SettingsTab;
+use asrbox_mod_settings::{BrowserTab, SettingsTab};
 use asrbox_mod_widgets::{CALENDAR_WIDGET_ID, SYS_WIDGET_ID};
 use asrbox_platform_api::{
     DockPlatform, IconProvider, LocalDateTime, PlatformEvent, ToolsPlatform, WidgetPlatform,
@@ -48,6 +48,16 @@ impl<I: IconProvider> AppController<I> {
                 }
                 SupervisorEvent::Error(e) => self.debug.log(now, LogLevel::Error, "app", e),
             }
+        }
+        if let Some(msg) = self.backup.maybe_auto_sync(host, now) {
+            self.debug.log(now, LogLevel::Info, "webdav", msg);
+            settings_dirty = true;
+        }
+        if host.is_settings_window_open()
+            && self.diagnostics_monitor_enabled
+            && self.settings_ui.active_browser_tab == BrowserTab::Diagnostics
+        {
+            settings_dirty = true;
         }
         if settings_dirty {
             self.render_settings_ui(host);

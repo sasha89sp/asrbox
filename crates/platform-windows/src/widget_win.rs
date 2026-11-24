@@ -246,7 +246,7 @@ impl WidgetPlatform for WindowsDockHost {
             .get(&widget_id)
             .copied()
             .unwrap_or(self.host_hwnd);
-        show_widget_context_menu(hwnd, screen_point, state)
+        show_widget_context_menu(self.hinstance, hwnd, screen_point, state, self.theme)
     }
 
     fn start_http_get(&mut self, request_id: u64, url: &str) -> Result<(), String> {
@@ -260,6 +260,10 @@ impl WidgetPlatform for WindowsDockHost {
 
     fn open_text_file(&self, path: &Path) -> Result<(), String> {
         open_in_notepad(path)
+    }
+
+    fn set_theme(&mut self, palette: asrbox_platform_api::FluentPalette) {
+        self.theme = palette;
     }
 }
 
@@ -275,7 +279,7 @@ impl WindowsDockHost {
             return Ok(());
         };
         let tip_hwnd = self.ensure_tooltip_window()?;
-        let frame = render_tooltip_frame(tip)?;
+        let frame = render_tooltip_frame(tip, &self.theme)?;
         let mut cursor = POINT::default();
         // SAFETY: Querying cursor position for non-activating tooltip placement.
         unsafe {

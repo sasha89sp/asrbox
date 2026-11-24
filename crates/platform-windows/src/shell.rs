@@ -5,10 +5,18 @@ use std::path::{Path, PathBuf};
 
 use windows::core::{PCWSTR, PWSTR};
 use windows::Win32::Foundation::HWND;
-use windows::Win32::UI::Controls::Dialogs::{
-    GetOpenFileNameW, OFN_FILEMUSTEXIST, OFN_NOCHANGEDIR, OFN_PATHMUSTEXIST, OPENFILENAMEW,
+use windows::Win32::System::Com::{
+    CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, CLSCTX_INPROC_SERVER,
+    COINIT_APARTMENTTHREADED,
 };
-use windows::Win32::UI::Shell::ShellExecuteW;
+use windows::Win32::UI::Controls::Dialogs::{
+    GetOpenFileNameW, OFN_ALLOWMULTISELECT, OFN_EXPLORER, OFN_FILEMUSTEXIST, OFN_NOCHANGEDIR,
+    OFN_PATHMUSTEXIST, OPENFILENAMEW,
+};
+use windows::Win32::UI::Shell::{
+    FileOpenDialog, IFileOpenDialog, ShellExecuteW, FOS_FORCEFILESYSTEM, FOS_PICKFOLDERS,
+    SIGDN_FILESYSPATH,
+};
 use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
 pub(crate) fn pick_icon_dialog(owner: HWND) -> Result<Option<PathBuf>, String> {
@@ -39,6 +47,86 @@ pub(crate) fn pick_icon_dialog(owner: HWND) -> Result<Option<PathBuf>, String> {
         return Ok(None);
     }
     Ok(Some(PathBuf::from(OsString::from_wide(&file_buf[..len]))))
+}
+
+pub(crate) fn pick_sync_files_dialog(owner: HWND) -> Result<Vec<PathBuf>, String> {
+    let filter = encode_wide_str("Все файлы (*.*)\0*.*\0");
+    let mut file_buf = vec![0u16; 32_768];
+    let mut ofn = OPENFILENAMEW {
+        lStructSize: u32::try_from(mem::size_of::<OPENFILENAMEW>()).unwrap_or(0),
+        hwndOwner: owner,
+        lpstrFilter: PCWSTR(filter.as_ptr()),
+        lpstrFile: PWSTR(file_buf.as_mut_ptr()),
+        nMaxFile: u32::try_from(file_buf.len()).unwrap_or(32_768),
+        Flags: OFN_ALLOWMULTISELECT
+            | OFN_EXPLORER
+            | OFN_FILEMUSTEXIST
+            | OFN_PATHMUSTEXIST
+            | OFN_NOCHANGEDIR,
+        ..Default::default()
+    };
+    // SAFETY: `filter` and `file_buf` stay valid during modal multi-select GetOpenFileNameW.
+    if !unsafe { GetOpenFileNameW(&mut ofn).as_bool() } {
+        return Ok(Vec::new());
+    }
+    let mut parts: Vec<OsString> = Vec::new();
+    let mut start = 0usize;
+    while start < file_buf.len() {
+        let Some(rel_end) = file_buf[start..].iter().position(|&ch| ch == 0) else {
+            break;
+        };
+        if rel_end == 0 {
+            break;
+        }
+        parts.push(OsString::from_wide(&file_buf[start..start + rel_end]));
+        start += rel_end + 1;
+    }
+    match parts.len() {
+        0 => Ok(Vec::new()),
+        1 => Ok(vec![PathBuf::from(&parts[0])]),
+        _ => {
+            let dir = PathBuf::from(&parts[0]);
+            Ok(parts[1..].iter().map(|name| dir.join(name)).collect())
+        }
+    }
+}
+
+pub(crate) fn pick_sync_folder_dialog(owner: HWND) -> Result<Option<PathBuf>, String> {
+    // SAFETY: Initializing STA COM for IFileOpenDialog, releasing COM objects and CoTaskMem before uninit.
+    unsafe {
+        let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let need_uninit = hr.is_ok();
+        let res = run_folder_dialog(owner);
+        if need_uninit {
+            CoUninitialize();
+        }
+        res
+    }
+}
+
+unsafe fn run_folder_dialog(owner: HWND) -> Result<Option<PathBuf>, String> {
+    let dialog: IFileOpenDialog = CoCreateInstance(&FileOpenDialog, None, CLSCTX_INPROC_SERVER)
+        .map_err(|e| format!("CoCreateInstance(FileOpenDialog): {e}"))?;
+    let opts = dialog
+        .GetOptions()
+        .map_err(|e| format!("GetOptions: {e}"))?;
+    dialog
+        .SetOptions(opts | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM)
+        .map_err(|e| format!("SetOptions: {e}"))?;
+    if dialog.Show(Some(owner)).is_err() {
+        return Ok(None);
+    }
+    let item = dialog.GetResult().map_err(|e| format!("GetResult: {e}"))?;
+    let pwstr = item
+        .GetDisplayName(SIGDN_FILESYSPATH)
+        .map_err(|e| format!("GetDisplayName: {e}"))?;
+    let path_str = pwstr.to_string().unwrap_or_default();
+    CoTaskMemFree(Some(pwstr.0.cast()));
+    if path_str.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(PathBuf::from(path_str)))
+    }
 }
 
 pub(crate) fn launch_path(path: &Path) -> Result<(), String> {
@@ -92,4 +180,40 @@ fn shell_exec(verb: &[u16], file: &[u16], params: Option<&[u16]>) -> Result<(), 
 
 pub(crate) fn encode_wide_str(text: &str) -> Vec<u16> {
     text.encode_utf16().chain(std::iter::once(0)).collect()
+}
+
+pub(crate) fn copy_text_to_clipboard(owner: HWND, text: &str) -> Result<(), String> {
+    use windows::Win32::Foundation::{GlobalFree, HANDLE};
+    use windows::Win32::System::DataExchange::{
+        CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,
+    };
+    use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
+    const CF_UNICODETEXT: u32 = 13;
+
+    let wide = encode_wide_str(text);
+    let byte_len = wide.len().saturating_mul(2);
+    // SAFETY: Standard Win32 clipboard sequence; global memory transfers ownership on success.
+    unsafe {
+        OpenClipboard(Some(owner)).map_err(|e| format!("OpenClipboard failed: {e}"))?;
+        let _ = EmptyClipboard();
+        let Ok(hmem) = GlobalAlloc(GMEM_MOVEABLE, byte_len) else {
+            let _ = CloseClipboard();
+            return Err("GlobalAlloc failed".to_owned());
+        };
+        let ptr = GlobalLock(hmem);
+        if ptr.is_null() {
+            let _ = GlobalFree(Some(hmem));
+            let _ = CloseClipboard();
+            return Err("GlobalLock failed".to_owned());
+        }
+        std::ptr::copy_nonoverlapping(wide.as_ptr(), ptr.cast::<u16>(), wide.len());
+        let _ = GlobalUnlock(hmem);
+        let set = SetClipboardData(CF_UNICODETEXT, Some(HANDLE(hmem.0)));
+        let _ = CloseClipboard();
+        if set.is_err() {
+            let _ = GlobalFree(Some(hmem));
+            return Err("SetClipboardData failed".to_owned());
+        }
+    }
+    Ok(())
 }

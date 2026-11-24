@@ -13,7 +13,8 @@ use asrbox_mod_overlay::{
 };
 use asrbox_mod_settings::{OverlaySettingsView, SettingsAction};
 use asrbox_platform_api::{
-    DockPlatform, IconProvider, PixelRect, PlatformEvent, ToolsPlatform, WidgetPlatform,
+    load_appearance_config, DockPlatform, IconProvider, PixelRect, PlatformEvent, ToolsPlatform,
+    WidgetPlatform,
 };
 use asrbox_platform_windows::{is_process_alive, WindowsDockHost};
 
@@ -27,6 +28,9 @@ pub fn run_overlay_worker(
     parent_pid: u32,
 ) -> Result<(), String> {
     let paths = resolve_app_paths();
+    let appearance_cfg = paths.appearance_cfg.clone();
+    let pal = load_appearance_config(&appearance_cfg).palette();
+    WidgetPlatform::set_theme(host, pal);
     let monitor = host.primary_work_area().unwrap_or(PixelRect {
         x: 0,
         y: 0,
@@ -34,6 +38,7 @@ pub fn run_overlay_worker(
         height: 1080,
     });
     let mut overlay = GameOverlay::load(paths.overlay_cfg, monitor);
+    overlay.set_palette(host, pal);
     overlay.sync_window(host)?;
     emit_log(
         "INFO",
@@ -52,7 +57,7 @@ pub fn run_overlay_worker(
                 return;
             }
             for cmd in drain_cmds(&cmds) {
-                apply_overlay_worker_cmd(platform, &mut overlay, cmd);
+                apply_overlay_worker_cmd(platform, &mut overlay, &appearance_cfg, cmd);
             }
             stats.maybe_emit(platform);
             return;
@@ -65,10 +70,14 @@ pub fn run_overlay_worker(
 fn apply_overlay_worker_cmd(
     host: &mut WindowsDockHost,
     overlay: &mut GameOverlay,
+    appearance_cfg: &std::path::Path,
     cmd: SupervisorCmd,
 ) {
     match cmd {
         SupervisorCmd::ReloadConfig => {
+            let pal = load_appearance_config(appearance_cfg).palette();
+            WidgetPlatform::set_theme(host, pal);
+            overlay.set_palette(host, pal);
             if overlay.reload_config(host).is_ok() {
                 emit_log(
                     "INFO",
@@ -158,6 +167,7 @@ impl<I: IconProvider> AppController<I> {
                 height: self.work_area.height,
             };
             let mut ov = GameOverlay::load(self.paths.overlay_cfg.clone(), mon);
+            ov.set_palette(host, self.appearance.palette());
             let _ = ov.set_setup_mode(host, self.overlay_setup_mode);
             self.debug.log(
                 host.local_time_now(),

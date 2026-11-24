@@ -1,4 +1,6 @@
-use asrbox_platform_api::{BgraFrame, PixelPoint, TextAlign, WidgetFrame, WidgetTextCmd};
+use asrbox_platform_api::{
+    BgraFrame, FluentPalette, PixelPoint, TextAlign, WidgetFrame, WidgetTextCmd,
+};
 
 use crate::draw::{
     arrow_color, draw_calendar_badge, draw_hline, draw_resize_grip, draw_triangle_down,
@@ -49,6 +51,7 @@ pub struct RenderView<'a> {
     pub can_scroll_up: bool,
     pub can_scroll_down: bool,
     pub is_loading: bool,
+    pub palette: FluentPalette,
 }
 
 pub fn widget_height(visible_rows: u8) -> u32 {
@@ -131,14 +134,14 @@ pub fn render_calendar_widget(view: &RenderView<'_>) -> WidgetFrame {
     let h = widget_height(view.visible_rows);
     let mut bgra = BgraFrame::transparent(w, h);
     let mut texts = Vec::with_capacity(32);
+    let pal = &view.palette;
 
     let pct = u16::from(view.opacity_percent.clamp(20, 100));
-    let bg_alpha = ((pct * 244) / 100) as u8;
-    let div_alpha = ((u16::from(bg_alpha) * 28) / 255).clamp(14, 36) as u8;
+    let div_a = ((pct * 220) / 100).clamp(60, 235) as u8;
+    let div = [pal.divider[0], pal.divider[1], pal.divider[2], div_a];
 
-    fill_macos_glass_card(&mut bgra, view.opacity_percent);
+    fill_macos_glass_card(&mut bgra, view.opacity_percent, pal);
     draw_header(&mut bgra, &mut texts, view, w as i32);
-    let div = [255, 255, 255, div_alpha];
     draw_hline(&mut bgra, HEADER_HEIGHT, div);
     draw_filter_bar(&mut bgra, &mut texts, view, w as i32);
     draw_hline(&mut bgra, HEADER_HEIGHT + FILTER_HEIGHT, div);
@@ -147,7 +150,7 @@ pub fn render_calendar_widget(view: &RenderView<'_>) -> WidgetFrame {
     let footer_y = h as i32 - FOOTER_HEIGHT;
     draw_hline(&mut bgra, footer_y, div);
     draw_footer(&mut bgra, &mut texts, view, w as i32, footer_y);
-    draw_resize_grip(&mut bgra);
+    draw_resize_grip(&mut bgra, pal);
 
     WidgetFrame { bgra, texts }
 }
@@ -158,45 +161,44 @@ fn draw_header(
     view: &RenderView<'_>,
     w: i32,
 ) {
-    draw_calendar_badge(frame, 14, 14);
-    let fg = [243, 244, 246, 255];
+    let pal = &view.palette;
+    draw_calendar_badge(frame, 14, 14, pal);
     push_txt(
         texts,
         (44, 12, w - 144, 26),
         view.title,
         (15, true),
-        fg,
+        pal.text_primary,
         TextAlign::Left,
     );
     let refresh_glyph = if view.is_loading { "…" } else { "↻" };
-    let accent = [232, 122, 72, 255];
-    let muted = [148, 155, 168, 255];
     let buttons = [
         (
             WidgetHitTarget::AddEventBtn,
             w - 94,
             "+",
-            accent,
+            pal.accent,
             (19, true),
         ),
         (
             WidgetHitTarget::SettingsBtn,
             w - 64,
             "⚙",
-            muted,
+            pal.text_secondary,
             (16, false),
         ),
         (
             WidgetHitTarget::RefreshBtn,
             w - 34,
             refresh_glyph,
-            muted,
+            pal.text_secondary,
             (16, false),
         ),
     ];
+    let hov_bg = [pal.menu_hover[0], pal.menu_hover[1], pal.menu_hover[2], 200];
     for (target, bx, glyph, color, font) in buttons {
         if view.hovered == target {
-            fill_rounded_rect(frame, bx, 12, 26, 26, 6.0, [255, 255, 255, 24]);
+            fill_rounded_rect(frame, bx, 12, 26, 26, 6.0, hov_bg);
         }
         push_txt(
             texts,
@@ -215,7 +217,9 @@ fn draw_filter_bar(
     view: &RenderView<'_>,
     w: i32,
 ) {
+    let pal = &view.palette;
     let y = HEADER_HEIGHT + 4;
+    let hov_bg = [pal.menu_hover[0], pal.menu_hover[1], pal.menu_hover[2], 190];
     let tabs = [
         (PeriodFilter::Today, 12, 54, "Сегодня"),
         (PeriodFilter::Days7, 70, 26, "7д"),
@@ -226,16 +230,16 @@ fn draw_filter_bar(
         let active = view.period == tab;
         let hovered = view.hovered == WidgetHitTarget::FilterTab(tab);
         if active {
-            fill_pill_badge(frame, tx - 5, y + 2, tw + 10, 24);
+            fill_pill_badge(frame, tx - 5, y + 2, tw + 10, 24, pal);
         } else if hovered {
-            fill_rounded_rect(frame, tx - 4, y + 2, tw + 8, 24, 6.0, [255, 255, 255, 18]);
+            fill_rounded_rect(frame, tx - 4, y + 2, tw + 8, 24, 6.0, hov_bg);
         }
         let color = if active {
-            [244, 152, 108, 255]
+            pal.accent
         } else if hovered {
-            [236, 238, 242, 255]
+            pal.text_primary
         } else {
-            [148, 155, 168, 255]
+            pal.text_secondary
         };
         push_txt(
             texts,
@@ -249,12 +253,12 @@ fn draw_filter_bar(
 
     let fmt_hovered = view.hovered == WidgetHitTarget::FormatCycleBtn;
     if fmt_hovered {
-        fill_rounded_rect(frame, w - 98, y + 2, 88, 24, 5.0, [255, 255, 255, 16]);
+        fill_rounded_rect(frame, w - 98, y + 2, 88, 24, 5.0, hov_bg);
     }
     let fmt_col = if fmt_hovered {
-        [229, 231, 235, 255]
+        pal.text_primary
     } else {
-        [148, 155, 168, 255]
+        pal.text_secondary
     };
     push_txt(
         texts,
@@ -272,28 +276,22 @@ fn draw_event_rows(
     view: &RenderView<'_>,
     w: i32,
 ) {
+    let pal = &view.palette;
     let base_y = HEADER_HEIGHT + FILTER_HEIGHT;
     let max_rows = usize::from(view.visible_rows.clamp(3, 16));
+    let hov_bg = [pal.menu_hover[0], pal.menu_hover[1], pal.menu_hover[2], 180];
     for (idx, row) in view.rows.iter().take(max_rows).enumerate() {
         let ry = base_y + (idx as i32) * ROW_HEIGHT;
         if view.hovered == WidgetHitTarget::EventRow(idx) {
-            fill_rounded_rect(
-                frame,
-                6,
-                ry + 3,
-                w - 12,
-                ROW_HEIGHT - 6,
-                8.0,
-                [255, 255, 255, 15],
-            );
+            fill_rounded_rect(frame, 6, ry + 3, w - 12, ROW_HEIGHT - 6, 8.0, hov_bg);
         }
         let bar_a = if row.is_past { 118 } else { 255 };
         let bar = [row.bar_rgb[0], row.bar_rgb[1], row.bar_rgb[2], bar_a];
         fill_rounded_rect(frame, 14, ry + 10, 4, 32, 2.0, bar);
         let (title_col, sub_col) = if row.is_past {
-            ([152, 158, 170, 255], [112, 118, 130, 255])
+            (pal.text_secondary, pal.text_muted)
         } else {
-            ([238, 240, 244, 255], [148, 155, 168, 255])
+            (pal.text_primary, pal.text_secondary)
         };
         let l = TextAlign::Left;
         push_txt(
@@ -322,10 +320,11 @@ fn draw_footer(
     w: i32,
     footer_y: i32,
 ) {
+    let pal = &view.palette;
     let color = if view.footer_error {
-        [245, 158, 11, 255]
+        pal.warn_text
     } else {
-        [136, 144, 158, 255]
+        pal.text_muted
     };
     push_txt(
         texts,
@@ -335,16 +334,18 @@ fn draw_footer(
         color,
         TextAlign::Left,
     );
-    let up_color = arrow_color(
+    let up = arrow_color(
         view.can_scroll_up,
         view.hovered == WidgetHitTarget::ScrollUpBtn,
+        pal,
     );
-    let dn_color = arrow_color(
+    let dn = arrow_color(
         view.can_scroll_down,
         view.hovered == WidgetHitTarget::ScrollDownBtn,
+        pal,
     );
-    draw_triangle_up(frame, w - 45, footer_y + 15, up_color);
-    draw_triangle_down(frame, w - 20, footer_y + 15, dn_color);
+    draw_triangle_up(frame, w - 45, footer_y + 15, up);
+    draw_triangle_down(frame, w - 20, footer_y + 15, dn);
 }
 
 #[cfg(test)]
@@ -356,7 +357,7 @@ mod tests {
         let rows = vec![DisplayRow {
             title: "ОЗОН: карта".to_owned(),
             subtitle: "Сегодня · весь день".to_owned(),
-            bar_rgb: [232, 122, 72],
+            bar_rgb: [0, 103, 192],
             tooltip: "ОЗОН: карта".to_owned(),
             is_past: false,
         }];
@@ -374,6 +375,7 @@ mod tests {
             can_scroll_up: false,
             can_scroll_down: false,
             is_loading: false,
+            palette: FluentPalette::default(),
         };
         let frame = render_calendar_widget(&view);
         assert_eq!(frame.bgra.width, 336);

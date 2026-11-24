@@ -1,8 +1,13 @@
-use asrbox_platform_api::{BgraFrame, TextAlign, WidgetTextCmd};
+use asrbox_platform_api::{BgraFrame, FluentPalette, TextAlign, WidgetTextCmd};
 
-pub const CARD_RADIUS: f32 = 12.0;
+pub const CARD_RADIUS: f32 = 10.0;
 
-pub fn fill_overlay_card(frame: &mut BgraFrame, opacity_percent: u8, setup_mode: bool) {
+pub fn fill_overlay_card(
+    frame: &mut BgraFrame,
+    opacity_percent: u8,
+    setup_mode: bool,
+    pal: &FluentPalette,
+) {
     let w = frame.width as i32;
     let h = frame.height as i32;
     if w <= 0 || h <= 0 {
@@ -13,15 +18,17 @@ pub fn fill_overlay_card(frame: &mut BgraFrame, opacity_percent: u8, setup_mode:
     let rim_alpha = if setup_mode {
         235u8
     } else {
-        ((u16::from(base_alpha) * 44) / 255).clamp(20, 62) as u8
+        ((u16::from(base_alpha) * 160) / 255).clamp(40, 190) as u8
     };
     let border_w = if setup_mode { 2.0 } else { 1.1 };
+    let acc = pal.accent;
+    let brd = pal.card_border;
 
     for y in 0..h {
         let fy = (y as f32) / (h.max(1) as f32);
-        // NotePlan Dark HUD base (#191B20 -> #121419) for crisp readability over bright/dark games.
-        let r = (26.0 - fy * 6.0) as u8;
-        let g = (28.0 - fy * 6.0) as u8;
+        // High-contrast HUD dark surface (#202020 -> #191919) for crisp readability over games.
+        let r = (32.0 - fy * 7.0) as u8;
+        let g = (32.0 - fy * 7.0) as u8;
         let b = (34.0 - fy * 7.0) as u8;
         for x in 0..w {
             let sdf = rounded_rect_sdf(
@@ -39,16 +46,26 @@ pub fn fill_overlay_card(frame: &mut BgraFrame, opacity_percent: u8, setup_mode:
             blend_pixel(frame, x, y, [r, g, b, a]);
             if sdf > -border_w {
                 let rim = if setup_mode {
-                    [232, 122, 72, (f32::from(rim_alpha) * cov).round() as u8]
+                    [
+                        acc[0],
+                        acc[1],
+                        acc[2],
+                        (f32::from(rim_alpha) * cov).round() as u8,
+                    ]
                 } else {
-                    [200, 210, 226, (f32::from(rim_alpha) * cov).round() as u8]
+                    [
+                        brd[0],
+                        brd[1],
+                        brd[2],
+                        (f32::from(rim_alpha) * cov).round() as u8,
+                    ]
                 };
                 blend_pixel(frame, x, y, rim);
             }
         }
     }
     if setup_mode {
-        draw_resize_grip(frame);
+        draw_resize_grip(frame, acc);
     }
 }
 
@@ -134,10 +151,10 @@ pub fn push_txt(
     });
 }
 
-fn draw_resize_grip(frame: &mut BgraFrame) {
+fn draw_resize_grip(frame: &mut BgraFrame, accent: [u8; 4]) {
     let w = frame.width as i32;
     let h = frame.height as i32;
-    let col = [232, 122, 72, 210];
+    let col = [accent[0], accent[1], accent[2], 220];
     for step in [5, 9, 13] {
         for i in 0..step {
             blend_pixel(frame, w - 4 - i, h - 4 - (step - i), col);

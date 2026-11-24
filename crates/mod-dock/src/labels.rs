@@ -1,7 +1,7 @@
 use std::ffi::OsStr;
 use std::path::Path;
 
-use asrbox_platform_api::{BgraFrame, TextAlign, WidgetTextCmd};
+use asrbox_platform_api::{BgraFrame, FluentPalette, TextAlign, WidgetTextCmd};
 
 use crate::config::DockEdge;
 use crate::layout::{DockSlotLayout, Rect};
@@ -173,10 +173,12 @@ pub fn push_icon_label_text(
     label: &str,
     edge: DockEdge,
     dimmed: bool,
+    pal: &FluentPalette,
 ) {
     if label.trim().is_empty() || rect.width < 12 || rect.height < 10 {
         return;
     }
+    let tp = pal.text_primary;
     texts.push(WidgetTextCmd {
         x: rect.x,
         y: rect.y,
@@ -185,7 +187,7 @@ pub fn push_icon_label_text(
         text: label.to_owned(),
         font_size_px: 11,
         bold: false,
-        color_rgba: [236, 238, 244, if dimmed { 110 } else { 238 }],
+        color_rgba: [tp[0], tp[1], tp[2], if dimmed { 110 } else { 242 }],
         align: if edge.is_horizontal() {
             TextAlign::Center
         } else {
@@ -194,6 +196,7 @@ pub fn push_icon_label_text(
     });
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn draw_labels_only_pill(
     frame: &mut BgraFrame,
     texts: &mut Vec<WidgetTextCmd>,
@@ -202,25 +205,26 @@ pub fn draw_labels_only_pill(
     hovered: bool,
     dimmed: bool,
     running: bool,
+    pal: &FluentPalette,
 ) {
     let alpha_mul = if dimmed { 0.38 } else { 1.0 };
-    let radius = 8.0f32;
+    let radius = 6.0f32;
     let x0 = rect.x.max(0);
     let y0 = rect.y.max(0);
     let x1 = (rect.x + rect.width as i32).min(frame.width as i32);
     let y1 = (rect.y + rect.height as i32).min(frame.height as i32);
-    let bg = if hovered { [54, 57, 68] } else { [40, 42, 50] };
+    let bg = if hovered { pal.menu_hover } else { pal.card_bg };
     let border = if hovered || running {
-        [232, 122, 72]
+        pal.accent
     } else {
-        [72, 76, 90]
+        pal.card_border
     };
     let border_a = if hovered {
-        180.0
+        215.0
     } else if running {
-        125.0
+        165.0
     } else {
-        90.0
+        150.0
     };
 
     for py in y0..y1 {
@@ -228,9 +232,9 @@ pub fn draw_labels_only_pill(
             let dist = rounded_rect_sdf(px as f32 + 0.5, py as f32 + 0.5, rect, radius);
             if dist <= 0.6 {
                 let cov = (0.6 - dist).clamp(0.0, 1.0);
-                let fill_a = (228.0 * cov * alpha_mul).round() as u8;
+                let fill_a = (232.0 * cov * alpha_mul).round() as u8;
                 blend_pixel(frame, px, py, [bg[0], bg[1], bg[2], fill_a]);
-                if dist > -1.25 {
+                if dist > -1.2 {
                     let ba = (border_a * cov * alpha_mul).round() as u8;
                     blend_pixel(frame, px, py, [border[0], border[1], border[2], ba]);
                 }
@@ -244,11 +248,13 @@ pub fn draw_labels_only_pill(
             rect.x + 10,
             rect.y + (rect.height as i32) / 2,
             alpha_mul,
+            pal,
         );
         18
     } else {
         8
     };
+    let tp = pal.text_primary;
     texts.push(WidgetTextCmd {
         x: rect.x + left_pad,
         y: rect.y,
@@ -257,7 +263,7 @@ pub fn draw_labels_only_pill(
         text: label.to_owned(),
         font_size_px: 12,
         bold: hovered,
-        color_rgba: [238, 240, 244, if dimmed { 110 } else { 245 }],
+        color_rgba: [tp[0], tp[1], tp[2], if dimmed { 110 } else { 248 }],
         align: if running {
             TextAlign::Left
         } else {
@@ -266,14 +272,15 @@ pub fn draw_labels_only_pill(
     });
 }
 
-fn draw_pill_dot(frame: &mut BgraFrame, cx: i32, cy: i32, alpha_mul: f32) {
+fn draw_pill_dot(frame: &mut BgraFrame, cx: i32, cy: i32, alpha_mul: f32, pal: &FluentPalette) {
+    let acc = pal.accent;
     for dy in -3..=3 {
         for dx in -3..=3 {
             let d = ((dx * dx + dy * dy) as f32).sqrt();
             if d <= 2.4 {
                 let cov = (2.4 - d).clamp(0.0, 1.0);
-                let a = (242.0 * cov * alpha_mul).round() as u8;
-                blend_pixel(frame, cx + dx, cy + dy, [236, 134, 86, a]);
+                let a = (245.0 * cov * alpha_mul).round() as u8;
+                blend_pixel(frame, cx + dx, cy + dy, [acc[0], acc[1], acc[2], a]);
             }
         }
     }

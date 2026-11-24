@@ -9,6 +9,14 @@ mod dock_proc;
 #[cfg(windows)]
 mod dock_win;
 #[cfg(windows)]
+mod fluent_menu;
+#[cfg(windows)]
+mod fluent_menu_layout;
+#[cfg(windows)]
+mod fluent_menu_render;
+#[cfg(windows)]
+mod fluent_menu_win;
+#[cfg(windows)]
 mod http;
 #[cfg(windows)]
 mod icons;
@@ -25,6 +33,8 @@ mod overlay_telemetry;
 #[cfg(windows)]
 mod running;
 #[cfg(windows)]
+mod settings_helpers;
+#[cfg(windows)]
 mod settings_proc;
 #[cfg(windows)]
 mod shell;
@@ -39,11 +49,21 @@ mod sys_telemetry;
 #[cfg(windows)]
 mod tools_proc;
 #[cfg(windows)]
+mod tools_state;
+#[cfg(windows)]
 mod tools_win;
 #[cfg(windows)]
 mod tray;
 #[cfg(windows)]
+mod tray_menu;
+#[cfg(windows)]
 mod webdav_http;
+#[cfg(windows)]
+mod webdav_sync;
+#[cfg(windows)]
+mod webdav_wire;
+#[cfg(windows)]
+mod webdav_xml;
 #[cfg(windows)]
 mod widget_menu;
 #[cfg(windows)]

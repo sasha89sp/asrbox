@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use asrbox_core::{Module, ModuleHealth, ModuleId};
 use asrbox_platform_api::{
-    OverlayTelemetry, PixelRect, WidgetLayer, WidgetPlatform, WidgetSizeBounds,
+    FluentPalette, OverlayTelemetry, PixelRect, WidgetLayer, WidgetPlatform, WidgetSizeBounds,
 };
 
 pub use config::{
@@ -25,6 +25,7 @@ pub struct GameOverlay {
     window_visible: bool,
     setup_mode: bool,
     running: bool,
+    palette: FluentPalette,
 }
 
 impl GameOverlay {
@@ -39,6 +40,14 @@ impl GameOverlay {
             window_visible: false,
             setup_mode: false,
             running: true,
+            palette: FluentPalette::default(),
+        }
+    }
+
+    pub fn set_palette<P: WidgetPlatform>(&mut self, host: &mut P, palette: FluentPalette) {
+        self.palette = palette;
+        if self.window_visible {
+            let _ = self.present(host);
         }
     }
 
@@ -255,7 +264,7 @@ impl GameOverlay {
             return Ok(());
         }
         let rect = self.cfg.compute_rect(self.monitor_rect);
-        let frame = render_game_overlay(&self.cfg, &self.snapshot, self.setup_mode);
+        let frame = render_game_overlay(&self.cfg, &self.snapshot, self.setup_mode, &self.palette);
         host.present_widget_frame(OVERLAY_WIDGET_ID, rect, &frame)
     }
 }
@@ -318,7 +327,8 @@ mod tests {
                 height: h,
                 ..OverlayConfig::default()
             };
-            let frame = render_game_overlay(&cfg, &snap, setup);
+            let pal = FluentPalette::default();
+            let frame = render_game_overlay(&cfg, &snap, setup, &pal);
             assert_eq!(frame.bgra.width, w);
             assert_eq!(frame.bgra.height, h);
             assert!(frame.texts.iter().any(|t| t.text == "144"));

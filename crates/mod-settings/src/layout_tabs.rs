@@ -1,7 +1,7 @@
 use asrbox_core::IsolationMode;
 
+use crate::i18n::tr;
 use crate::layout::{ButtonTone, CardRow, LayoutBuilder};
-pub(crate) use crate::layout_cal::build_calendar_tab;
 use crate::types::{SettingsAction, SettingsSnapshot};
 
 pub(crate) fn row(
@@ -23,69 +23,100 @@ pub(crate) fn row(
 }
 
 pub(crate) fn build_modules_tab(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
+    let lang = b.lang;
     b.set_header(
-        "Модули и изоляция процессов",
-        "Отключённые модули не расходуют CPU/RAM; ошибка в одном модуле не роняет остальные",
+        tr(
+            lang,
+            "Модули и изоляция процессов",
+            "Modules & Process Isolation",
+        ),
+        tr(
+            lang,
+            "Отключённые модули не расходуют CPU/RAM; ошибка в одном модуле не роняет остальные",
+            "Disabled modules consume 0 CPU/RAM; isolated workers keep failures contained",
+        ),
     );
-    let iso_sub = Some("Отдельный процесс для каждого модуля или общий");
-    let auto_sub = Some("Запускать asrbox при входе в систему (HKCU\\...\\Run)");
-    let iso_y = b.add_card(
-        Some("СИСТЕМА И ЗАПУСК"),
-        false,
-        vec![
-            row(0, 56, "Изоляция модулей", iso_sub, None, true),
-            row(56, 54, "Автозагрузка с Windows", auto_sub, None, false),
-        ],
-    );
-    let is_proc = snap.isolation == IsolationMode::Process;
-    b.add_segmented_row(
-        iso_y,
-        56,
-        vec![
-            (
-                "Процессы",
-                is_proc,
-                SettingsAction::SetIsolation(IsolationMode::Process),
-            ),
-            (
-                "Один процесс",
-                !is_proc,
-                SettingsAction::SetIsolation(IsolationMode::InProc),
-            ),
-        ],
-    );
-    let auto_tx = b.content_x + b.content_w as i32 - 60;
-    b.push_toggle(
-        auto_tx,
-        iso_y + 71,
-        snap.autostart_enabled,
-        SettingsAction::SetAutostart(!snap.autostart_enabled),
-    );
-    let rows: Vec<CardRow> = snap
+    if b.matches_search("изоляция процессы один процесс isolation process inproc")
+    {
+        let iso_sub = Some(tr(
+            lang,
+            "Отдельный процесс для каждого модуля или общий",
+            "Separate worker process per module or shared single process",
+        ));
+        let iso_y = b.add_card(
+            Some(tr(lang, "ИЗОЛЯЦИЯ", "ISOLATION")),
+            false,
+            vec![row(
+                0,
+                56,
+                tr(lang, "Изоляция модулей", "Module isolation"),
+                iso_sub,
+                None,
+                false,
+            )],
+        );
+        let is_proc = snap.isolation == IsolationMode::Process;
+        b.add_segmented_row(
+            iso_y,
+            56,
+            vec![
+                (
+                    tr(lang, "Процессы", "Processes"),
+                    is_proc,
+                    SettingsAction::SetIsolation(IsolationMode::Process),
+                ),
+                (
+                    tr(lang, "Один процесс", "In-Process"),
+                    !is_proc,
+                    SettingsAction::SetIsolation(IsolationMode::InProc),
+                ),
+            ],
+        );
+    }
+
+    let visible_mods: Vec<_> = snap
         .modules
+        .iter()
+        .filter(|m| b.matches_search(m.id.display_name()))
+        .collect();
+    if visible_mods.is_empty() {
+        return;
+    }
+    let rows: Vec<CardRow> = visible_mods
         .iter()
         .enumerate()
         .map(|(i, m)| {
             let st = match (m.enabled, m.running, m.pid) {
-                (false, _, _) => "Отключён (0 МБ RAM)".to_owned(),
-                (true, true, Some(p)) => format!("Работает · PID {p} · рестартов: {}", m.restarts),
-                (true, true, None) => "Работает (inproc)".to_owned(),
-                (true, false, _) => format!("Остановлен ({})", m.note),
+                (false, _, _) => tr(lang, "Отключён (0 МБ RAM)", "Disabled (0 MB RAM)").to_owned(),
+                (true, true, Some(p)) => format!(
+                    "{} · PID {p} · {}: {}",
+                    tr(lang, "Работает", "Running"),
+                    tr(lang, "рестартов", "restarts"),
+                    m.restarts
+                ),
+                (true, true, None) => tr(lang, "Работает (inproc)", "Running (inproc)").to_owned(),
+                (true, false, _) => {
+                    format!("{} ({})", tr(lang, "Остановлен", "Stopped"), m.note)
+                }
             };
             row(
-                (i as i32) * 62,
-                62,
+                (i as i32) * 60,
+                60,
                 m.id.display_name(),
                 Some(&st),
                 None,
-                i + 1 < snap.modules.len(),
+                i + 1 < visible_mods.len(),
             )
         })
         .collect();
-    let card_y = b.add_card(Some("АКТИВНЫЕ МОДУЛИ"), false, rows);
-    let tx = b.content_x + b.content_w as i32 - 60;
-    for (i, m) in snap.modules.iter().enumerate() {
-        let ry = card_y + (i as i32) * 62;
+    let card_y = b.add_card(
+        Some(tr(lang, "АКТИВНЫЕ МОДУЛИ", "ACTIVE MODULES")),
+        false,
+        rows,
+    );
+    let tx = b.content_x + b.content_w as i32 - 58;
+    for (i, m) in visible_mods.iter().enumerate() {
+        let ry = card_y + (i as i32) * 60;
         let act = SettingsAction::SetModuleEnabled {
             id: m.id,
             enabled: !m.enabled,
@@ -93,102 +124,11 @@ pub(crate) fn build_modules_tab(b: &mut LayoutBuilder, snap: &SettingsSnapshot) 
         b.push_toggle(tx, ry + 19, m.enabled, act);
         if m.enabled {
             b.push_btn(
-                (tx - 108, ry + 17, 96, 28),
-                "Перезапуск",
+                (tx - 108, ry + 16, 96, 28),
+                tr(lang, "Перезапуск", "Restart"),
                 ButtonTone::Secondary,
                 SettingsAction::RestartModule(m.id),
             );
         }
     }
-}
-
-pub(crate) fn build_debug_tab(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
-    b.set_header(
-        "Диагностика и логи",
-        "Отслеживание событий, нагрузки и ошибок всех процессов",
-    );
-    let rows = vec![
-        row(
-            0,
-            54,
-            "Подробные логи (TRACE)",
-            Some("Детальные события движения, рендера и IPC"),
-            None,
-            true,
-        ),
-        row(
-            54,
-            54,
-            "Запись логов в файл",
-            Some("Сохранение в data/logs/asrbox.log"),
-            None,
-            true,
-        ),
-        row(
-            108,
-            54,
-            "Сводка",
-            Some(&snap.debug.summary_line),
-            None,
-            false,
-        ),
-    ];
-    let cy = b.add_card(Some("МОНИТОРИНГ"), false, rows);
-    let tx = b.content_x + b.content_w as i32 - 60;
-    b.push_toggle(
-        tx,
-        cy + 15,
-        snap.debug.verbose,
-        SettingsAction::SetDebugVerbose(!snap.debug.verbose),
-    );
-    b.push_toggle(
-        tx,
-        cy + 69,
-        snap.debug.file_log,
-        SettingsAction::SetDebugFileLog(!snap.debug.file_log),
-    );
-    let (x, y) = (b.content_x, b.cursor_y);
-    b.push_btn(
-        (x, y, 250, 34),
-        "Открыть окно диагностики и логов",
-        ButtonTone::Primary,
-        SettingsAction::OpenDebugWindow,
-    );
-    b.cursor_y += 44;
-}
-
-pub(crate) fn build_about_tab(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
-    let a = &snap.about;
-    b.set_header(
-        &format!("asrbox v{}", a.version),
-        "Портативный модульный центр рабочего стола Windows 10/11",
-    );
-    let rows = vec![
-        row(
-            0,
-            52,
-            "Режим хранения",
-            Some("Полностью портативный — настройки в data рядом с asrbox.exe"),
-            None,
-            true,
-        ),
-        row(52, 52, "Исполняемый файл", Some(&a.exe_path), None, true),
-        row(104, 52, "Папка данных", Some(&a.data_dir), None, true),
-        row(156, 52, "Папка конфигов", Some(&a.config_dir), None, false),
-    ];
-    b.add_card(Some("СВЕДЕНИЯ И ПУТИ"), false, rows);
-    let (x, y) = (b.content_x, b.cursor_y);
-    b.push_btn(
-        (x, y, 184, 34),
-        "Открыть папку data",
-        ButtonTone::Primary,
-        SettingsAction::OpenDataFolder,
-    );
-    b.push_btn(
-        (x + 196, y, 230, 34),
-        "История версий и подробности",
-        ButtonTone::Secondary,
-        SettingsAction::OpenAboutWindow,
-    );
-    b.cursor_y += 44;
 }

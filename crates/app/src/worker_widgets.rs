@@ -6,7 +6,7 @@ use std::time::Instant;
 
 use asrbox_core::{SupervisorCmd, WorkerMsg};
 use asrbox_mod_widgets::{CalendarWidget, SysMonitorWidget, CALENDAR_WIDGET_ID, SYS_WIDGET_ID};
-use asrbox_platform_api::{DockPlatform, PlatformEvent};
+use asrbox_platform_api::{load_appearance_config, DockPlatform, PlatformEvent, WidgetPlatform};
 use asrbox_platform_windows::{is_process_alive, WindowsDockHost};
 
 use crate::tools::resolve_app_paths;
@@ -19,8 +19,13 @@ pub(crate) fn run_widgets_worker(
     mut safe_mode: bool,
 ) -> Result<(), String> {
     let paths = resolve_app_paths();
+    let appearance_cfg = paths.appearance_cfg.clone();
+    let pal = load_appearance_config(&appearance_cfg).palette();
+    WidgetPlatform::set_theme(host, pal);
     let mut cal = CalendarWidget::load(paths.widgets_cfg, paths.cache_dir);
     let mut sys = SysMonitorWidget::load(paths.sysmon_cfg);
+    cal.set_palette(host, pal);
+    sys.set_palette(host, pal);
     cal.sync_window(host, safe_mode)?;
     sys.sync_window(host, safe_mode)?;
     emit_log(
@@ -41,7 +46,14 @@ pub(crate) fn run_widgets_worker(
                 return;
             }
             for cmd in drain_cmds(&cmds) {
-                handle_supervisor_cmd(platform, &mut cal, &mut sys, &mut safe_mode, cmd);
+                handle_supervisor_cmd(
+                    platform,
+                    &mut cal,
+                    &mut sys,
+                    &mut safe_mode,
+                    &appearance_cfg,
+                    cmd,
+                );
             }
             stats.maybe_emit(platform);
             return;
@@ -56,10 +68,15 @@ fn handle_supervisor_cmd(
     cal: &mut CalendarWidget,
     sys: &mut SysMonitorWidget,
     safe_mode: &mut bool,
+    appearance_cfg: &std::path::Path,
     cmd: SupervisorCmd,
 ) {
     match cmd {
         SupervisorCmd::ReloadConfig => {
+            let pal = load_appearance_config(appearance_cfg).palette();
+            WidgetPlatform::set_theme(platform, pal);
+            cal.set_palette(platform, pal);
+            sys.set_palette(platform, pal);
             let _ = cal.reload_config_and_refresh(platform);
             let _ = cal.sync_window(platform, *safe_mode);
             let _ = sys.reload_config(platform, *safe_mode);

@@ -187,13 +187,16 @@ fn blend_text_mask(
     }
 }
 
-pub(crate) fn render_tooltip_frame(text: &str) -> Result<BgraFrame, String> {
+pub(crate) fn render_tooltip_frame(
+    text: &str,
+    palette: &asrbox_platform_api::FluentPalette,
+) -> Result<BgraFrame, String> {
     let lines: Vec<&str> = text.lines().take(5).collect();
     let max_chars = lines.iter().map(|l| l.chars().count()).max().unwrap_or(8);
     let width = ((max_chars as u32) * 7 + 24).clamp(140, 320);
     let height = (lines.len().max(1) as u32) * 18 + 14;
     let mut bgra = BgraFrame::transparent(width, height);
-    fill_tooltip_bg(&mut bgra);
+    fill_tooltip_bg(&mut bgra, palette);
     let mut texts = Vec::with_capacity(lines.len());
     for (idx, line) in lines.iter().enumerate() {
         texts.push(WidgetTextCmd {
@@ -205,9 +208,9 @@ pub(crate) fn render_tooltip_frame(text: &str) -> Result<BgraFrame, String> {
             font_size_px: 12,
             bold: idx == 0,
             color_rgba: if idx == 0 {
-                [243, 244, 246, 255]
+                palette.text_primary
             } else {
-                [196, 202, 214, 255]
+                palette.text_secondary
             },
             align: TextAlign::Left,
         });
@@ -215,24 +218,24 @@ pub(crate) fn render_tooltip_frame(text: &str) -> Result<BgraFrame, String> {
     composite_widget_frame(&WidgetFrame { bgra, texts })
 }
 
-fn fill_tooltip_bg(frame: &mut BgraFrame) {
+fn fill_tooltip_bg(frame: &mut BgraFrame, palette: &asrbox_platform_api::FluentPalette) {
     let w = frame.width as usize;
     let h = frame.height as usize;
+    let bg = palette.menu_bg;
+    let bd = palette.menu_border;
     for y in 0..h {
         for x in 0..w {
+            let corner = (x == 0 || x + 1 == w) && (y == 0 || y + 1 == h);
+            if corner {
+                continue;
+            }
             let border = x == 0 || y == 0 || x + 1 == w || y + 1 == h;
             let idx = (y * w + x) * 4;
-            if border {
-                frame.pixels[idx] = 74;
-                frame.pixels[idx + 1] = 68;
-                frame.pixels[idx + 2] = 64;
-                frame.pixels[idx + 3] = 245;
-            } else {
-                frame.pixels[idx] = 34;
-                frame.pixels[idx + 1] = 28;
-                frame.pixels[idx + 2] = 26;
-                frame.pixels[idx + 3] = 242;
-            }
+            let c = if border { bd } else { bg };
+            frame.pixels[idx] = c[2];
+            frame.pixels[idx + 1] = c[1];
+            frame.pixels[idx + 2] = c[0];
+            frame.pixels[idx + 3] = 248;
         }
     }
 }

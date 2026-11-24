@@ -4,10 +4,10 @@ use std::env;
 use std::path::PathBuf;
 
 use asrbox_core::SupervisorCmd;
-use asrbox_mod_about::{build_about_text, build_paths_clipboard, AppPaths};
+use asrbox_mod_about::{build_paths_clipboard, AppPaths};
 use asrbox_mod_debug::LogLevel;
 use asrbox_mod_dock::load_docks_from_file;
-use asrbox_mod_settings::SettingsTab;
+use asrbox_mod_settings::{BrowserTab, SettingsTab};
 use asrbox_mod_widgets::{load_sysmon_config, load_widget_config};
 use asrbox_platform_api::{
     AboutUiCommand, DebugUiCommand, DockPlatform, IconProvider, PixelPoint, ToolsPlatform,
@@ -89,7 +89,7 @@ impl<I: IconProvider> AppController<I> {
         use asrbox_mod_backup::BackupMode;
         let now = host.local_time_now();
         match action {
-            TrayAction::OpenSettings => self.open_settings_tab(host, SettingsTab::Modules),
+            TrayAction::OpenSettings => self.open_settings_tab(host, SettingsTab::General),
             TrayAction::ToggleAutostart => {
                 let next = !host.is_autostart_enabled();
                 let res = host.set_autostart_enabled(next);
@@ -194,9 +194,13 @@ impl<I: IconProvider> AppController<I> {
                 }
                 self.render_settings_ui(host);
             }
-            TrayAction::OpenBackupTab => self.open_settings_tab(host, SettingsTab::Backup),
-            TrayAction::OpenDebugWindow => self.open_debug_window(host),
-            TrayAction::OpenAboutWindow => self.open_about_window(host),
+            TrayAction::OpenBackupTab => self.open_settings_tab(host, SettingsTab::General),
+            TrayAction::OpenDebugWindow => {
+                self.open_browser_tab(host, BrowserTab::Diagnostics);
+            }
+            TrayAction::OpenAboutWindow => {
+                self.open_browser_tab(host, BrowserTab::VersionHistory);
+            }
             TrayAction::Exit => {
                 self.supervisor.stop_all();
                 if let Some(docks) = &self.docks {
@@ -205,27 +209,6 @@ impl<I: IconProvider> AppController<I> {
                 host.request_quit();
             }
         }
-    }
-
-    pub(crate) fn open_debug_window<H: WidgetPlatform + ToolsPlatform>(&mut self, host: &mut H) {
-        let now = host.local_time_now();
-        let title = format!("asrbox v{APP_VERSION} — Диагностика и логи");
-        match host.open_debug_window(&title) {
-            Ok(()) => {
-                self.debug
-                    .log(now, LogLevel::Info, "debug", "Открыто окно диагностики");
-                self.refresh_debug_ui(host);
-            }
-            Err(e) => self.debug.log(now, LogLevel::Error, "debug", e),
-        }
-    }
-
-    pub(crate) fn open_about_window<H: WidgetPlatform + ToolsPlatform>(&mut self, host: &mut H) {
-        let now = host.local_time_now();
-        let title = format!("О программе — asrbox v{APP_VERSION}");
-        let content = build_about_text(APP_VERSION, &self.paths);
-        let res = host.open_about_window(&title, &content);
-        self.log_io_result(now, "about", "Открыто окно «О программе»", res);
     }
 
     pub(crate) fn on_debug_cmd<H: WidgetPlatform + ToolsPlatform>(

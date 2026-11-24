@@ -1,6 +1,6 @@
 # ARCHITECTURE.md — Архитектура `asrbox`
 
-Версия: `0.0.4` (рабочие модули `mod-dock`, `mod-widgets`, `mod-overlay`, `mod-settings`, `mod-backup`, `mod-webdav`, `mod-debug`, `mod-about` + мультипроцессный супервизор в `crates/app`, единый дизайн macOS NotePlan Dark).
+Версия: `0.0.5` (рабочие модули `mod-dock`, `mod-widgets`, `mod-overlay`, `mod-settings`, `mod-backup`, `mod-webdav`, `mod-debug`, `mod-about` + мультипроцессный супервизор в `crates/app`, единый дизайн Windows 11 Fluent Light/Dark + 6 акцентов + кастомные Fluent-меню).
 
 ## 1. Правило зависимостей (строго вниз)
 
@@ -11,23 +11,23 @@
 
 ```text
                       ┌───────────────────────────────┐
-                      │          crates/app           │  Супервизор, JobObject, NotePlan-трей,
-                      │ (asrbox.exe / --worker <mod>) │  BackupController (--inproc/--selftest)
+                      │          crates/app           │  Супервизор, JobObject, Fluent-трей,
+                      │ (asrbox.exe / --worker <mod>) │  Backup/WebDAV/Sync (--inproc/--selftest)
                       └───────────────┬───────────────┘
           ┌───────────────────────────┼───────────────────────────┐
           ▼                           ▼                           ▼
 ┌───────────────────┐       ┌──────────────────┐       ┌─────────────────────────┐
 │   crates/mod-*    │       │   crates/core    │       │ crates/platform-windows │
 │ dock, widgets,    │       │ Module, IPC,     │       │  windows-rs, WinAPI     │
-│ settings, backup, │       │ modules.cfg      │       │  WinHTTP/CredMgr/HICON  │
-│ webdav, debug, ...│       └────────▲─────────┘       │  (ONLY crate w/ unsafe) │
+│ settings, backup, │       │ modules.cfg      │       │  FluentMenu/WinHTTP/    │
+│ webdav, debug, ...│       └────────▲─────────┘       │  CredMgr (ONLY unsafe)  │
 └─────────┬─────────┘                │                 └────────────┬────────────┘
           └──────────────┬───────────┴─────────────────┐            │
                          ▼                             ▼            ▼
                  ┌───────────────┐            ┌────────────────────────────┐
                  │  crates/core  │            │    crates/platform-api     │
                  └───────────────┘            │ DockPlatform, WidgetPlatform│
-                                              │ ToolsPlatform, PlatformEvent│
+                                              │ ToolsPlatform, FluentPalette│
                                               │ (no unsafe)                │
                                               └────────────────────────────┘
 ```
@@ -36,23 +36,23 @@
 
 - **Единый контракт**: каждый модуль реализует трейт `Module` из `crates/core` (`start`, `stop`, `health`).
 - **Управление в настройках (`data/config/modules.cfg`)**: каждый модуль (`dock`, `widgets`, `overlay`) включается и отключается независимо (выключенный не запускается, 0% CPU и 0 МБ RAM, `NF-007`), а режим изоляции (`process` по умолчанию или `inproc`) переключается на лету в окне «Настройки asrbox».
-- **Один исполняемый файл**: `asrbox.exe` выступает супервизором (сгруппированное ПКМ-меню трея с NotePlan-иконкой, `mod-settings`, `mod-backup`, `mod-webdav`, `mod-debug`, `mod-about`) и запускает каждый активный прикладной модуль как изолированный дочерний процесс `asrbox.exe --worker <dock|widgets|overlay> --parent-pid <PID>`.
+- **Один исполняемый файл**: `asrbox.exe` выступает супервизором (кастомное Fluent ПКМ-меню трея, `mod-settings` с браузерными вкладками, `mod-backup`, `mod-webdav`, `mod-debug`, `mod-about`) и запускает каждый активный прикладной модуль как изолированный дочерний процесс `asrbox.exe --worker <dock|widgets|overlay> --parent-pid <PID>`.
 - **Гарантия очистки (`JobObject`)**: все воркеры привязаны к Win32 `JobObject` (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`) + проверяют живость родительского PID, поэтому при выходе или аварийном завершении супервизора не остаётся «сиротских» процессов.
 - **Политика перезапуска (`NF-006`, `NF-008`)**: при аварийном завершении воркера остальные модули и супервизор продолжают работать; супервизор автоматически перезапускает упавший модуль (до 3 попыток за 60 секунд, затем останавливает с записью в лог диагностики).
-- **IPC (`crates/core/src/ipc.rs`)**: построчный текстовый протокол (`SupervisorCmd` по stdin воркера -> `WorkerMsg` по stdout воркера), пробуждающий цикл сообщений через `WM_IPC_WAKE` без поллинга.
+- **IPC (`crates/core/src/ipc.rs`)**: построчный текстовый протокол (`SupervisorCmd` по stdin воркера, включая `SetTheme`, -> `WorkerMsg` по stdout воркера), пробуждающий цикл сообщений через `WM_IPC_WAKE` без поллинга.
 
 ### Режимы исполнения модулей
 
 | Модуль | Режим по умолчанию | Причина изоляции |
 | --- | --- | --- |
-| `mod-dock` | Отдельный процесс (`--worker dock`) | Все док-панели в одном процессе; слой отображения (`Обои`/`Обычный`/`Поверх`), перетаскивание значков/панелей и Shell API изолированы от супервизора (`NF-006`). |
-| `mod-widgets` | Отдельный процесс (`--worker widgets`) | Размещает оба виджета (Google Календарь + Системный монитор) в стиле NotePlan Dark с ресайзом; фоновый WinHTTP, парсер `.ics` и поток телеметрии не влияют на трей и доки (`NF-007`). |
-| `mod-overlay` | Отдельный процесс (`--worker overlay`) | Игровой HUD-оверлей (FPS/1% low, GPU/VRAM, CPU, RAM, NET/PL) с автозапуском только в играх и 100% click-through без инъекции DLL; полностью изолирован от супервизора и игр (`OV-001..OV-008`). |
-| `mod-settings` | Окно по открытию (`on-open`) | Единое изменяемое окно настроек в стиле NotePlan Dark по модулям (включая автозагрузку, Игровой оверлей и вкладку «Бэкап и Облако»); 0% CPU при закрытом окне. |
+| `mod-dock` | Отдельный процесс (`--worker dock`) | Все док-панели в одном процессе (Fluent Light/Dark); слой отображения (`Обои`/`Обычный`/`Поверх`), перетаскивание значков/панелей и Shell API изолированы от супервизора (`NF-006`). |
+| `mod-widgets` | Отдельный процесс (`--worker widgets`) | Размещает оба виджета (Google Календарь + Системный монитор) в стиле Windows 11 Fluent с ресайзом; фоновый WinHTTP, парсер `.ics` и поток телеметрии не влияют на трей и доки (`NF-007`). |
+| `mod-overlay` | Отдельный процесс (`--worker overlay`) | Игровой HUD-оверлей (FPS/1% low, GPU/VRAM, CPU, RAM, NET/PL) с автозапуском только в играх, FSO/Topmost и 100% click-through без инъекции DLL (`OV-001..OV-009`). |
+| `mod-settings` | Окно по открытию (`on-open`) | Единое изменяемое Fluent-окно настроек с разделом «Общие настройки» и браузерными вкладками («Диагностика», «История версий», «Обзор WebDAV»); 0% CPU при закрытом окне. |
 | `mod-backup` | По запросу (`on-demand`) | Создание `.zip`-архивов настроек (`data/config/*`) или полной копии (`asrbox.exe` + `data/config/*`) в `data/backups/` без внешних крейтов; 0% CPU в простое. |
-| `mod-webdav` | По запросу (`on-demand`) | Пресеты Яндекс.Диск / Mail.ru / Свой HTTPS; фоновая загрузка WinHTTP (`MKCOL` + `PUT`) и тест (`PROPFIND`) с паролями из Windows Credential Manager. |
-| `mod-debug` | Окно по открытию (`on-open`) | Живые логи супервизора и всех воркеров (`app`, `dock`, `widgets`, `overlay`, `http`, `platform`) в тёмной палитре NotePlan, метрики RAM/CPU/GDI/USER и экспорт отчёта. |
-| `mod-about` | Окно по открытию (`on-open`) | Версия, портативный режим, живые пути на диске и встроенный `CHANGELOG.md`. |
+| `mod-webdav` | По запросу (`on-demand`) | Неограниченное число серверов WebDAV (`Яндекс.Диск` / `Mail.ru` / `Свой HTTPS`), обзор/создание папок (`PROPFIND`/`MKCOL`) и синхронизация файлов/папок Windows (`sync.cfg`) с паролями только в Credential Manager. |
+| `mod-debug` | Окно/вкладка по открытию (`on-open`) | Живые логи супервизора и всех воркеров (`app`, `dock`, `widgets`, `overlay`, `http`, `platform`), переключаемый 1 Гц монитор RAM/CPU/GDI/USER и экспорт отчёта. |
+| `mod-about` | Вкладка по открытию (`on-open`) | Версия, портативный режим, живые пути на диске и встроенная полная история версий (`CHANGELOG.md`). |
 | `mod-keyboard` / `speech` / `huawei` / `screenshot` / `monitor` | Отдельный процесс / по запросу | Зарезервированы каркасами workspace под следующие этапы. |
 
 ## 3. Защита при работе и хранение данных

@@ -1,11 +1,13 @@
 #![cfg(windows)]
 
 use asrbox_core::{save_modules_config, IsolationMode, ModuleId};
+use asrbox_mod_about::changelog_text;
 use asrbox_mod_debug::LogLevel;
 use asrbox_mod_dock::{load_docks_from_file, DockEdge};
 use asrbox_mod_settings::{
-    AboutSettingsView, CalendarSettingsView, CalendarSourceView, DebugSettingsView, DockItemView,
-    DockSettingsView, SettingsAction, SettingsSnapshot, SettingsTab, SysMonitorSettingsView,
+    AboutSettingsView, AppearanceSettingsView, BrowserTab, CalendarSettingsView,
+    CalendarSourceView, DockItemView, DockSettingsView, SettingsAction, SettingsSnapshot,
+    SettingsTab, SysMonitorSettingsView,
 };
 use asrbox_mod_widgets::{load_sysmon_config, load_widget_config, PeriodFilter};
 use asrbox_platform_api::{
@@ -21,6 +23,7 @@ impl<I: IconProvider> AppController<I> {
         tab: SettingsTab,
     ) {
         self.settings_ui.active_tab = tab;
+        self.settings_ui.active_browser_tab = BrowserTab::Main;
         self.settings_ui.scroll_y = 0;
         self.last_settings_tab = None;
         let title = format!("Настройки — asrbox v{APP_VERSION}");
@@ -31,6 +34,8 @@ impl<I: IconProvider> AppController<I> {
                 .log(host.local_time_now(), LogLevel::Error, "settings", err);
             return;
         }
+        let pal = self.appearance.palette();
+        host.apply_settings_theme(pal);
         self.render_settings_ui(host);
     }
 
@@ -43,8 +48,14 @@ impl<I: IconProvider> AppController<I> {
         if let Some(txt) = self.settings_ui.take_dock_input_sync(&snap) {
             host.set_settings_input_text(0, &txt);
         }
+        if let Some(txt) = self.settings_ui.take_aux_prefill() {
+            host.set_settings_input_text(4, &txt);
+        }
         let (frame, inputs) = self.settings_ui.render(&snap);
         host.present_settings_frame(&frame, inputs);
+        if !self.settings_ui.is_animating() {
+            host.set_settings_anim_timer(false);
+        }
     }
 
     fn sync_settings_tab_inputs<H: ToolsPlatform>(&mut self, host: &H) {
@@ -55,11 +66,6 @@ impl<I: IconProvider> AppController<I> {
         self.last_settings_tab = Some(cur);
         match cur {
             SettingsTab::Dock => self.settings_ui.reset_dock_input_sync(),
-            SettingsTab::Backup => {
-                host.set_settings_input_text(0, self.backup.webdav_username());
-                host.set_settings_input_text(1, "");
-                host.set_settings_input_text(2, self.backup.webdav_custom_url());
-            }
             SettingsTab::Calendar => host.set_settings_input_text(0, ""),
             _ => {}
         }
@@ -72,6 +78,7 @@ impl<I: IconProvider> AppController<I> {
     ) {
         if matches!(ev, SettingsUiEvent::Closed) {
             self.last_settings_tab = None;
+            host.set_settings_anim_timer(false);
             if self.overlay_setup_mode {
                 self.set_overlay_setup_mode(host, false);
             }
@@ -86,7 +93,10 @@ impl<I: IconProvider> AppController<I> {
         }
     }
 
-    pub(crate) fn build_settings_snapshot(&self, host: &dyn ToolsPlatform) -> SettingsSnapshot {
+    pub(crate) fn build_settings_snapshot<H: ToolsPlatform>(
+        &self,
+        host: &mut H,
+    ) -> SettingsSnapshot {
         let docks_cfg = load_docks_from_file(&self.paths.docks_cfg).unwrap_or_default();
         let docks = docks_cfg
             .iter()
@@ -153,7 +163,19 @@ impl<I: IconProvider> AppController<I> {
             height: sys_cfg.height,
         };
 
+        let diagnostics = self.build_diagnostics_view(host);
+        let changelog_lines = changelog_text()
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .map(ToOwned::to_owned)
+            .collect();
+
         SettingsSnapshot {
+            appearance: AppearanceSettingsView {
+                theme: self.appearance.theme,
+                accent: self.appearance.accent,
+                language: self.appearance.language,
+            },
             isolation: self.modules_cfg.isolation,
             autostart_enabled: host.is_autostart_enabled(),
             modules: self.supervisor.status_views(&self.modules_cfg),
@@ -161,22 +183,16 @@ impl<I: IconProvider> AppController<I> {
             calendar,
             sysmon,
             overlay: self.build_overlay_settings_view(),
-            backup: self.backup.backup_view(),
-            webdav: self.backup.webdav_view(),
-            debug: DebugSettingsView {
-                verbose: self.debug.verbose_trace(),
-                file_log: self.debug.file_logging(),
-                summary_line: format!(
-                    "Режим: {} · фильтр логов: {}",
-                    self.modules_cfg.isolation.as_str(),
-                    self.debug.filter_label()
-                ),
-            },
+            backup: self.backup.backup_view(self.appearance.language),
+            diagnostics,
             about: AboutSettingsView {
                 version: APP_VERSION.to_owned(),
                 exe_path: self.paths.exe_path.display().to_string(),
                 data_dir: self.paths.data_dir.display().to_string(),
                 config_dir: self.paths.data_dir.join("config").display().to_string(),
+                backups_dir: self.paths.backups_dir.display().to_string(),
+                logs_dir: self.paths.logs_dir.display().to_string(),
+                changelog_lines,
             },
         }
     }
@@ -259,16 +275,14 @@ impl<I: IconProvider> AppController<I> {
                     self.debug.toggle_file_logging(now);
                 }
             }
-            SettingsAction::OpenDebugWindow => self.open_debug_window(host),
-            SettingsAction::OpenAboutWindow => self.open_about_window(host),
             SettingsAction::OpenDataFolder => {
                 let _ = std::fs::create_dir_all(&self.paths.data_dir);
                 let _ = host.open_folder(&self.paths.data_dir);
             }
             other => {
-                if !self.apply_dock_setting(host, &other)
+                if !self.apply_general_setting(host, &other)
+                    && !self.apply_dock_setting(host, &other)
                     && !self.apply_overlay_setting(host, &other)
-                    && !self.apply_backup_setting(host, &other)
                 {
                     self.apply_widget_setting(host, &other);
                 }

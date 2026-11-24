@@ -8,7 +8,7 @@ use asrbox_mod_dock::{
     to_dock_rect, to_pixel_rect, DockConfig, DockEdge, DockEvent, DockInstance, Point, Rect,
 };
 use asrbox_platform_api::{
-    DockPlatform, IconProvider, PixelPoint, PixelRect, RgbaImage, TrayMenuEntry,
+    DockPlatform, FluentPalette, IconProvider, PixelPoint, PixelRect, RgbaImage, TrayMenuEntry,
 };
 
 use crate::dock_drag::{DockDragState, DragReleaseOutcome};
@@ -32,6 +32,7 @@ pub struct DockManager<I: IconProvider> {
     next_dock_id: u64,
     pub(crate) drag: DockDragState,
     pub(crate) running_timer_on: bool,
+    pub(crate) palette: FluentPalette,
 }
 
 impl<I: IconProvider> DockManager<I> {
@@ -57,7 +58,13 @@ impl<I: IconProvider> DockManager<I> {
             next_dock_id: max_id.saturating_add(1),
             drag: DockDragState::default(),
             running_timer_on: false,
+            palette: FluentPalette::default(),
         })
+    }
+
+    pub fn set_palette(&mut self, host: &mut dyn DockPlatform, palette: FluentPalette) {
+        self.palette = palette;
+        self.redraw_open_docks(host);
     }
 
     pub fn dock_count(&self) -> usize {
@@ -94,7 +101,7 @@ impl<I: IconProvider> DockManager<I> {
                     dock.window_open = true;
                 }
                 let _ = host.set_dock_layer(id, dock.instance.config().layer);
-                present_dock(host, dock, self.drag.overlay_for(dock))?;
+                present_dock(host, dock, self.drag.overlay_for(dock), self.palette)?;
             } else if dock.window_open {
                 let _ = host.destroy_dock_window(id);
                 dock.window_open = false;
@@ -156,7 +163,7 @@ impl<I: IconProvider> DockManager<I> {
                 .collect();
             if next != dock.running_items {
                 dock.running_items = next;
-                let _ = present_dock(host, dock, self.drag.overlay_for(dock));
+                let _ = present_dock(host, dock, self.drag.overlay_for(dock), self.palette);
                 changed = true;
             }
         }
@@ -183,7 +190,7 @@ impl<I: IconProvider> DockManager<I> {
             let _ = host.set_animation_timer(id, effect.animation_active);
         }
         if effect.needs_redraw && dock.window_open {
-            let _ = present_dock(host, dock, self.drag.overlay_for(dock));
+            let _ = present_dock(host, dock, self.drag.overlay_for(dock), self.palette);
             return true;
         }
         false
@@ -234,7 +241,7 @@ impl<I: IconProvider> DockManager<I> {
                 .instance
                 .handle_event(DockEvent::WorkAreaChanged(self.work_area));
             if effect.needs_redraw && dock.window_open {
-                let _ = present_dock(host, dock, self.drag.overlay_for(dock));
+                let _ = present_dock(host, dock, self.drag.overlay_for(dock), self.palette);
             }
         }
     }
@@ -277,7 +284,7 @@ impl<I: IconProvider> DockManager<I> {
             }
         }
         if effect.needs_redraw && dock.window_open {
-            let _ = present_dock(host, dock, self.drag.overlay_for(dock));
+            let _ = present_dock(host, dock, self.drag.overlay_for(dock), self.palette);
         }
         self.persist();
         self.refresh_running_apps(host);

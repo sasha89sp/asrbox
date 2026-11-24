@@ -29,7 +29,7 @@ pub(crate) fn small_app_icon() -> HICON {
         if let Some(icon) = st.small {
             return icon;
         }
-        let icon = create_noteplan_hicon(16).unwrap_or_default();
+        let icon = create_fluent_hicon(16).unwrap_or_default();
         if !icon.is_invalid() {
             st.small = Some(icon);
         }
@@ -43,7 +43,7 @@ pub(crate) fn large_app_icon() -> HICON {
         if let Some(icon) = st.large {
             return icon;
         }
-        let icon = create_noteplan_hicon(32).unwrap_or_default();
+        let icon = create_fluent_hicon(32).unwrap_or_default();
         if !icon.is_invalid() {
             st.large = Some(icon);
         }
@@ -90,8 +90,8 @@ pub(crate) fn cleanup_app_icons() {
     });
 }
 
-fn create_noteplan_hicon(size: u32) -> Option<HICON> {
-    let pixels = render_noteplan_icon_bgra(size);
+fn create_fluent_hicon(size: u32) -> Option<HICON> {
+    let pixels = render_fluent_icon_bgra(size);
     let side = i32::try_from(size).ok()?;
     let bmi = make_top_down_bmi(side, side);
     let mut bits: *mut c_void = std::ptr::null_mut();
@@ -131,32 +131,32 @@ fn create_noteplan_hicon(size: u32) -> Option<HICON> {
     }
 }
 
-/// Renders a NotePlan-inspired macOS dark squircle icon with coral-tangerine header band
-/// and minimalist warm-cream task/calendar lines (32-bit BGRA, straight alpha for Win32 HICON).
-fn render_noteplan_icon_bgra(size: u32) -> Vec<u8> {
+/// Renders a Windows 11 Fluent Design rounded squircle icon with Fluent Blue gradient
+/// and crisp modular tile grid representing asrbox (32-bit BGRA for Win32 HICON).
+fn render_fluent_icon_bgra(size: u32) -> Vec<u8> {
     let mut buf = vec![0u8; (size as usize) * (size as usize) * 4];
     let s = size as f32;
     let margin = s * 0.06;
-    let body_w = s - margin * 2.0;
+    let body = s - margin * 2.0;
     let rad = s * 0.24;
 
     for y in 0..size {
         for x in 0..size {
             let fx = x as f32 + 0.5;
             let fy = y as f32 + 0.5;
-            let d = rounded_sdf(fx - s * 0.5, fy - s * 0.5, body_w * 0.5, body_w * 0.5, rad);
+            let d = rounded_sdf(fx - s * 0.5, fy - s * 0.5, body * 0.5, body * 0.5, rad);
             let cov = (0.6 - d).clamp(0.0, 1.0);
             if cov <= 0.0 {
                 continue;
             }
-            let ty = ((fy - margin) / body_w).clamp(0.0, 1.0);
-            let mut rgb = sample_noteplan_surface(fx, fy, s, margin, body_w, ty, d);
-            // Subtle warm rim highlight on squircle border
-            if d > -1.25 {
-                let rim = ((d + 1.25) / 1.25).clamp(0.0, 1.0) * 0.28;
-                rgb[0] = lerp_u8(rgb[0], 246, rim);
-                rgb[1] = lerp_u8(rgb[1], 228, rim);
-                rgb[2] = lerp_u8(rgb[2], 216, rim);
+            let ux = ((fx - margin) / body).clamp(0.0, 1.0);
+            let uy = ((fy - margin) / body).clamp(0.0, 1.0);
+            let mut rgb = sample_fluent_surface(ux, uy);
+            if d > -1.2 {
+                let rim = ((d + 1.2) / 1.2).clamp(0.0, 1.0) * 0.30;
+                rgb[0] = lerp_u8(rgb[0], 190, rim);
+                rgb[1] = lerp_u8(rgb[1], 232, rim);
+                rgb[2] = lerp_u8(rgb[2], 255, rim);
             }
             let a = (cov * 255.0).round().clamp(0.0, 255.0) as u8;
             let idx = ((y as usize) * (size as usize) + (x as usize)) * 4;
@@ -169,58 +169,38 @@ fn render_noteplan_icon_bgra(size: u32) -> Vec<u8> {
     buf
 }
 
-fn sample_noteplan_surface(
-    fx: f32,
-    fy: f32,
-    s: f32,
-    margin: f32,
-    body_w: f32,
-    ty: f32,
-    _d: f32,
-) -> [u8; 3] {
-    let header_end = margin + body_w * 0.30;
-    if fy <= header_end {
-        // Signature NotePlan warm coral-tangerine header gradient
-        let ht = ((fx - margin) / body_w).clamp(0.0, 1.0);
-        let r = (228.0 + ht * 16.0) as u8;
-        let g = (112.0 + ht * 24.0) as u8;
-        let b = (66.0 + ht * 14.0) as u8;
-        return [r, g, b];
-    }
-
-    // Warm obsidian card body
-    let mut rgb = [
-        (36.0 - ty * 12.0) as u8,
-        (38.0 - ty * 13.0) as u8,
-        (46.0 - ty * 14.0) as u8,
+fn sample_fluent_surface(ux: f32, uy: f32) -> [u8; 3] {
+    // Windows 11 Fluent Blue gradient (#0067C0 -> #0A4D96) with subtle top-left sheen
+    let diag = (ux * 0.45 + uy * 0.55).clamp(0.0, 1.0);
+    let bg = [
+        lerp_u8(22, 0, diag),
+        lerp_u8(136, 84, diag),
+        lerp_u8(224, 174, diag),
     ];
 
-    // Minimalist NotePlan checklist / planner rows inside lower body
-    let ux = (fx - margin) / body_w;
-    let uy = (fy - header_end) / (body_w * 0.70);
-    let line_h = if s <= 18.0 { 0.14 } else { 0.11 };
-    let row_centers = [0.27f32, 0.54, 0.80];
-    let row_ends = [0.84f32, 0.72, 0.60];
-    for (i, (&cy, &rx_end)) in row_centers.iter().zip(row_ends.iter()).enumerate() {
-        if (uy - cy).abs() <= line_h * 0.55 {
-            // Coral bullet dot on the left
-            if (0.16..=0.28).contains(&ux) {
-                rgb = if i == 0 {
-                    [238, 134, 84]
-                } else {
-                    [104, 199, 148]
-                };
-            } else if ux >= 0.35 && ux <= rx_end {
-                // Warm cream note line
-                rgb = if i == 0 {
-                    [242, 240, 236]
-                } else {
-                    [186, 192, 204]
-                };
-            }
-        }
+    // 4 crisp modular Fluent tiles (2x2 asymmetric bento layout)
+    let tile_top_left = in_box(ux, uy, 0.17, 0.17, 0.46, 0.46, 0.07);
+    let tile_top_right = in_box(ux, uy, 0.54, 0.17, 0.83, 0.46, 0.07);
+    let tile_bottom = in_box(ux, uy, 0.17, 0.54, 0.83, 0.83, 0.07);
+
+    if tile_top_left {
+        return [255, 255, 255];
     }
-    rgb
+    if tile_top_right {
+        return [140, 224, 255];
+    }
+    if tile_bottom {
+        return [230, 244, 255];
+    }
+    bg
+}
+
+fn in_box(ux: f32, uy: f32, x0: f32, y0: f32, x1: f32, y1: f32, r: f32) -> bool {
+    let cx = (x0 + x1) * 0.5;
+    let cy = (y0 + y1) * 0.5;
+    let hx = (x1 - x0) * 0.5;
+    let hy = (y1 - y0) * 0.5;
+    rounded_sdf(ux - cx, uy - cy, hx, hy, r) <= 0.0
 }
 
 fn rounded_sdf(px: f32, py: f32, hx: f32, hy: f32, r: f32) -> f32 {

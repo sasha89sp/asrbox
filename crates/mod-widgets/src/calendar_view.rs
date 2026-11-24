@@ -1,18 +1,49 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use asrbox_platform_api::{HttpFetchResult, LocalDateTime};
+use asrbox_platform_api::{
+    FluentPalette, HttpFetchResult, LocalDateTime, PixelRect, WidgetMenuState, WidgetSizeBounds,
+};
 
 use crate::format::{
     event_matches_period, format_event_subtitle, format_event_tooltip, local_now_as_ics,
     pick_bar_color,
 };
 use crate::ics::{parse_ics_bytes, CalendarEvent, ParseOptions};
-use crate::render::{render_calendar_widget, DisplayRow, RenderView, WidgetHitTarget};
+use crate::render::{
+    render_calendar_widget, widget_height, DisplayRow, RenderView, WidgetHitTarget,
+};
 use crate::storage::{
     load_cached_ics, parse_calendar_source, parse_widget_config, save_widget_config,
     CalendarWidgetConfig,
 };
+
+pub fn calendar_resize_bounds() -> WidgetSizeBounds {
+    WidgetSizeBounds {
+        min_w: 280,
+        min_h: widget_height(3),
+        max_w: 860,
+        max_h: widget_height(16),
+    }
+}
+
+pub fn calendar_window_rect(cfg: &CalendarWidgetConfig) -> PixelRect {
+    PixelRect {
+        x: cfg.x,
+        y: cfg.y,
+        width: cfg.width,
+        height: widget_height(cfg.visible_rows),
+    }
+}
+
+pub fn calendar_menu_state(cfg: &CalendarWidgetConfig) -> WidgetMenuState {
+    WidgetMenuState {
+        layer: cfg.layer,
+        opacity_percent: cfg.opacity_percent,
+        refresh_ms: None,
+        sync_interval_sec: Some(cfg.refresh_interval_sec),
+    }
+}
 
 pub fn format_status_summary(
     cfg: &CalendarWidgetConfig,
@@ -116,6 +147,7 @@ pub fn build_calendar_frame(
     cfg: &CalendarWidgetConfig,
     now: LocalDateTime,
     st: &CalendarState,
+    palette: FluentPalette,
 ) -> (asrbox_platform_api::WidgetFrame, usize, usize) {
     let total = filter_events(&st.all_events, cfg, now).len();
     let max_rows = usize::from(cfg.visible_rows);
@@ -149,6 +181,7 @@ pub fn build_calendar_frame(
         can_scroll_up: scroll_offset > 0,
         can_scroll_down: scroll_offset + max_rows < total,
         is_loading,
+        palette,
     };
     (render_calendar_widget(&view), scroll_offset, rows.len())
 }

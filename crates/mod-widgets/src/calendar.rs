@@ -1,18 +1,16 @@
 use std::path::PathBuf;
 
 use asrbox_platform_api::{
-    HttpFetchResult, PixelPoint, PixelRect, WidgetLayer, WidgetMenuAction, WidgetMenuState,
-    WidgetPlatform, WidgetSizeBounds,
+    FluentPalette, HttpFetchResult, PixelPoint, WidgetLayer, WidgetMenuAction, WidgetPlatform,
 };
 
 use crate::calendar_view::{
-    build_calendar_frame, build_display_rows, clamp_scroll_offset, filter_events,
-    format_status_summary, tooltip_for_target, CalendarState,
+    build_calendar_frame, build_display_rows, calendar_menu_state, calendar_resize_bounds,
+    calendar_window_rect, clamp_scroll_offset, filter_events, format_status_summary,
+    tooltip_for_target, CalendarState,
 };
 use crate::format::event_day_url;
-use crate::render::{
-    hit_test_widget, rows_for_height, widget_height, WidgetHitTarget, HEADER_HEIGHT,
-};
+use crate::render::{hit_test_widget, rows_for_height, WidgetHitTarget, HEADER_HEIGHT};
 use crate::storage::{
     load_widget_config, save_widget_config, CalendarWidgetConfig, DateFormatMode,
     MAX_OPACITY_PERCENT, MIN_OPACITY_PERCENT,
@@ -28,6 +26,7 @@ pub struct CalendarWidget {
     config: CalendarWidgetConfig,
     window_open: bool,
     st: CalendarState,
+    palette: FluentPalette,
 }
 
 impl CalendarWidget {
@@ -41,6 +40,14 @@ impl CalendarWidget {
             config,
             window_open: false,
             st,
+            palette: FluentPalette::default(),
+        }
+    }
+
+    pub fn set_palette(&mut self, host: &mut dyn WidgetPlatform, palette: FluentPalette) {
+        self.palette = palette;
+        if self.window_open {
+            self.redraw(host);
         }
     }
 
@@ -67,7 +74,7 @@ impl CalendarWidget {
             let now = host.local_time_now();
             self.st.reparse(&self.config, now);
             if !self.window_open {
-                let r = self.window_rect();
+                let r = calendar_window_rect(&self.config);
                 host.create_widget_window(
                     CALENDAR_WIDGET_ID,
                     &self.config.title,
@@ -75,13 +82,7 @@ impl CalendarWidget {
                     self.config.layer,
                     HEADER_HEIGHT,
                 )?;
-                let b = WidgetSizeBounds {
-                    min_w: 280,
-                    min_h: widget_height(3),
-                    max_w: 860,
-                    max_h: widget_height(16),
-                };
-                let _ = host.set_widget_resize_bounds(CALENDAR_WIDGET_ID, b);
+                let _ = host.set_widget_resize_bounds(CALENDAR_WIDGET_ID, calendar_resize_bounds());
                 self.window_open = true;
             }
             self.sync_timers(host);
@@ -196,12 +197,7 @@ impl CalendarWidget {
     }
 
     pub fn on_right_click(&mut self, host: &mut dyn WidgetPlatform, screen: PixelPoint) -> String {
-        let state = WidgetMenuState {
-            layer: self.config.layer,
-            opacity_percent: self.config.opacity_percent,
-            refresh_ms: None,
-            sync_interval_sec: Some(self.config.refresh_interval_sec),
-        };
+        let state = calendar_menu_state(&self.config);
         let Ok(Some(action)) = host.show_widget_menu(CALENDAR_WIDGET_ID, screen, &state) else {
             return String::new();
         };
@@ -351,8 +347,7 @@ impl CalendarWidget {
     }
 
     fn scroll_by(&mut self, host: &mut dyn WidgetPlatform, delta: isize) {
-        let now = host.local_time_now();
-        let total = filter_events(&self.st.all_events, &self.config, now).len();
+        let total = filter_events(&self.st.all_events, &self.config, host.local_time_now()).len();
         let next = clamp_scroll_offset(
             self.st.scroll_offset,
             delta,
@@ -370,25 +365,21 @@ impl CalendarWidget {
             return;
         }
         let now = host.local_time_now();
-        let (frame, scroll_offset, shown) = build_calendar_frame(&self.config, now, &self.st);
+        let (frame, scroll_offset, shown) =
+            build_calendar_frame(&self.config, now, &self.st, self.palette);
         self.st.scroll_offset = scroll_offset;
         self.st.shown_row_count = shown;
-        let _ = host.present_widget_frame(CALENDAR_WIDGET_ID, self.window_rect(), &frame);
+        let _ = host.present_widget_frame(
+            CALENDAR_WIDGET_ID,
+            calendar_window_rect(&self.config),
+            &frame,
+        );
     }
 
     fn sync_timers(&self, host: &mut dyn WidgetPlatform) {
         let minute = self.config.date_format == DateFormatMode::Countdown;
         let _ =
             host.set_widget_timers(CALENDAR_WIDGET_ID, self.config.refresh_interval_sec, minute);
-    }
-
-    fn window_rect(&self) -> PixelRect {
-        PixelRect {
-            x: self.config.x,
-            y: self.config.y,
-            width: self.config.width,
-            height: widget_height(self.config.visible_rows),
-        }
     }
 
     fn persist(&self) {

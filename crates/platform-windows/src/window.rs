@@ -3,7 +3,7 @@ use std::collections::{HashMap, VecDeque};
 use std::ffi::c_void;
 use std::mem;
 
-use asrbox_platform_api::{PixelPoint, PlatformEvent};
+use asrbox_platform_api::{AccentPreset, FluentPalette, PixelPoint, PlatformEvent};
 use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::Graphics::Gdi::{COLOR_WINDOW, HBRUSH};
@@ -17,6 +17,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 use crate::app_icon::{cleanup_app_icons, large_app_icon, small_app_icon};
 use crate::dock_proc::dock_wnd_proc;
+use crate::fluent_menu::fluent_menu_wnd_proc;
 use crate::http::{drain_http_results, WM_HTTP_DONE};
 use crate::metrics::ProcessMetricsSampler;
 use crate::overlay_telemetry::{drain_overlay_results, WM_OVERLAY_DONE};
@@ -54,6 +55,7 @@ pub struct WindowsDockHost {
     pub(crate) tooltip_hwnd: Option<HWND>,
     pub(crate) tools: ToolsWinState,
     pub(crate) metrics: ProcessMetricsSampler,
+    pub(crate) theme: FluentPalette,
 }
 
 impl WindowsDockHost {
@@ -88,6 +90,12 @@ impl WindowsDockHost {
                 hinstance,
                 w!("AsrboxWidgetWindow"),
                 Some(widget_wnd_proc),
+                HBRUSH::default(),
+            )?;
+            register_class(
+                hinstance,
+                w!("AsrboxFluentMenuWindow"),
+                Some(fluent_menu_wnd_proc),
                 HBRUSH::default(),
             )?;
             register_class(hinstance, w!("AsrboxDebugWindow"), Some(debug_wnd_proc), bg)?;
@@ -130,6 +138,7 @@ impl WindowsDockHost {
                 tooltip_hwnd: None,
                 tools: ToolsWinState::new(),
                 metrics: ProcessMetricsSampler::new(),
+                theme: FluentPalette::dark(AccentPreset::Blue),
             })
         }
     }

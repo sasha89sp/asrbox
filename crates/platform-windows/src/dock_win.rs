@@ -174,7 +174,7 @@ impl DockPlatform for WindowsDockHost {
             .get(&dock_id)
             .copied()
             .unwrap_or(self.host_hwnd);
-        show_dock_context_menu(hwnd, screen_point, state)
+        show_dock_context_menu(self.hinstance, hwnd, screen_point, state, self.theme)
     }
 
     fn show_tray_menu(
@@ -183,7 +183,14 @@ impl DockPlatform for WindowsDockHost {
         docks: &[TrayMenuEntry],
         flags: TrayModuleFlags,
     ) -> Result<Option<TrayAction>, String> {
-        show_tray_context_menu(self.host_hwnd, screen_point, docks, flags)
+        show_tray_context_menu(
+            self.hinstance,
+            self.host_hwnd,
+            screen_point,
+            docks,
+            flags,
+            self.theme,
+        )
     }
 
     fn pick_icon_file(&mut self) -> Result<Option<PathBuf>, String> {
@@ -196,6 +203,10 @@ impl DockPlatform for WindowsDockHost {
 
     fn open_text_file(&self, path: &Path) -> Result<(), String> {
         open_in_notepad(path)
+    }
+
+    fn set_theme(&mut self, palette: asrbox_platform_api::FluentPalette) {
+        self.theme = palette;
     }
 
     fn request_quit(&mut self) {

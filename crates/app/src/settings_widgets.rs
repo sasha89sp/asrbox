@@ -183,52 +183,6 @@ impl<I: IconProvider> AppController<I> {
         }
     }
 
-    pub(crate) fn apply_backup_setting<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
-        &mut self,
-        host: &mut H,
-        action: &SettingsAction,
-    ) -> bool {
-        use asrbox_mod_backup::BackupMode;
-        let now = host.local_time_now();
-        let outcome = match action {
-            SettingsAction::BackupSettingsNow => {
-                Some(self.backup.run_backup(host, BackupMode::SettingsOnly, now))
-            }
-            SettingsAction::BackupFullNow => Some(self.backup.run_backup(
-                host,
-                BackupMode::FullAppAndSettings,
-                now,
-            )),
-            SettingsAction::UploadLatestBackupNow => Some(self.backup.upload_latest(host)),
-            SettingsAction::OpenBackupsFolder => {
-                let _ = std::fs::create_dir_all(&self.paths.backups_dir);
-                let res = host.open_folder(&self.paths.backups_dir);
-                self.log_io_result(now, "backup", "Открыта папка бэкапов", res);
-                return true;
-            }
-            SettingsAction::SetAutoUploadBackup(on) => {
-                self.backup.set_auto_upload(*on);
-                return true;
-            }
-            SettingsAction::SetWebDavProvider(idx) => {
-                self.backup.set_provider(*idx, host);
-                self.last_settings_tab = None;
-                return true;
-            }
-            SettingsAction::SaveWebDavSettings => Some(self.backup.save_webdav(host)),
-            SettingsAction::TestWebDavConnection => Some(self.backup.test_webdav(host)),
-            SettingsAction::DeleteWebDavPassword => Some(self.backup.delete_password(host)),
-            _ => return false,
-        };
-        if let Some(res) = outcome {
-            match res {
-                Ok(msg) => self.debug.log(now, LogLevel::Info, "backup", msg),
-                Err(err) => self.debug.log(now, LogLevel::Error, "backup", err),
-            }
-        }
-        true
-    }
-
     pub(crate) fn apply_dock_setting<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
         &mut self,
         host: &mut H,

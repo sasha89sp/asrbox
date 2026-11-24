@@ -5,18 +5,27 @@ mod backup_ctl;
 #[cfg(windows)]
 mod dock_drag;
 #[cfg(windows)]
+mod dock_events;
+#[cfg(windows)]
 mod dock_ops;
 #[cfg(windows)]
 mod docks;
 mod selftest;
+mod selftest_tools;
 #[cfg(windows)]
 mod settings_ctl;
+#[cfg(windows)]
+mod settings_general;
 #[cfg(windows)]
 mod settings_widgets;
 #[cfg(windows)]
 mod supervisor;
 #[cfg(windows)]
+mod sync_ctl;
+#[cfg(windows)]
 mod tools;
+#[cfg(windows)]
+mod webdav_ctl;
 #[cfg(windows)]
 mod worker;
 #[cfg(windows)]
@@ -30,16 +39,13 @@ use std::env;
 use std::process::ExitCode;
 
 #[cfg(windows)]
-use std::time::Instant;
-
-#[cfg(windows)]
 use asrbox_core::{load_modules_config, IsolationMode, ModuleId, ModulesConfig};
 #[cfg(windows)]
 use asrbox_mod_about::AppPaths;
 #[cfg(windows)]
 use asrbox_mod_debug::{DebugHub, LogLevel};
 #[cfg(windows)]
-use asrbox_mod_dock::{to_dock_point, to_dock_rect, DockEvent, Rect};
+use asrbox_mod_dock::{to_dock_rect, Rect};
 #[cfg(windows)]
 use asrbox_mod_overlay::GameOverlay;
 #[cfg(windows)]
@@ -48,7 +54,8 @@ use asrbox_mod_settings::{SettingsTab, SettingsUiState};
 use asrbox_mod_widgets::{CalendarWidget, SysMonitorWidget, CALENDAR_WIDGET_ID, SYS_WIDGET_ID};
 #[cfg(windows)]
 use asrbox_platform_api::{
-    DockPlatform, IconProvider, PlatformEvent, ToolsPlatform, WidgetPlatform,
+    load_appearance_config, AppearanceConfig, DockPlatform, IconProvider, PlatformEvent,
+    ToolsPlatform, WidgetPlatform,
 };
 
 #[cfg(windows)]
@@ -132,11 +139,16 @@ fn run_app(safe_mode: bool, force_inproc: bool) -> Result<(), String> {
     let hwnd_raw = host.host_hwnd_raw();
     host.set_supervisor_timer(true);
     let backup = BackupController::load(&paths, &host);
+    let appearance = load_appearance_config(&paths.appearance_cfg);
+    let pal = appearance.palette();
+    DockPlatform::set_theme(&mut host, pal);
+    WidgetPlatform::set_theme(&mut host, pal);
     let mut ctrl = AppController::new(
         paths,
         work_area,
         WindowsIconProvider::new,
         modules_cfg,
+        appearance,
         backup,
         hwnd_raw,
         safe_mode,
@@ -154,6 +166,7 @@ pub(crate) struct AppController<I: IconProvider> {
     pub(crate) work_area: Rect,
     pub(crate) make_icons: fn() -> I,
     pub(crate) modules_cfg: ModulesConfig,
+    pub(crate) appearance: AppearanceConfig,
     pub(crate) supervisor: ModuleSupervisor,
     pub(crate) docks: Option<DockManager<I>>,
     pub(crate) calendar: Option<CalendarWidget>,
@@ -163,28 +176,34 @@ pub(crate) struct AppController<I: IconProvider> {
     pub(crate) backup: BackupController,
     pub(crate) settings_ui: SettingsUiState,
     pub(crate) last_settings_tab: Option<SettingsTab>,
+    pub(crate) diagnostics_monitor_enabled: bool,
     pub(crate) debug: DebugHub,
     pub(crate) safe_mode: bool,
 }
 
 #[cfg(windows)]
 impl<I: IconProvider> AppController<I> {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         paths: AppPaths,
         work_area: Rect,
         make_icons: fn() -> I,
         modules_cfg: ModulesConfig,
+        appearance: AppearanceConfig,
         backup: BackupController,
         host_hwnd_raw: usize,
         safe_mode: bool,
     ) -> Self {
         let debug = DebugHub::new(paths.logs_dir.clone());
         let supervisor = ModuleSupervisor::new(host_hwnd_raw, safe_mode);
+        let mut settings_ui = SettingsUiState::default();
+        settings_ui.set_palette_immediate(appearance.palette());
         Self {
             paths,
             work_area,
             make_icons,
             modules_cfg,
+            appearance,
             supervisor,
             docks: None,
             calendar: None,
@@ -192,8 +211,9 @@ impl<I: IconProvider> AppController<I> {
             overlay: None,
             overlay_setup_mode: false,
             backup,
-            settings_ui: SettingsUiState::default(),
+            settings_ui,
             last_settings_tab: None,
+            diagnostics_monitor_enabled: true,
             debug,
             safe_mode,
         }
@@ -207,6 +227,7 @@ impl<I: IconProvider> AppController<I> {
         for msg in self.supervisor.sync_with_config(&self.modules_cfg) {
             self.log_tagged(host, "app", msg);
         }
+        let pal = self.appearance.palette();
         let want_inproc_dock =
             self.modules_cfg.isolation == IsolationMode::InProc && self.modules_cfg.dock_enabled;
         if want_inproc_dock && self.docks.is_none() {
@@ -217,6 +238,7 @@ impl<I: IconProvider> AppController<I> {
                 (self.make_icons)(),
                 host,
             ) {
+                dm.palette = pal;
                 let _ = dm.sync_windows(host, self.safe_mode);
                 self.docks = Some(dm);
             }
@@ -231,6 +253,7 @@ impl<I: IconProvider> AppController<I> {
         if want_inproc_cal && self.calendar.is_none() {
             let mut cal =
                 CalendarWidget::load(self.paths.widgets_cfg.clone(), self.paths.cache_dir.clone());
+            cal.set_palette(host, pal);
             let _ = cal.sync_window(host, self.safe_mode);
             self.debug.log(
                 now,
@@ -244,6 +267,7 @@ impl<I: IconProvider> AppController<I> {
         }
         if want_inproc_cal && self.sysmon.is_none() {
             let mut sys = SysMonitorWidget::load(self.paths.sysmon_cfg.clone());
+            sys.set_palette(host, pal);
             let _ = sys.sync_window(host, self.safe_mode);
             self.debug.log(
                 now,
@@ -272,9 +296,10 @@ impl<I: IconProvider> AppController<I> {
             PlatformEvent::AboutCommand(cmd) => self.on_about_cmd(host, cmd),
             PlatformEvent::WebDavDone(res) => {
                 let ok = res.ok;
-                let msg = self.backup.on_webdav_done(res);
+                let now = host.local_time_now();
+                let msg = self.backup.on_webdav_done(host, res, now);
                 let lvl = if ok { LogLevel::Info } else { LogLevel::Error };
-                self.debug.log(host.local_time_now(), lvl, "webdav", msg);
+                self.debug.log(now, lvl, "webdav", msg);
                 self.render_settings_ui(host);
             }
             PlatformEvent::DisplayChanged { work_area } => {
@@ -299,100 +324,6 @@ impl<I: IconProvider> AppController<I> {
         }
         if host.is_debug_window_open() && self.debug.take_dirty() {
             self.refresh_debug_ui(host);
-        }
-    }
-
-    fn handle_dock_event<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
-        &mut self,
-        host: &mut H,
-        ev: PlatformEvent,
-    ) {
-        let t0 = Instant::now();
-        let mut open_settings = false;
-        let mut log_msg: Option<String> = None;
-        {
-            let Some(docks) = self.docks.as_mut() else {
-                return;
-            };
-            match ev {
-                PlatformEvent::PointerMove { dock_id, point } => {
-                    self.debug.record_event("dock", "pointer_move");
-                    if docks.step_dock(host, dock_id, DockEvent::PointerMove(to_dock_point(point)))
-                    {
-                        self.record_frame("dock", t0);
-                    }
-                }
-                PlatformEvent::PointerLeave { dock_id } => {
-                    self.debug.record_event("dock", "pointer_leave");
-                    if docks.step_dock(host, dock_id, DockEvent::PointerLeave) {
-                        self.record_frame("dock", t0);
-                    }
-                }
-                PlatformEvent::AnimationTick { dock_id, dt_ms } => {
-                    if docks.step_dock(host, dock_id, DockEvent::AnimationTick { dt_ms }) {
-                        self.record_frame("dock", t0);
-                    }
-                }
-                PlatformEvent::RunningPollTick => {
-                    if docks.refresh_running_apps(host) {
-                        self.record_frame("dock", t0);
-                    }
-                }
-                PlatformEvent::LeftButtonDown {
-                    dock_id,
-                    point,
-                    screen_point,
-                } => {
-                    docks.on_left_down(dock_id, to_dock_point(point), screen_point);
-                }
-                PlatformEvent::DockDragMove { screen_point, .. } => {
-                    docks.on_drag_move(host, screen_point);
-                }
-                PlatformEvent::LeftButtonUp { screen_point, .. } => {
-                    if let Some(m) = docks.on_left_up(host, screen_point) {
-                        if m == "open_settings" {
-                            open_settings = true;
-                        } else {
-                            log_msg = Some(m);
-                        }
-                    }
-                }
-                PlatformEvent::RightClick {
-                    dock_id,
-                    point,
-                    screen_point,
-                } => {
-                    if let Some(m) = docks.on_right_click(
-                        host,
-                        dock_id,
-                        to_dock_point(point),
-                        screen_point,
-                        &mut self.safe_mode,
-                    ) {
-                        if m == "open_settings" {
-                            open_settings = true;
-                        } else {
-                            log_msg = Some(m);
-                        }
-                    }
-                }
-                PlatformEvent::DropFiles {
-                    dock_id,
-                    paths,
-                    point,
-                } => {
-                    let added = docks.on_drop(host, dock_id, paths, to_dock_point(point));
-                    log_msg = Some(format!("dock[{dock_id}] добавлено значков: {added}"));
-                }
-                _ => {}
-            }
-        }
-        if open_settings {
-            self.open_settings_tab(host, SettingsTab::Dock);
-        }
-        if let Some(m) = log_msg {
-            self.log_tagged(host, "dock", m);
-            self.render_settings_ui(host);
         }
     }
 }

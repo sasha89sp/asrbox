@@ -8,7 +8,7 @@ pub(crate) fn build_sysmon_tab(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
     let s = &snap.sysmon;
     b.set_header(
         "Системный монитор",
-        "Стиль macOS Dark-Glass · регулируйте частоту опроса, чтобы снизить нагрузку на CPU",
+        "Windows 11 Fluent Design · регулируйте частоту опроса, чтобы снизить нагрузку на CPU",
     );
 
     let main_rows = vec![

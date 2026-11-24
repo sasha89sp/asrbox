@@ -32,6 +32,7 @@ impl BackupMode {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct BackupConfig {
     pub auto_upload_cloud: bool,
+    pub target_server_ids: Vec<String>,
     pub last_backup_file: String,
     pub last_backup_time: String,
     pub last_cloud_status: String,
@@ -75,6 +76,14 @@ pub fn parse_backup_config(raw: &str) -> BackupConfig {
         };
         match k.trim() {
             "auto_upload_cloud" => cfg.auto_upload_cloud = v.trim() == "1" || v.trim() == "true",
+            "target_server_ids" => {
+                cfg.target_server_ids = v
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(ToOwned::to_owned)
+                    .collect();
+            }
             "last_backup_file" => cfg.last_backup_file = v.trim().to_owned(),
             "last_backup_time" => cfg.last_backup_time = v.trim().to_owned(),
             "last_cloud_status" => cfg.last_cloud_status = v.trim().to_owned(),
@@ -87,11 +96,15 @@ pub fn parse_backup_config(raw: &str) -> BackupConfig {
 pub fn serialize_backup_config(cfg: &BackupConfig) -> String {
     let mut out = String::new();
     out.push_str("# Настройки модуля бэкапа (asrbox)\n");
-    out.push_str("settings_version=1\n");
+    out.push_str("settings_version=2\n");
     out.push_str(&format!("written_by={}\n", env!("CARGO_PKG_VERSION")));
     out.push_str(&format!(
         "auto_upload_cloud={}\n",
         if cfg.auto_upload_cloud { 1 } else { 0 }
+    ));
+    out.push_str(&format!(
+        "target_server_ids={}\n",
+        cfg.target_server_ids.join(",")
     ));
     out.push_str(&format!("last_backup_file={}\n", cfg.last_backup_file));
     out.push_str(&format!("last_backup_time={}\n", cfg.last_backup_time));
@@ -202,6 +215,7 @@ mod tests {
     fn backup_config_roundtrip_and_zip_creation() {
         let cfg = BackupConfig {
             auto_upload_cloud: true,
+            target_server_ids: vec!["srv-1".to_owned(), "srv-2".to_owned()],
             last_backup_file: "asrbox-full-20261123-123045.zip".to_owned(),
             last_backup_time: "23.11 12:30".to_owned(),
             last_cloud_status: "Загружено".to_owned(),

@@ -6,7 +6,7 @@ use asrbox_mod_dock::{
     apply_menu_action, icon_request_for_item, render_dock_widget_frame, to_pixel_rect, DockConfig,
     DockInstance, DockRenderOverlay, Rect, SlotKind,
 };
-use asrbox_platform_api::{DockMenuAction, DockPlatform, IconProvider, RgbaImage};
+use asrbox_platform_api::{DockMenuAction, DockPlatform, FluentPalette, IconProvider, RgbaImage};
 
 use crate::docks::{DockManager, DockRuntime};
 
@@ -37,7 +37,7 @@ impl<I: IconProvider> DockManager<I> {
     pub(crate) fn redraw_open_docks(&mut self, host: &mut dyn DockPlatform) {
         for dock in &self.docks {
             if dock.window_open {
-                let _ = present_dock(host, dock, self.drag.overlay_for(dock));
+                let _ = present_dock(host, dock, self.drag.overlay_for(dock), self.palette);
             }
         }
     }
@@ -100,7 +100,7 @@ impl<I: IconProvider> DockManager<I> {
                     }
                     if dock.window_open {
                         let _ = host.set_dock_layer(id, dock.instance.config().layer);
-                        let _ = present_dock(host, dock, self.drag.overlay_for(dock));
+                        let _ = present_dock(host, dock, self.drag.overlay_for(dock), self.palette);
                     }
                     self.persist();
                     self.sync_running_timer(host);
@@ -162,7 +162,9 @@ pub(crate) fn present_dock(
     host: &mut dyn DockPlatform,
     dock: &DockRuntime,
     mut overlay: DockRenderOverlay,
+    palette: FluentPalette,
 ) -> Result<(), String> {
+    overlay.palette = palette;
     if overlay.dragged_item_id.is_none() {
         overlay.hovered_item_id = dock.instance.hovered_item();
     }

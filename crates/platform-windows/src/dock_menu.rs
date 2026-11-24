@@ -1,11 +1,10 @@
-use asrbox_platform_api::{DockMenuAction, DockMenuState, PixelPoint, WidgetLayer};
-use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
-use windows::Win32::UI::WindowsAndMessaging::{
-    CreatePopupMenu, DestroyMenu, PostMessageW, SetForegroundWindow, TrackPopupMenuEx, HMENU,
-    TPM_NONOTIFY, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_NULL,
+use asrbox_platform_api::{
+    DockMenuAction, DockMenuState, FluentMenuItem, FluentMenuSpec, FluentPalette, FluentQuickBtn,
+    PixelPoint, WidgetLayer,
 };
+use windows::Win32::Foundation::{HINSTANCE, HWND};
 
-use crate::tray::{add_item, add_sep, add_submenu};
+use crate::fluent_menu::show_fluent_menu;
 
 const CMD_EDGE_LEFT: u32 = 101;
 const CMD_EDGE_RIGHT: u32 = 102;
@@ -43,204 +42,283 @@ const CMD_LABEL_ICON_TEXT: u32 = 162;
 const CMD_LABEL_ONLY: u32 = 163;
 
 pub(crate) fn show_dock_context_menu(
+    hinstance: HINSTANCE,
     hwnd: HWND,
     screen_pt: PixelPoint,
     state: &DockMenuState,
+    palette: FluentPalette,
 ) -> Result<Option<DockMenuAction>, String> {
-    // SAFETY: Popup menu and its submenus are created, tracked, and destroyed synchronously.
-    unsafe {
-        let menu = CreatePopupMenu().map_err(|err| format!("CreatePopupMenu failed: {err}"))?;
-        populate_dock_menu(menu, state);
-        let _ = SetForegroundWindow(hwnd);
-        let flags = (TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON).0;
-        let raw = TrackPopupMenuEx(menu, flags, screen_pt.x, screen_pt.y, hwnd, None);
-        let _ = PostMessageW(Some(hwnd), WM_NULL, WPARAM(0), LPARAM(0));
-        let _ = DestroyMenu(menu);
-        Ok(decode_dock_command(raw.0 as u32, state.hovered_item_id))
-    }
+    let spec = build_dock_menu_spec(state);
+    let chosen = show_fluent_menu(hinstance, hwnd, screen_pt, &spec, palette)?;
+    Ok(chosen.and_then(|cmd| decode_dock_command(cmd, state.hovered_item_id)))
 }
 
-unsafe fn populate_dock_menu(menu: HMENU, state: &DockMenuState) {
+fn build_dock_menu_spec(state: &DockMenuState) -> FluentMenuSpec {
+    let quick_actions = vec![
+        FluentQuickBtn {
+            id: CMD_OPEN_SETTINGS,
+            glyph: "⚙".to_owned(),
+            enabled: true,
+        },
+        FluentQuickBtn {
+            id: CMD_ADD_SEPARATOR,
+            glyph: "|".to_owned(),
+            enabled: true,
+        },
+        FluentQuickBtn {
+            id: CMD_TOGGLE_LOCK,
+            glyph: if state.locked { "🔒" } else { "🔓" }.to_owned(),
+            enabled: true,
+        },
+        FluentQuickBtn {
+            id: CMD_ADD_DOCK,
+            glyph: "+".to_owned(),
+            enabled: true,
+        },
+    ];
+    let mut items = Vec::new();
     if state.hovered_item_id.is_some() {
         if state.hovered_is_separator {
-            add_item(menu, CMD_REMOVE_ITEM, "Удалить разделитель", false, true);
+            items.push(act(
+                CMD_REMOVE_ITEM,
+                "Удалить разделитель",
+                Some("✕"),
+                false,
+                true,
+            ));
         } else {
-            add_item(menu, CMD_CHOOSE_ICON, "Сменить иконку...", false, true);
-            add_item(menu, CMD_RESET_ICON, "Авто-иконка Windows", false, true);
-            add_item(menu, CMD_REMOVE_ITEM, "Удалить значок", false, true);
+            items.push(act(
+                CMD_CHOOSE_ICON,
+                "Сменить иконку...",
+                Some("✎"),
+                false,
+                true,
+            ));
+            items.push(act(
+                CMD_RESET_ICON,
+                "Авто-иконка Windows",
+                Some("↻"),
+                false,
+                true,
+            ));
+            items.push(act(
+                CMD_REMOVE_ITEM,
+                "Удалить значок",
+                Some("✕"),
+                false,
+                true,
+            ));
         }
-        add_sep(menu);
+        items.push(FluentMenuItem::Separator);
     }
-    add_item(menu, CMD_OPEN_SETTINGS, "Настройки asrbox...", false, true);
-    add_item(menu, CMD_ADD_SEPARATOR, "Добавить разделитель", false, true);
-    add_item(
-        menu,
+    items.push(act(
+        CMD_OPEN_SETTINGS,
+        "Настройки asrbox",
+        Some("⚙"),
+        false,
+        true,
+    ));
+    items.push(act(
+        CMD_ADD_SEPARATOR,
+        "Добавить разделитель",
+        Some("|"),
+        false,
+        true,
+    ));
+    items.push(act(
         CMD_TOGGLE_LOCK,
         "Закрепить панель",
+        None,
         state.locked,
         true,
-    );
-    add_sep(menu);
-    populate_dock_submenus(menu, state);
-    add_sep(menu);
-    add_item(menu, CMD_OPEN_DOCK_CFG, "Открыть docks.cfg", false, true);
-    add_item(
-        menu,
-        CMD_RELOAD_DOCK_CFG,
-        "Перечитать docks.cfg",
+    ));
+    items.push(FluentMenuItem::Separator);
+    items.push(FluentMenuItem::Submenu {
+        label: "Положение на экране".to_owned(),
+        icon: Some("⊞".to_owned()),
+        enabled: true,
+        items: vec![
+            act(CMD_EDGE_BOTTOM, "Снизу", None, state.edge_code == 3, true),
+            act(CMD_EDGE_TOP, "Сверху", None, state.edge_code == 2, true),
+            act(CMD_EDGE_LEFT, "Слева", None, state.edge_code == 0, true),
+            act(CMD_EDGE_RIGHT, "Справа", None, state.edge_code == 1, true),
+            FluentMenuItem::Separator,
+            act(CMD_ALIGN_CENTER, "По центру", None, state.is_centered, true),
+        ],
+    });
+    items.push(FluentMenuItem::Submenu {
+        label: "Слой отображения".to_owned(),
+        icon: Some("◫".to_owned()),
+        enabled: true,
+        items: vec![
+            act(
+                CMD_LAYER_WALLPAPER,
+                "На рабочем столе",
+                None,
+                state.layer == WidgetLayer::Wallpaper,
+                true,
+            ),
+            act(
+                CMD_LAYER_NORMAL,
+                "Обычное окно",
+                None,
+                state.layer == WidgetLayer::Normal,
+                true,
+            ),
+            act(
+                CMD_LAYER_TOPMOST,
+                "Поверх всех окон",
+                None,
+                state.layer == WidgetLayer::Topmost,
+                true,
+            ),
+        ],
+    });
+    items.push(FluentMenuItem::Submenu {
+        label: "Отображение имён".to_owned(),
+        icon: Some("Aa".to_owned()),
+        enabled: true,
+        items: vec![
+            act(
+                CMD_LABEL_ICONS,
+                "Только иконки",
+                None,
+                state.label_mode_code == 0,
+                true,
+            ),
+            act(
+                CMD_LABEL_HOVER,
+                "При наведении",
+                None,
+                state.label_mode_code == 1,
+                true,
+            ),
+            act(
+                CMD_LABEL_ICON_TEXT,
+                "Иконка + имя",
+                None,
+                state.label_mode_code == 2,
+                true,
+            ),
+            act(
+                CMD_LABEL_ONLY,
+                "Только имена",
+                None,
+                state.label_mode_code == 3,
+                true,
+            ),
+        ],
+    });
+    let p = closest_opacity(state.opacity_percent);
+    items.push(FluentMenuItem::Submenu {
+        label: "Прозрачность панели".to_owned(),
+        icon: Some("◐".to_owned()),
+        enabled: true,
+        items: vec![
+            act(CMD_OPACITY_100, "100% (плотный)", None, p == 100, true),
+            act(CMD_OPACITY_85, "85%", None, p == 85, true),
+            act(CMD_OPACITY_70, "70%", None, p == 70, true),
+            act(CMD_OPACITY_50, "50%", None, p == 50, true),
+            act(CMD_OPACITY_35, "35%", None, p == 35, true),
+        ],
+    });
+    let md = (43..=56).contains(&state.icon_size_px);
+    items.push(FluentMenuItem::Submenu {
+        label: "Значки и поведение".to_owned(),
+        icon: Some("✦".to_owned()),
+        enabled: true,
+        items: vec![
+            act(
+                CMD_SIZE_SMALL,
+                "Значки: 40 px",
+                None,
+                state.icon_size_px <= 42,
+                true,
+            ),
+            act(CMD_SIZE_MEDIUM, "Значки: 48 px", None, md, true),
+            act(
+                CMD_SIZE_LARGE,
+                "Значки: 64 px",
+                None,
+                state.icon_size_px >= 57,
+                true,
+            ),
+            FluentMenuItem::Separator,
+            act(
+                CMD_TOGGLE_ZOOM,
+                "Увеличение при наведении",
+                None,
+                state.hover_zoom_enabled,
+                true,
+            ),
+            act(
+                CMD_TOGGLE_RUNNING,
+                "Индикатор запущенных",
+                None,
+                state.show_running_indicator,
+                true,
+            ),
+            act(
+                CMD_TOGGLE_FOCUS_RUN,
+                "Активировать окно",
+                None,
+                state.focus_running_window,
+                true,
+            ),
+            act(
+                CMD_TOGGLE_SETTINGS_BTN,
+                "Кнопка ⚙ на панели",
+                None,
+                state.show_settings_button,
+                true,
+            ),
+        ],
+    });
+    items.push(FluentMenuItem::Separator);
+    items.push(act(
+        CMD_OPEN_DOCK_CFG,
+        "Открыть docks.cfg",
+        Some("✎"),
         false,
         true,
-    );
-    add_sep(menu);
-    add_item(menu, CMD_ADD_DOCK, "Добавить док-панель", false, true);
-    add_item(
-        menu,
+    ));
+    items.push(act(
+        CMD_RELOAD_DOCK_CFG,
+        "Перечитать docks.cfg",
+        Some("↻"),
+        false,
+        true,
+    ));
+    items.push(FluentMenuItem::Separator);
+    items.push(act(
+        CMD_ADD_DOCK,
+        "Добавить док-панель",
+        Some("+"),
+        false,
+        true,
+    ));
+    items.push(act(
         CMD_REMOVE_DOCK,
         "Удалить эту панель",
+        Some("✕"),
         false,
         state.can_remove_dock,
-    );
+    ));
+    FluentMenuSpec {
+        quick_actions,
+        items,
+        min_width: 244,
+    }
 }
 
-unsafe fn populate_dock_submenus(menu: HMENU, state: &DockMenuState) {
-    if let Ok(edge_sub) = CreatePopupMenu() {
-        add_item(
-            edge_sub,
-            CMD_EDGE_BOTTOM,
-            "Снизу",
-            state.edge_code == 3,
-            true,
-        );
-        add_item(edge_sub, CMD_EDGE_TOP, "Сверху", state.edge_code == 2, true);
-        add_item(edge_sub, CMD_EDGE_LEFT, "Слева", state.edge_code == 0, true);
-        add_item(
-            edge_sub,
-            CMD_EDGE_RIGHT,
-            "Справа",
-            state.edge_code == 1,
-            true,
-        );
-        add_sep(edge_sub);
-        add_item(
-            edge_sub,
-            CMD_ALIGN_CENTER,
-            "По центру",
-            state.is_centered,
-            true,
-        );
-        add_submenu(menu, edge_sub, "Положение на экране");
-    }
-    if let Ok(layer_sub) = CreatePopupMenu() {
-        add_item(
-            layer_sub,
-            CMD_LAYER_WALLPAPER,
-            "На рабочем столе (обои)",
-            state.layer == WidgetLayer::Wallpaper,
-            true,
-        );
-        add_item(
-            layer_sub,
-            CMD_LAYER_NORMAL,
-            "Обычное окно",
-            state.layer == WidgetLayer::Normal,
-            true,
-        );
-        add_item(
-            layer_sub,
-            CMD_LAYER_TOPMOST,
-            "Поверх всех окон",
-            state.layer == WidgetLayer::Topmost,
-            true,
-        );
-        add_submenu(menu, layer_sub, "Слой отображения");
-    }
-    if let Ok(lbl_sub) = CreatePopupMenu() {
-        add_item(
-            lbl_sub,
-            CMD_LABEL_ICONS,
-            "Только иконки",
-            state.label_mode_code == 0,
-            true,
-        );
-        add_item(
-            lbl_sub,
-            CMD_LABEL_HOVER,
-            "При наведении (подсказка)",
-            state.label_mode_code == 1,
-            true,
-        );
-        add_item(
-            lbl_sub,
-            CMD_LABEL_ICON_TEXT,
-            "Иконка + имя",
-            state.label_mode_code == 2,
-            true,
-        );
-        add_item(
-            lbl_sub,
-            CMD_LABEL_ONLY,
-            "Только имена",
-            state.label_mode_code == 3,
-            true,
-        );
-        add_submenu(menu, lbl_sub, "Отображение имён");
-    }
-    if let Ok(op_sub) = CreatePopupMenu() {
-        let p = closest_opacity(state.opacity_percent);
-        add_item(op_sub, CMD_OPACITY_100, "100% (плотный)", p == 100, true);
-        add_item(op_sub, CMD_OPACITY_85, "85%", p == 85, true);
-        add_item(op_sub, CMD_OPACITY_70, "70%", p == 70, true);
-        add_item(op_sub, CMD_OPACITY_50, "50%", p == 50, true);
-        add_item(op_sub, CMD_OPACITY_35, "35%", p == 35, true);
-        add_submenu(menu, op_sub, "Прозрачность панели");
-    }
-    if let Ok(beh_sub) = CreatePopupMenu() {
-        add_item(
-            beh_sub,
-            CMD_SIZE_SMALL,
-            "Значки: 40 px",
-            state.icon_size_px <= 42,
-            true,
-        );
-        let md = (43..=56).contains(&state.icon_size_px);
-        add_item(beh_sub, CMD_SIZE_MEDIUM, "Значки: 48 px", md, true);
-        add_item(
-            beh_sub,
-            CMD_SIZE_LARGE,
-            "Значки: 64 px",
-            state.icon_size_px >= 57,
-            true,
-        );
-        add_sep(beh_sub);
-        add_item(
-            beh_sub,
-            CMD_TOGGLE_ZOOM,
-            "Увеличение при наведении",
-            state.hover_zoom_enabled,
-            true,
-        );
-        add_item(
-            beh_sub,
-            CMD_TOGGLE_RUNNING,
-            "Индикатор запущенных",
-            state.show_running_indicator,
-            true,
-        );
-        add_item(
-            beh_sub,
-            CMD_TOGGLE_FOCUS_RUN,
-            "Активировать открытое окно",
-            state.focus_running_window,
-            true,
-        );
-        add_item(
-            beh_sub,
-            CMD_TOGGLE_SETTINGS_BTN,
-            "Кнопка ⚙ на панели",
-            state.show_settings_button,
-            true,
-        );
-        add_submenu(menu, beh_sub, "Значки и поведение");
+fn act(id: u32, label: &str, icon: Option<&str>, checked: bool, enabled: bool) -> FluentMenuItem {
+    FluentMenuItem::Action {
+        id,
+        label: label.to_owned(),
+        icon: icon.map(ToOwned::to_owned),
+        shortcut: None,
+        checked,
+        enabled,
     }
 }
 

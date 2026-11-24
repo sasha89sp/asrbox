@@ -1,14 +1,12 @@
-use asrbox_platform_api::{BgraFrame, TextAlign, WidgetTextCmd};
+use asrbox_platform_api::{BgraFrame, FluentPalette, TextAlign, WidgetTextCmd};
 
 use crate::draw::{fill_glow_bar, fill_pill_badge};
-use crate::sys_render::{
-    fmt_mem, truncate, SysRenderInput, TEXT_AMBER, TEXT_BRIGHT, TEXT_CYAN, TEXT_GREEN, TEXT_MAIN,
-    TEXT_MUTED, TEXT_TAG,
-};
+use crate::sys_render::{fmt_mem, truncate, SysRenderInput};
 
 pub(crate) struct Canvas<'a> {
     pub frame: &'a mut BgraFrame,
     pub texts: &'a mut Vec<WidgetTextCmd>,
+    pub pal: &'a FluentPalette,
 }
 
 impl Canvas<'_> {
@@ -38,7 +36,8 @@ impl Canvas<'_> {
     }
 
     pub(crate) fn l(&mut self, x: i32, y: i32, w: i32, s: impl Into<String>) {
-        self.text([x, y, w, 18], s, 12, false, TEXT_MAIN, TextAlign::Left);
+        let col = self.pal.text_primary;
+        self.text([x, y, w, 18], s, 12, false, col, TextAlign::Left);
     }
 
     pub(crate) fn lc(&mut self, x: i32, y: i32, w: i32, s: impl Into<String>, col: [u8; 4]) {
@@ -46,12 +45,14 @@ impl Canvas<'_> {
     }
 
     pub(crate) fn hdr(&mut self, w: i32, y: i32, title: &str, tag: &str) {
+        let bright = self.pal.text_primary;
+        let muted = self.pal.text_muted;
         self.text(
             [14, y + 6, 220, 18],
             title,
             12,
             true,
-            TEXT_BRIGHT,
+            bright,
             TextAlign::Left,
         );
         if !tag.is_empty() {
@@ -60,7 +61,7 @@ impl Canvas<'_> {
                 tag,
                 11,
                 false,
-                TEXT_TAG,
+                muted,
                 TextAlign::Right,
             );
         }
@@ -87,6 +88,7 @@ pub(crate) fn draw_cpu_section(
         (mid - 116).clamp(50, 140),
         7,
         cpu.usage_pct,
+        c.pal,
     );
     let temp = match (cpu.temp_c, cpu.tdp_watts, cpu.fan_rpm) {
         (Some(t), Some(pw), Some(rpm)) => format!("Темп/TDP: {t}°C | {pw} Вт | {rpm} RPM"),
@@ -106,7 +108,11 @@ pub(crate) fn draw_cpu_section(
     };
     c.l(14, r2, mid - 20, freq);
     let thr = if cpu.throttled { "Да" } else { "Нет" };
-    let tcol = if cpu.throttled { TEXT_AMBER } else { TEXT_MAIN };
+    let tcol = if cpu.throttled {
+        c.pal.warn_text
+    } else {
+        c.pal.text_primary
+    };
     let cores = format!(
         "Ядра/Потоки: {} / {} | [THR: {thr}]",
         cpu.logical_cores, cpu.active_threads
@@ -116,12 +122,13 @@ pub(crate) fn draw_cpu_section(
     let r3 = r2 + step;
     if !inp.data.gpu.name.is_empty() {
         let hint = format!("GPU: {}", truncate(&inp.data.gpu.name, 26));
+        let muted = c.pal.text_secondary;
         c.text(
             [14, r3, mid - 20, 18],
             hint,
             11,
             false,
-            TEXT_MUTED,
+            muted,
             TextAlign::Left,
         );
     }
@@ -150,13 +157,14 @@ pub(crate) fn draw_gpu_section(
         "GPU".to_owned()
     };
     let bw = 114;
-    fill_pill_badge(c.frame, w - bw - 14, y + 5, bw, 20);
+    fill_pill_badge(c.frame, w - bw - 14, y + 5, bw, 20, c.pal);
+    let acc = c.pal.accent;
     c.text(
         [w - bw - 14, y + 6, bw, 18],
         badge,
         11,
         true,
-        TEXT_CYAN,
+        acc,
         TextAlign::Center,
     );
 
@@ -174,6 +182,7 @@ pub(crate) fn draw_gpu_section(
         (mid - 114).clamp(40, 110),
         7,
         gpu.usage_pct.unwrap_or(0),
+        c.pal,
     );
 
     let clk = gpu
@@ -194,6 +203,7 @@ pub(crate) fn draw_gpu_section(
         (w - vx - 58).clamp(32, 110),
         7,
         vpct,
+        c.pal,
     );
 
     let r2 = r1 + step;
@@ -250,7 +260,7 @@ pub(crate) fn draw_ram_disk_section(
     let bx = (w * 51 / 100).max(245);
     let bw = (w * 15 / 100).clamp(44, 96);
     c.l(14, r1, bx - 18, ram_s);
-    fill_glow_bar(c.frame, bx, r1 + 5, bw, 7, ram.usage_pct);
+    fill_glow_bar(c.frame, bx, r1 + 5, bw, 7, ram.usage_pct, c.pal);
     if let Some(p) = &ram.top_proc {
         let top = format!("Топ: {} ({})", truncate(&p.name, 14), fmt_mem(p.mem_mb));
         let tx = bx + bw + 8;
@@ -268,7 +278,7 @@ pub(crate) fn draw_ram_disk_section(
             0
         };
         c.l(14, ry, 86, format!("Диск {}: {:>2}%", d.letter, d.busy_pct));
-        fill_glow_bar(c.frame, 102, ry + 5, 54, 7, pct);
+        fill_glow_bar(c.frame, 102, ry + 5, 54, 7, pct, c.pal);
         let (rd, wr) = (
             f64::from(d.read_tenths_mb_s) / 10.0,
             f64::from(d.write_tenths_mb_s) / 10.0,
@@ -302,19 +312,21 @@ pub(crate) fn draw_net_section(
     };
     c.l(14, r1, mid - 18, ip);
     c.l(mid, r1, 60, "Трафик:");
+    let acc = c.pal.accent;
+    let ok = c.pal.success;
     c.lc(
         mid + 54,
         r1,
         112,
         format!("▼ {:.1} Мбит/с", f64::from(net.rx_kbps) / 1000.0),
-        TEXT_CYAN,
+        acc,
     );
     c.lc(
         mid + 166,
         r1,
         w - mid - 180,
         format!("▲ {:.1} Мбит/с", f64::from(net.tx_kbps) / 1000.0),
-        TEXT_GREEN,
+        ok,
     );
 
     let r2 = r1 + step;

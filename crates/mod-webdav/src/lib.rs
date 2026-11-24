@@ -1,5 +1,14 @@
+pub mod propfind;
+pub mod sync;
+
 use std::fs;
 use std::path::Path;
+
+pub use propfind::{parent_remote_dir, parse_propfind_xml};
+pub use sync::{
+    load_sync_config, parse_sync_config, save_sync_config, serialize_sync_config, FileSyncConfig,
+    SyncInterval, SyncItem,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum WebDavProvider {
@@ -31,8 +40,16 @@ impl WebDavProvider {
     pub fn label_ru(self) -> &'static str {
         match self {
             Self::Yandex => "Яндекс.Диск",
-            Self::MailRu => "Mail.ru",
-            Self::Custom => "Свой",
+            Self::MailRu => "Облако Mail.ru",
+            Self::Custom => "Свой WebDAV",
+        }
+    }
+
+    pub fn label_en(self) -> &'static str {
+        match self {
+            Self::Yandex => "Yandex.Disk",
+            Self::MailRu => "Mail.ru Cloud",
+            Self::Custom => "Custom WebDAV",
         }
     }
 
@@ -44,19 +61,11 @@ impl WebDavProvider {
         }
     }
 
-    pub fn cred_target(self) -> &'static str {
+    pub fn legacy_cred_target(self) -> &'static str {
         match self {
             Self::Yandex => "asrbox:webdav:yandex",
             Self::MailRu => "asrbox:webdav:mailru",
             Self::Custom => "asrbox:webdav:custom",
-        }
-    }
-
-    pub fn index(self) -> u8 {
-        match self {
-            Self::Yandex => 0,
-            Self::MailRu => 1,
-            Self::Custom => 2,
         }
     }
 
@@ -69,28 +78,20 @@ impl WebDavProvider {
     }
 }
 
-/// Non-secret WebDAV configuration persisted in `data/config/webdav.cfg`.
+/// Non-secret WebDAV server profile persisted in `data/config/webdav.cfg`.
 /// Passwords / App Passwords are NEVER stored here — only in Windows Credential Manager.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WebDavConfig {
+pub struct WebDavServer {
+    pub id: String,
+    pub name: String,
     pub provider: WebDavProvider,
     pub custom_url: String,
     pub username: String,
     pub remote_dir: String,
+    pub legacy_cred_target: Option<String>,
 }
 
-impl Default for WebDavConfig {
-    fn default() -> Self {
-        Self {
-            provider: WebDavProvider::Yandex,
-            custom_url: String::new(),
-            username: String::new(),
-            remote_dir: "/asrbox-backups".to_owned(),
-        }
-    }
-}
-
-impl WebDavConfig {
+impl WebDavServer {
     pub fn effective_url(&self) -> String {
         let raw = match self.provider {
             WebDavProvider::Custom => self.custom_url.trim(),
@@ -100,16 +101,69 @@ impl WebDavConfig {
     }
 
     pub fn normalized_remote_dir(&self) -> String {
-        let trimmed = self.remote_dir.trim().trim_matches('/');
-        if trimmed.is_empty() {
-            "/asrbox-backups".to_owned()
-        } else {
-            format!("/{trimmed}")
-        }
+        normalize_remote_dir(&self.remote_dir)
     }
 
-    pub fn cred_target(&self) -> &'static str {
-        self.provider.cred_target()
+    pub fn cred_target(&self) -> String {
+        if let Some(ref legacy) = self.legacy_cred_target {
+            if !legacy.trim().is_empty() {
+                return legacy.clone();
+            }
+        }
+        format!("asrbox:webdav:srv:{}", self.id)
+    }
+
+    pub fn display_title(&self) -> String {
+        if !self.name.trim().is_empty() {
+            return self.name.clone();
+        }
+        if !self.username.trim().is_empty() {
+            format!("{} ({})", self.provider.label_ru(), self.username.trim())
+        } else {
+            self.provider.label_ru().to_owned()
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct WebDavStore {
+    pub servers: Vec<WebDavServer>,
+}
+
+impl WebDavStore {
+    pub fn find(&self, id: &str) -> Option<&WebDavServer> {
+        self.servers.iter().find(|s| s.id == id)
+    }
+
+    pub fn find_mut(&mut self, id: &str) -> Option<&mut WebDavServer> {
+        self.servers.iter_mut().find(|s| s.id == id)
+    }
+
+    pub fn next_server_id(&self) -> String {
+        let mut idx = self.servers.len() + 1;
+        loop {
+            let candidate = format!("srv-{idx}");
+            if !self.servers.iter().any(|s| s.id == candidate) {
+                return candidate;
+            }
+            idx += 1;
+        }
+    }
+}
+
+pub fn normalize_remote_dir(raw: &str) -> String {
+    let clean: Vec<String> = raw
+        .trim()
+        .replace('\\', "/")
+        .split('/')
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && *s != "." && *s != "..")
+        .map(ToOwned::to_owned)
+        .collect();
+    if clean.is_empty() {
+        "/".to_owned()
+    } else {
+        format!("/{}", clean.join("/"))
     }
 }
 
@@ -124,27 +178,93 @@ pub fn validate_https_url(url: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub fn load_webdav_config(path: &Path) -> WebDavConfig {
+pub fn load_webdav_store(path: &Path) -> WebDavStore {
     let Ok(raw) = fs::read_to_string(path) else {
-        return WebDavConfig::default();
+        return WebDavStore::default();
     };
-    parse_webdav_config(&raw)
+    parse_webdav_store(&raw)
 }
 
-pub fn save_webdav_config(path: &Path, cfg: &WebDavConfig) -> Result<(), String> {
+pub fn save_webdav_store(path: &Path, store: &WebDavStore) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("create_dir_all webdav.cfg: {e}"))?;
     }
     let tmp = path.with_extension("cfg.tmp");
-    fs::write(&tmp, serialize_webdav_config(cfg)).map_err(|e| format!("write webdav.cfg: {e}"))?;
+    fs::write(&tmp, serialize_webdav_store(store)).map_err(|e| format!("write webdav.cfg: {e}"))?;
     let _ = fs::remove_file(path);
     fs::rename(&tmp, path).map_err(|e| format!("rename webdav.cfg: {e}"))?;
     Ok(())
 }
 
-pub fn parse_webdav_config(raw: &str) -> WebDavConfig {
-    let mut cfg = WebDavConfig::default();
-    for line in raw.trim_start_matches('\u{FEFF}').lines() {
+pub fn parse_webdav_store(raw: &str) -> WebDavStore {
+    let text = raw.trim_start_matches('\u{FEFF}');
+    if text.contains("[server]") {
+        return parse_v2_store(text);
+    }
+    migrate_v1_store(text)
+}
+
+fn parse_v2_store(text: &str) -> WebDavStore {
+    let mut store = WebDavStore::default();
+    let mut cur: Option<WebDavServer> = None;
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if trimmed == "[server]" {
+            if let Some(srv) = cur.take() {
+                if !srv.id.is_empty() {
+                    store.servers.push(srv);
+                }
+            }
+            cur = Some(WebDavServer {
+                id: String::new(),
+                name: String::new(),
+                provider: WebDavProvider::Yandex,
+                custom_url: String::new(),
+                username: String::new(),
+                remote_dir: "/asrbox-backups".to_owned(),
+                legacy_cred_target: None,
+            });
+            continue;
+        }
+        let Some((k, v)) = trimmed.split_once('=') else {
+            continue;
+        };
+        let Some(srv) = cur.as_mut() else {
+            continue;
+        };
+        apply_server_field(srv, k.trim(), v.trim());
+    }
+    if let Some(srv) = cur.take() {
+        if !srv.id.is_empty() {
+            store.servers.push(srv);
+        }
+    }
+    store
+}
+
+fn apply_server_field(srv: &mut WebDavServer, key: &str, val: &str) {
+    match key {
+        "id" => srv.id = val.to_owned(),
+        "name" => srv.name = val.to_owned(),
+        "provider" => srv.provider = WebDavProvider::parse(val),
+        "custom_url" => srv.custom_url = val.to_owned(),
+        "username" => srv.username = val.to_owned(),
+        "remote_dir" if !val.is_empty() => srv.remote_dir = normalize_remote_dir(val),
+        "legacy_cred_target" if !val.is_empty() => srv.legacy_cred_target = Some(val.to_owned()),
+        _ => {}
+    }
+}
+
+fn migrate_v1_store(text: &str) -> WebDavStore {
+    let mut provider = WebDavProvider::Yandex;
+    let mut custom_url = String::new();
+    let mut username = String::new();
+    let mut remote_dir = "/asrbox-backups".to_owned();
+    let mut saw_any = false;
+    for line in text.lines() {
         let trimmed = line.trim();
         if trimmed.is_empty() || trimmed.starts_with('#') {
             continue;
@@ -153,27 +273,63 @@ pub fn parse_webdav_config(raw: &str) -> WebDavConfig {
             continue;
         };
         match k.trim() {
-            "provider" => cfg.provider = WebDavProvider::parse(v),
-            "custom_url" => cfg.custom_url = v.trim().to_owned(),
-            "username" => cfg.username = v.trim().to_owned(),
-            "remote_dir" if !v.trim().is_empty() => cfg.remote_dir = v.trim().to_owned(),
+            "provider" => {
+                provider = WebDavProvider::parse(v);
+                saw_any = true;
+            }
+            "custom_url" => custom_url = v.trim().to_owned(),
+            "username" => {
+                username = v.trim().to_owned();
+                if !username.is_empty() {
+                    saw_any = true;
+                }
+            }
+            "remote_dir" if !v.trim().is_empty() => remote_dir = normalize_remote_dir(v),
             _ => {}
         }
     }
-    cfg
+    if !saw_any || (username.is_empty() && custom_url.is_empty()) {
+        return WebDavStore::default();
+    }
+    let name = if username.is_empty() {
+        provider.label_ru().to_owned()
+    } else {
+        format!("{} ({username})", provider.label_ru())
+    };
+    WebDavStore {
+        servers: vec![WebDavServer {
+            id: "srv-1".to_owned(),
+            name,
+            provider,
+            custom_url,
+            username,
+            remote_dir,
+            legacy_cred_target: Some(provider.legacy_cred_target().to_owned()),
+        }],
+    }
 }
 
-pub fn serialize_webdav_config(cfg: &WebDavConfig) -> String {
+pub fn serialize_webdav_store(store: &WebDavStore) -> String {
     let mut out = String::new();
     out.push_str(
-        "# Настройки WebDAV (asrbox) — пароли хранятся только в Windows Credential Manager\n",
+        "# Настройки WebDAV серверов (asrbox) — пароли хранятся только в Windows Credential Manager\n",
     );
-    out.push_str("settings_version=1\n");
+    out.push_str("settings_version=2\n");
     out.push_str(&format!("written_by={}\n", env!("CARGO_PKG_VERSION")));
-    out.push_str(&format!("provider={}\n", cfg.provider.as_str()));
-    out.push_str(&format!("custom_url={}\n", cfg.custom_url.trim()));
-    out.push_str(&format!("username={}\n", cfg.username.trim()));
-    out.push_str(&format!("remote_dir={}\n", cfg.normalized_remote_dir()));
+    for srv in &store.servers {
+        out.push_str("\n[server]\n");
+        out.push_str(&format!("id={}\n", srv.id.trim()));
+        out.push_str(&format!("name={}\n", srv.name.trim()));
+        out.push_str(&format!("provider={}\n", srv.provider.as_str()));
+        out.push_str(&format!("custom_url={}\n", srv.custom_url.trim()));
+        out.push_str(&format!("username={}\n", srv.username.trim()));
+        out.push_str(&format!("remote_dir={}\n", srv.normalized_remote_dir()));
+        if let Some(ref legacy) = srv.legacy_cred_target {
+            if !legacy.trim().is_empty() {
+                out.push_str(&format!("legacy_cred_target={}\n", legacy.trim()));
+            }
+        }
+    }
     out
 }
 
@@ -214,15 +370,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn webdav_config_roundtrip_and_presets() {
-        let cfg = WebDavConfig {
-            provider: WebDavProvider::MailRu,
-            custom_url: String::new(),
-            username: "user@mail.ru".to_owned(),
-            remote_dir: "/asrbox-backups".to_owned(),
-        };
-        assert_eq!(cfg.effective_url(), "https://webdav.cloud.mail.ru");
-        assert_eq!(parse_webdav_config(&serialize_webdav_config(&cfg)), cfg);
+    fn webdav_store_v2_roundtrip_and_v1_migration() {
+        let v1 = "settings_version=1\nprovider=mailru\nusername=user@mail.ru\nremote_dir=/asrbox-backups\n";
+        let migrated = parse_webdav_store(v1);
+        assert_eq!(migrated.servers.len(), 1);
+        assert_eq!(migrated.servers[0].provider, WebDavProvider::MailRu);
+        assert_eq!(migrated.servers[0].cred_target(), "asrbox:webdav:mailru");
+        assert_eq!(
+            parse_webdav_store(&serialize_webdav_store(&migrated)),
+            migrated
+        );
         assert!(validate_https_url("https://webdav.yandex.ru").is_ok());
         assert!(validate_https_url("http://insecure.example").is_err());
         assert_eq!(base64_encode(b"user:pass"), "dXNlcjpwYXNz");

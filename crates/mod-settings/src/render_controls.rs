@@ -1,0 +1,244 @@
+use asrbox_platform_api::{
+    AppLanguage, BgraFrame, FluentPalette, PixelRect, TextAlign, WidgetTextCmd,
+};
+
+use crate::draw::{
+    draw_slider, draw_swatch, draw_toggle, fill_rounded_rect, push_text, stroke_rounded_rect,
+};
+use crate::i18n::tr;
+use crate::layout::{ButtonTone, ControlItem, HitKind};
+use crate::types::SettingsTab;
+
+fn pr(x: i32, y: i32, width: u32, height: u32) -> PixelRect {
+    PixelRect {
+        x,
+        y,
+        width,
+        height,
+    }
+}
+
+pub(crate) fn is_chrome_control(kind: &HitKind) -> bool {
+    matches!(
+        kind,
+        HitKind::Tab(_)
+            | HitKind::BrowserTabSelect { .. }
+            | HitKind::BrowserTabClose { .. }
+            | HitKind::HeaderButton { .. }
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn draw_control(
+    bgra: &mut BgraFrame,
+    texts: &mut Vec<WidgetTextCmd>,
+    ctrl: &ControlItem,
+    active_tab: SettingsTab,
+    selected_dock: usize,
+    hovered: bool,
+    top_y: i32,
+    pal: &FluentPalette,
+    lang: AppLanguage,
+) {
+    let r = ctrl.rect;
+    if !is_chrome_control(&ctrl.kind)
+        && (r.y + r.height as i32 <= top_y || r.y >= bgra.height as i32)
+    {
+        return;
+    }
+    match &ctrl.kind {
+        HitKind::Tab(tab) => {
+            draw_sidebar_tab(bgra, texts, r, *tab, *tab == active_tab, hovered, pal, lang)
+        }
+        HitKind::BrowserTabSelect {
+            label,
+            active,
+            closable,
+            ..
+        } => {
+            draw_browser_tab(bgra, texts, r, label, *active, *closable, hovered, pal);
+        }
+        HitKind::BrowserTabClose { .. } => {
+            if hovered {
+                fill_rounded_rect(bgra, r, 4, pal.control_hover);
+            }
+            push_text(
+                texts,
+                r,
+                "×",
+                13,
+                false,
+                pal.text_secondary,
+                TextAlign::Center,
+            );
+        }
+        HitKind::HeaderButton { label, .. } => {
+            draw_fluent_btn(bgra, texts, r, label, ButtonTone::Secondary, hovered, pal);
+        }
+        HitKind::SelectDock(idx) => {
+            let active = *idx == selected_dock;
+            let lbl = format!("{} #{}", tr(lang, "Док", "Dock"), idx + 1);
+            draw_segment_or_chip(bgra, texts, r, &lbl, active, hovered, pal);
+        }
+        HitKind::SelectDockItem { label, active, .. }
+        | HitKind::Chip { label, active, .. }
+        | HitKind::Segment { label, active, .. } => {
+            draw_segment_or_chip(bgra, texts, r, label, *active, hovered, pal);
+        }
+        HitKind::StartEditServerDir { label, .. } | HitKind::CancelEditServerDir { label } => {
+            draw_fluent_btn(bgra, texts, r, label, ButtonTone::Secondary, hovered, pal);
+        }
+        HitKind::AccentSwatch { preset, active } => {
+            let col = preset.colors(pal.is_dark).0;
+            draw_swatch(bgra, r, col, *active, hovered, pal);
+        }
+        HitKind::Toggle { on, .. } => draw_toggle(bgra, r, *on, hovered, pal),
+        HitKind::Slider {
+            value, min, max, ..
+        } => {
+            let ratio =
+                ((*value).saturating_sub(*min) as f32) / (*max).saturating_sub(*min).max(1) as f32;
+            draw_slider(bgra, r, ratio, hovered, pal);
+        }
+        HitKind::Button { label, tone, .. } => {
+            draw_fluent_btn(bgra, texts, r, label, *tone, hovered, pal);
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn draw_sidebar_tab(
+    bgra: &mut BgraFrame,
+    texts: &mut Vec<WidgetTextCmd>,
+    r: PixelRect,
+    tab: SettingsTab,
+    active: bool,
+    hovered: bool,
+    pal: &FluentPalette,
+    lang: AppLanguage,
+) {
+    if active {
+        fill_rounded_rect(bgra, r, 6, pal.nav_active_bg);
+        fill_rounded_rect(
+            bgra,
+            pr(r.x + 2, r.y + 8, 3, r.height.saturating_sub(16)),
+            2,
+            pal.accent,
+        );
+    } else if hovered {
+        fill_rounded_rect(bgra, r, 6, pal.nav_hover_bg);
+    }
+    push_text(
+        texts,
+        pr(r.x + 14, r.y + 7, r.width.saturating_sub(20), 22),
+        format!("{}  {}", tab.icon(), tab.label(lang)),
+        13,
+        active,
+        if active {
+            pal.text_primary
+        } else {
+            pal.text_secondary
+        },
+        TextAlign::Left,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn draw_browser_tab(
+    bgra: &mut BgraFrame,
+    texts: &mut Vec<WidgetTextCmd>,
+    r: PixelRect,
+    label: &str,
+    active: bool,
+    closable: bool,
+    hovered: bool,
+    pal: &FluentPalette,
+) {
+    if active {
+        fill_rounded_rect(bgra, r, 6, pal.window_bg);
+        stroke_rounded_rect(bgra, r, 6, pal.divider);
+        fill_rounded_rect(
+            bgra,
+            pr(r.x + 10, r.y + 1, r.width.saturating_sub(20), 2),
+            1,
+            pal.accent,
+        );
+    } else if hovered {
+        fill_rounded_rect(bgra, r, 6, pal.nav_hover_bg);
+    }
+    let text_w = r.width.saturating_sub(if closable { 34 } else { 16 });
+    push_text(
+        texts,
+        pr(r.x + 10, r.y + 4, text_w, 20),
+        label,
+        12,
+        active,
+        if active {
+            pal.text_primary
+        } else {
+            pal.text_secondary
+        },
+        TextAlign::Left,
+    );
+}
+
+fn draw_segment_or_chip(
+    bgra: &mut BgraFrame,
+    texts: &mut Vec<WidgetTextCmd>,
+    r: PixelRect,
+    label: &str,
+    active: bool,
+    hovered: bool,
+    pal: &FluentPalette,
+) {
+    let (bg, fg) = if active {
+        (
+            if hovered {
+                pal.accent_hover
+            } else {
+                pal.accent
+            },
+            pal.accent_on,
+        )
+    } else {
+        (
+            if hovered {
+                pal.control_hover
+            } else {
+                pal.control_bg
+            },
+            pal.text_primary,
+        )
+    };
+    fill_rounded_rect(bgra, r, 6, bg);
+    if !active {
+        stroke_rounded_rect(bgra, r, 6, pal.control_border);
+    }
+    push_text(texts, r, label, 12, active, fg, TextAlign::Center);
+}
+
+fn draw_fluent_btn(
+    bgra: &mut BgraFrame,
+    texts: &mut Vec<WidgetTextCmd>,
+    r: PixelRect,
+    label: &str,
+    tone: ButtonTone,
+    hovered: bool,
+    pal: &FluentPalette,
+) {
+    let (bg, fg, bordered) = match (tone, hovered) {
+        (ButtonTone::Primary, false) => (pal.accent, pal.accent_on, false),
+        (ButtonTone::Primary, true) => (pal.accent_hover, pal.accent_on, false),
+        (ButtonTone::Danger, false) => (pal.danger_bg, [255, 255, 255, 255], false),
+        (ButtonTone::Danger, true) => (pal.danger_hover, [255, 255, 255, 255], false),
+        (ButtonTone::Amber, false) => (pal.warn_border, [255, 255, 255, 255], false),
+        (ButtonTone::Amber, true) => (pal.warn_border, [255, 255, 255, 255], false),
+        (ButtonTone::Secondary, false) => (pal.control_bg, pal.text_primary, true),
+        (ButtonTone::Secondary, true) => (pal.control_hover, pal.text_primary, true),
+    };
+    fill_rounded_rect(bgra, r, 6, bg);
+    if bordered {
+        stroke_rounded_rect(bgra, r, 6, pal.control_border);
+    }
+    push_text(texts, r, label, 12, !bordered, fg, TextAlign::Center);
+}

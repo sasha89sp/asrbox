@@ -1,5 +1,7 @@
 pub mod menu;
+pub mod palette;
 pub mod telemetry;
+pub mod theme;
 pub mod tools;
 
 use std::collections::HashSet;
@@ -13,9 +15,14 @@ pub use telemetry::{
     CpuTelemetry, DriveTelemetry, GpuTelemetry, NetTelemetry, OverlayTelemetry, ProcUsage,
     RamTelemetry, SysTelemetry, WidgetSizeBounds,
 };
+pub use theme::{
+    lerp_rgba, load_appearance_config, parse_appearance_config, save_appearance_config,
+    serialize_appearance_config, AccentPreset, AppLanguage, AppearanceConfig, FluentPalette,
+    ThemeMode,
+};
 pub use tools::{
-    AboutUiCommand, DebugUiCommand, ProcessMetrics, SettingsInputRects, SettingsUiEvent,
-    ToolsPlatform, WebDavResult,
+    AboutUiCommand, DebugUiCommand, FluentMenuItem, FluentMenuSpec, FluentQuickBtn, ProcessMetrics,
+    SettingsInputRects, SettingsUiEvent, ToolsPlatform, WebDavDirEntry, WebDavOpKind, WebDavResult,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -278,6 +285,7 @@ pub trait DockPlatform {
     fn pick_icon_file(&mut self) -> Result<Option<PathBuf>, String>;
     fn activate_or_launch_target(&self, path: &Path, focus_running: bool) -> Result<bool, String>;
     fn open_text_file(&self, path: &Path) -> Result<(), String>;
+    fn set_theme(&mut self, palette: FluentPalette);
     fn request_quit(&mut self);
 }
 
@@ -333,4 +341,5 @@ pub trait WidgetPlatform {
     fn start_http_get(&mut self, request_id: u64, url: &str) -> Result<(), String>;
     fn open_url(&self, url: &str) -> Result<(), String>;
     fn open_text_file(&self, path: &Path) -> Result<(), String>;
+    fn set_theme(&mut self, palette: FluentPalette);
 }

@@ -1,34 +1,37 @@
-version: 0.0.4
+version: 0.0.5
 updated: 2026-11-24
-spec_ids: [NF-001, NF-002, NF-005, NF-006, NF-007, DK-019, DK-020, OV-009, ST-003]
+spec_ids: [NF-001, NF-002, NF-005, NF-006, NF-007, NF-010, ST-001, ST-005, ST-007]
 atlas_updated: true
 last_session:
-  goal: "Версия 0.0.4: FSO/Topmost + авто-выход setup в игровом оверлее, исправление конвейера иконок дока (.lnk/серая рамка/альфа), 4 индивидуальных режима имён док-панелей + переименование ярлыков в настройках"
+  goal: "Версия 0.0.5: единый Windows 11 Fluent Design (Light/Dark + 6 акцентов + плавный переход 220 мс), кастомные Fluent-меню, раздел «Общие настройки» с браузерными вкладками (Диагностика, История версий, Обзор WebDAV), неограниченные WebDAV-серверы и синхронизация файлов/папок Windows"
   done:
-    - "Версия workspace поднята до 0.0.4 (Cargo.toml + CHANGELOG.md + specs + ADR-015)"
-    - "mod-overlay + platform-windows: добавлена опция force_topmost_fullscreen (по умолчанию ВКЛ, без DLL-инъекции), WS_EX_TOPMOST при создании, SWP_NOZORDER в click-through и авто-выход из setup_mode при старте игры"
-    - "platform-windows/src/{icons.rs, icons_lnk.rs}: IShellLinkW::GetIconLocation + ExpandEnvironmentStringsW + GetPath, детектор и отсев серой рамки Explorer (has_explorer_frame_box), PrivateExtractIconsW/ExtractIconExW, восстановление прозрачности legacy 1-bit HICON, фолбэк SHGetFileInfoW"
-    - "mod-dock + platform-api + platform-windows + app: строго индивидуальный label_mode на каждую док-панель (IconsOnly, HoverTooltip, IconAndLabel, LabelsOnly), рендер через WidgetFrame (Segoe UI) и тёмные всплывающие подсказки"
-    - "mod-settings + app: вынесен layout_dock.rs, добавлен выбор 4 режимов имён и карточка переименования ярлыков выбранной док-панели (чипы, нативный EDIT, Сохранить/Сбросить)"
+    - "Версия workspace поднята до 0.0.5 (Cargo.toml + CHANGELOG.md + ADR-016 + specs + MAP.md)"
+    - "platform-api + platform-windows + mod-*: FluentPalette (Light/Dark + 6 акцентов + lerp 220 мс, 0% CPU в покое), appearance.cfg, язык RU/EN, DWMWA_USE_IMMERSIVE_DARK_MODE и IPC SetTheme во все воркеры"
+    - "platform-windows/src/fluent_menu*.rs: кастомные слоистые Fluent-меню (трей, доки, виджеты, выбор нового WebDAV-сервера) с быстрыми кнопками и подменю"
+    - "mod-settings: объединённый раздел «Общие настройки» (1. Тема/акцент, 2. Язык/автозагрузка, 3. Бэкап/WebDAV/Синхронизация, 4. Диагностика, 5. История версий, 6. Пути) + верхняя панель браузерных вкладок внутри одного окна"
+    - "mod-webdav + platform-windows + app: неограниченные серверы WebDAV (миграция v1->v2 с сохранением asrbox:webdav:mailru), PROPFIND/MKCOL-навигатор папок и периодическая синхронизация файлов/папок Windows (sync.cfg)"
+    - "Рефакторинг всех 16 файлов > 400 строк: все .rs файлы workspace строго <= 400 строк после cargo fmt"
   not_done:
     - "Прогон GitHub Actions (.github/workflows/ci.yml) на windows-latest"
-    - "Живая проверка на Windows 10/11: FSO-игры с оверлеем, иконки .lnk/старых утилит, 4 режима имён и переименование ярлыков"
+    - "Живая проверка на Windows 10/11: плавная смена Light/Dark, Fluent-меню, обзор/создание папок WebDAV, синхронизация файлов/папок и браузерные вкладки Диагностики/Истории версий"
   verified:
     ci_build: false
     tests: true
     manual_run: false
 open_bugs: [BUG-003, BUG-004, BUG-005]
-next_step: "Запустить GitHub Actions (windows-latest), скачать asrbox.exe v0.0.4 и проверить оверлей поверх FSO-игры, исправленные иконки дока и 4 индивидуальных режима имён с переименованием"
+next_step: "Запустить GitHub Actions (windows-latest), скачать asrbox.exe v0.0.5 и проверить Fluent Light/Dark + кастомные меню, Общие настройки, браузерные вкладки и WebDAV-обзор/синхронизацию"
 touched_files:
-  - Cargo.toml, CHANGELOG.md, ATLAS.md, ARCHITECTURE.md, DECISIONS.md, HANDOFF.yaml
-  - specs/ (mod-dock.md, mod-overlay.md, mod-settings.md)
-  - crates/platform-api/src/ (lib.rs, menu.rs)
-  - crates/mod-overlay/src/ (config.rs, lib.rs)
-  - crates/platform-windows/ (Cargo.toml, MAP.md, src/lib.rs, src/icons.rs, src/icons_lnk.rs, src/widget_win.rs, src/widget_text.rs, src/dock_win.rs, src/dock_menu.rs)
-  - crates/mod-dock/ (MAP.md, src/lib.rs, src/labels.rs, src/config.rs, src/storage.rs, src/layout.rs, src/render.rs, src/render_ops.rs, src/state.rs)
-  - crates/mod-settings/ (MAP.md, src/lib.rs, src/types.rs, src/layout.rs, src/layout_dock.rs, src/layout_tabs.rs, src/layout_overlay.rs, src/render.rs)
-  - crates/app/src/ (dock_ops.rs, docks.rs, settings_ctl.rs, worker_overlay.rs, selftest.rs)
+  - Cargo.toml, CHANGELOG.md, ATLAS.md, ARCHITECTURE.md, DECISIONS.md, HANDOFF.yaml, specs/mod-settings.md
+  - crates/core/src/ipc.rs
+  - crates/platform-api/ (MAP.md, src/lib.rs, src/theme.rs, src/palette.rs, src/tools.rs)
+  - crates/platform-windows/ (MAP.md, src/lib.rs, src/fluent_menu*.rs, src/webdav_*.rs, src/settings_*.rs, src/tools_*.rs, src/tray*.rs, src/dock_menu.rs, src/widget_menu.rs, src/shell.rs, src/window.rs)
+  - crates/mod-webdav/ (MAP.md, src/lib.rs, src/propfind.rs, src/sync.rs)
+  - crates/mod-settings/ (MAP.md, src/lib.rs, src/events.rs, src/tests.rs, src/types.rs, src/layout*.rs, src/render*.rs, src/draw.rs)
+  - crates/mod-dock/ (MAP.md, src/render.rs, src/render_marks.rs, src/labels.rs)
+  - crates/mod-widgets/ (MAP.md, src/calendar.rs, src/calendar_view.rs, src/render.rs, src/sys_*.rs)
+  - crates/mod-overlay/src/ (lib.rs, render.rs)
+  - crates/app/ (MAP.md, src/main.rs, src/dock_events.rs, src/backup_ctl.rs, src/webdav_ctl.rs, src/settings_*.rs, src/worker*.rs, src/selftest*.rs)
 warnings:
-  - "Ожидает сборки на GitHub Actions (windows-latest). Эксклюзивный старый полноэкранный режим DX9/11 без FSO физически скрывает любые окна без DLL-инъекции"
+  - "Ожидает сборки на GitHub Actions (windows-latest). Локально проверены Linux-тесты, --selftest, atlas-check, fmt и кросс-clippy x86_64-pc-windows-msvc"
 ideas:
   - "Глобальный хоткей показа/скрытия игрового оверлея"

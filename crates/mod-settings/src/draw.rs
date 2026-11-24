@@ -1,4 +1,4 @@
-use asrbox_platform_api::{BgraFrame, PixelRect, TextAlign, WidgetTextCmd};
+use asrbox_platform_api::{BgraFrame, FluentPalette, PixelRect, TextAlign, WidgetTextCmd};
 
 pub fn fill_rect(frame: &mut BgraFrame, rect: PixelRect, rgba: [u8; 4]) {
     let x0 = rect.x.max(0);
@@ -101,36 +101,56 @@ pub fn stroke_rounded_rect(frame: &mut BgraFrame, rect: PixelRect, radius: i32, 
     }
 }
 
-pub fn draw_toggle(frame: &mut BgraFrame, rect: PixelRect, on: bool, hovered: bool) {
+pub fn draw_toggle(
+    frame: &mut BgraFrame,
+    rect: PixelRect,
+    on: bool,
+    hovered: bool,
+    pal: &FluentPalette,
+) {
     let track = if on {
         if hovered {
-            [244, 140, 90, 255]
+            pal.accent_hover
         } else {
-            [232, 122, 72, 255]
+            pal.accent
         }
     } else if hovered {
-        [78, 82, 96, 255]
+        pal.control_hover
     } else {
-        [56, 59, 70, 255]
+        pal.control_bg
     };
     let radius = (rect.height / 2) as i32;
     fill_rounded_rect(frame, rect, radius, track);
-    let knob = rect.height.saturating_sub(4).max(8);
+    if !on {
+        stroke_rounded_rect(frame, rect, radius, pal.control_border);
+    }
+    let knob = rect.height.saturating_sub(6).max(10);
     let kx = if on {
-        rect.x + rect.width as i32 - knob as i32 - 2
+        rect.x + rect.width as i32 - knob as i32 - 3
     } else {
-        rect.x + 2
+        rect.x + 3
     };
     let knob_rect = PixelRect {
         x: kx,
-        y: rect.y + 2,
+        y: rect.y + 3,
         width: knob,
         height: knob,
     };
-    fill_rounded_rect(frame, knob_rect, (knob / 2) as i32, [255, 255, 255, 255]);
+    let knob_col = if on {
+        pal.accent_on
+    } else {
+        pal.text_secondary
+    };
+    fill_rounded_rect(frame, knob_rect, (knob / 2) as i32, knob_col);
 }
 
-pub fn draw_slider(frame: &mut BgraFrame, rect: PixelRect, ratio: f32, hovered: bool) {
+pub fn draw_slider(
+    frame: &mut BgraFrame,
+    rect: PixelRect,
+    ratio: f32,
+    hovered: bool,
+    pal: &FluentPalette,
+) {
     let clamped = ratio.clamp(0.0, 1.0);
     let track_h = 4u32;
     let track_y = rect.y + (rect.height as i32 - track_h as i32) / 2;
@@ -140,7 +160,7 @@ pub fn draw_slider(frame: &mut BgraFrame, rect: PixelRect, ratio: f32, hovered: 
         width: rect.width,
         height: track_h,
     };
-    fill_rounded_rect(frame, track, 2, [52, 55, 66, 255]);
+    fill_rounded_rect(frame, track, 2, pal.control_border);
     let fill_w = ((rect.width as f32) * clamped).round() as u32;
     if fill_w > 0 {
         let filled = PixelRect {
@@ -149,7 +169,7 @@ pub fn draw_slider(frame: &mut BgraFrame, rect: PixelRect, ratio: f32, hovered: 
             width: fill_w.min(rect.width),
             height: track_h,
         };
-        fill_rounded_rect(frame, filled, 2, [232, 122, 72, 255]);
+        fill_rounded_rect(frame, filled, 2, pal.accent);
     }
     let knob = if hovered { 18u32 } else { 16u32 };
     let travel = rect.width.saturating_sub(knob) as f32;
@@ -161,8 +181,45 @@ pub fn draw_slider(frame: &mut BgraFrame, rect: PixelRect, ratio: f32, hovered: 
         width: knob,
         height: knob,
     };
-    fill_rounded_rect(frame, knob_rect, (knob / 2) as i32, [255, 255, 255, 255]);
-    stroke_rounded_rect(frame, knob_rect, (knob / 2) as i32, [20, 20, 24, 90]);
+    fill_rounded_rect(frame, knob_rect, (knob / 2) as i32, pal.card_bg);
+    stroke_rounded_rect(frame, knob_rect, (knob / 2) as i32, pal.control_border);
+    let inner_d = knob.saturating_sub(8).max(6);
+    let inner_rect = PixelRect {
+        x: kx + ((knob - inner_d) / 2) as i32,
+        y: ky + ((knob - inner_d) / 2) as i32,
+        width: inner_d,
+        height: inner_d,
+    };
+    fill_rounded_rect(frame, inner_rect, (inner_d / 2) as i32, pal.accent);
+}
+
+pub fn draw_swatch(
+    frame: &mut BgraFrame,
+    rect: PixelRect,
+    color: [u8; 4],
+    active: bool,
+    hovered: bool,
+    pal: &FluentPalette,
+) {
+    let rad = (rect.width.min(rect.height) / 2) as i32;
+    if active {
+        stroke_rounded_rect(frame, rect, rad, pal.text_primary);
+    } else if hovered {
+        stroke_rounded_rect(frame, rect, rad, pal.control_border);
+    }
+    let inset = if active { 4 } else { 3 };
+    let inner = PixelRect {
+        x: rect.x + inset,
+        y: rect.y + inset,
+        width: rect.width.saturating_sub((inset * 2) as u32),
+        height: rect.height.saturating_sub((inset * 2) as u32),
+    };
+    fill_rounded_rect(
+        frame,
+        inner,
+        (inner.width.min(inner.height) / 2) as i32,
+        color,
+    );
 }
 
 pub fn push_text(

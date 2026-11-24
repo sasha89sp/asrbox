@@ -2,6 +2,10 @@ use std::path::PathBuf;
 
 const EMBEDDED_CHANGELOG: &str = include_str!("../../../CHANGELOG.md");
 
+pub fn changelog_text() -> &'static str {
+    EMBEDDED_CHANGELOG
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppPaths {
     pub exe_path: PathBuf,
@@ -13,6 +17,8 @@ pub struct AppPaths {
     pub overlay_cfg: PathBuf,
     pub backup_cfg: PathBuf,
     pub webdav_cfg: PathBuf,
+    pub appearance_cfg: PathBuf,
+    pub sync_cfg: PathBuf,
     pub backups_dir: PathBuf,
     pub cache_dir: PathBuf,
     pub logs_dir: PathBuf,
@@ -34,6 +40,8 @@ impl AppPaths {
             overlay_cfg: config_dir.join("overlay.cfg"),
             backup_cfg: config_dir.join("backup.cfg"),
             webdav_cfg: config_dir.join("webdav.cfg"),
+            appearance_cfg: config_dir.join("appearance.cfg"),
+            sync_cfg: config_dir.join("sync.cfg"),
             backups_dir: data_dir.join("backups"),
             cache_dir: data_dir.join("cache"),
             logs_dir: data_dir.join("logs"),
@@ -73,24 +81,28 @@ pub fn build_paths_clipboard(paths: &AppPaths) -> String {
         "Исполняемый файл : {}\r\n\
          Папка программы  : {}\r\n\
          Папка данных     : {}\r\n\
+         Оформление       : {}\r\n\
          Настройки доков  : {}\r\n\
          Настройки календ.: {}\r\n\
          Системн. монитор : {}\r\n\
          Игровой оверлей  : {}\r\n\
          Настройки бэкапа : {}\r\n\
          Настройки WebDAV : {}\r\n\
+         Синхронизация    : {}\r\n\
          Папка бэкапов    : {}\r\n\
          Кэш календарей   : {}\r\n\
          Логи и отчёты    : {}\r\n",
         paths.exe_path.display(),
         paths.exe_dir.display(),
         paths.data_dir.display(),
+        paths.appearance_cfg.display(),
         paths.docks_cfg.display(),
         paths.widgets_cfg.display(),
         paths.sysmon_cfg.display(),
         paths.overlay_cfg.display(),
         paths.backup_cfg.display(),
         paths.webdav_cfg.display(),
+        paths.sync_cfg.display(),
         paths.backups_dir.display(),
         paths.cache_dir.display(),
         paths.logs_dir.display(),
@@ -107,14 +119,17 @@ mod tests {
             PathBuf::from("D:\\Tools\\asrbox\\asrbox.exe"),
             PathBuf::from("D:\\Tools\\asrbox\\data"),
         );
-        let text = build_about_text("0.0.3", &paths);
-        assert!(text.contains("asrbox v0.0.3"));
+        let text = build_about_text("0.0.5", &paths);
+        assert!(text.contains("asrbox v0.0.5"));
         assert!(text.contains("ПОРТАТИВНАЯ СБОРКА"));
+        assert!(text.contains("appearance.cfg"));
+        assert!(text.contains("sync.cfg"));
         assert!(text.contains("widgets.cfg"));
         assert!(text.contains("docks.cfg"));
         assert!(text.contains("overlay.cfg"));
         assert!(text.contains("backup.cfg"));
         assert!(text.contains("webdav.cfg"));
         assert!(text.contains("CHANGELOG"));
+        assert!(!changelog_text().is_empty());
     }
 }
