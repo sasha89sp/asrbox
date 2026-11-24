@@ -8,6 +8,7 @@ mod dock_drag;
 mod dock_events;
 #[cfg(windows)]
 mod dock_ops;
+mod dock_shortcuts;
 #[cfg(windows)]
 mod docks;
 mod selftest;
@@ -111,6 +112,8 @@ fn run_worker_mode(_module: &str, _parent_pid: u32, _safe_mode: bool) -> Result<
 
 #[cfg(windows)]
 fn run_worker_mode(module: &str, parent_pid: u32, safe_mode: bool) -> Result<(), String> {
+    let paths = resolve_app_paths();
+    install_crash_log_hook(&paths.logs_dir);
     let id = ModuleId::from_str_id(module).ok_or_else(|| format!("unknown worker: {module}"))?;
     worker::run_worker(id, parent_pid, safe_mode)
 }
@@ -124,13 +127,14 @@ fn run_app(_safe_mode: bool, _force_inproc: bool) -> Result<(), String> {
 fn run_app(safe_mode: bool, force_inproc: bool) -> Result<(), String> {
     use asrbox_platform_windows::{SingleInstanceGuard, WindowsDockHost, WindowsIconProvider};
 
+    let paths = resolve_app_paths();
+    install_crash_log_hook(&paths.logs_dir);
     let Some(_guard) = SingleInstanceGuard::acquire("Local\\asrbox_single_instance_v1")? else {
         return Ok(());
     };
     let tooltip = format!("asrbox v{APP_VERSION}");
     let mut host = WindowsDockHost::new(&tooltip)?;
     let work_area = to_dock_rect(host.primary_work_area()?);
-    let paths = resolve_app_paths();
     let mut modules_cfg =
         load_modules_config(&paths.data_dir.join("config").join("modules.cfg")).unwrap_or_default();
     if force_inproc {
@@ -327,3 +331,37 @@ impl<I: IconProvider> AppController<I> {
         }
     }
 }
+
+#[cfg(windows)]
+fn install_crash_log_hook(logs_dir: &std::path::Path) {
+    use std::fs::{self, OpenOptions};
+    use std::io::Write;
+    let dir = logs_dir.to_path_buf();
+    let prev = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = fs::create_dir_all(&dir);
+        if let Ok(mut file) = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(dir.join("crash.log"))
+        {
+            let loc = info.location().map_or_else(
+                || "unknown".to_owned(),
+                |l| format!("{}:{}:{}", l.file(), l.line(), l.column()),
+            );
+            let msg = info
+                .payload()
+                .downcast_ref::<&str>()
+                .copied()
+                .or_else(|| info.payload().downcast_ref::<String>().map(String::as_str))
+                .unwrap_or("<non-string panic>");
+            let _ = writeln!(
+                file,
+                "[v{APP_VERSION}] pid={} panic at {loc}: {msg}",
+                std::process::id()
+            );
+        }
+        prev(info);
+    }));
+}
+

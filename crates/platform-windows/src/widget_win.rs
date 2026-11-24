@@ -14,6 +14,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
 };
 
+use crate::font_engine::set_active_font_renderer;
 use crate::http::spawn_http_get;
 use crate::overlay_telemetry::request_overlay_sample;
 use crate::present_layered_bgra;
@@ -142,15 +143,7 @@ impl WidgetPlatform for WindowsDockHost {
             unsafe {
                 if visible {
                     let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
-                    let _ = SetWindowPos(
-                        hwnd,
-                        Some(HWND_TOPMOST),
-                        0,
-                        0,
-                        0,
-                        0,
-                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-                    );
+                    let _ = SetWindowPos(hwnd, Some(HWND_TOPMOST), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
                 } else {
                     let _ = ShowWindow(hwnd, SW_HIDE);
                 }
@@ -264,6 +257,7 @@ impl WidgetPlatform for WindowsDockHost {
 
     fn set_theme(&mut self, palette: asrbox_platform_api::FluentPalette) {
         self.theme = palette;
+        set_active_font_renderer(palette.font_renderer);
     }
 }
 

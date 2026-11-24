@@ -51,6 +51,8 @@ pub enum SlotKind {
 pub struct HoverVisualState {
     pub item_id: Option<u64>,
     pub progress: f32,
+    pub bounce_item_id: Option<u64>,
+    pub bounce_offset_px: i32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -80,7 +82,10 @@ pub fn compute_layout(config: &DockConfig, work_area: Rect, hover: HoverVisualSt
     let bar_cross = cross_slot.saturating_add(padding.saturating_mul(2));
 
     let max_scale = effective_mode_scale(config);
-    let zoom_extra = ((icon as f32) * (max_scale - 1.0)).ceil().max(0.0) as u32;
+    let mut zoom_extra = ((icon as f32) * (max_scale - 1.0)).ceil().max(0.0) as u32;
+    if config.launch_animation_enabled {
+        zoom_extra = zoom_extra.max(16);
+    }
     let side_pad = zoom_extra / 2;
 
     let (win_w, win_h, bar_rect) =
@@ -278,11 +283,18 @@ impl SlotCtx {
         } else {
             1.0
         };
+        let mut visual_rect = scale_slot_rect(base_rect, scale, self.edge);
+        if kind == SlotKind::Shortcut
+            && self.hover.bounce_item_id == Some(item_id)
+            && self.hover.bounce_offset_px > 0
+        {
+            visual_rect = apply_bounce_offset(visual_rect, self.hover.bounce_offset_px, self.edge);
+        }
         DockSlotLayout {
             item_id,
             kind,
             base_rect,
-            visual_rect: scale_slot_rect(base_rect, scale, self.edge),
+            visual_rect,
             scale,
         }
     }
@@ -361,5 +373,20 @@ fn scale_slot_rect(base: Rect, scale: f32, edge: DockEdge) -> Rect {
         y,
         width: scaled_w,
         height: scaled_h,
+    }
+}
+
+fn apply_bounce_offset(r: Rect, px: i32, edge: DockEdge) -> Rect {
+    let (dx, dy) = match edge {
+        DockEdge::Bottom => (0, -px),
+        DockEdge::Top => (0, px),
+        DockEdge::Left => (px, 0),
+        DockEdge::Right => (-px, 0),
+    };
+    Rect {
+        x: r.x.saturating_add(dx),
+        y: r.y.saturating_add(dy),
+        width: r.width,
+        height: r.height,
     }
 }

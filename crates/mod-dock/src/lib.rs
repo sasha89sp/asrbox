@@ -63,6 +63,7 @@ pub fn build_menu_state(dock: &DockInstance, pt: Point, can_remove: bool) -> Doc
         hover_zoom_enabled: cfg.hover_zoom.enabled,
         show_running_indicator: cfg.show_running_indicator,
         focus_running_window: cfg.focus_running_window,
+        launch_animation_enabled: cfg.launch_animation_enabled,
         hovered_item_id,
         hovered_is_separator,
         show_settings_button: cfg.show_settings_button,
@@ -113,6 +114,9 @@ pub fn apply_menu_action(
         }
         DockMenuAction::ToggleFocusRunning => {
             cfg.focus_running_window = !cfg.focus_running_window;
+        }
+        DockMenuAction::ToggleLaunchAnimation => {
+            cfg.launch_animation_enabled = !cfg.launch_animation_enabled;
         }
         DockMenuAction::ChooseItemIcon(id) => {
             let Some(path) = picked_icon else {

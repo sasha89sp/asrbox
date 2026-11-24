@@ -1,6 +1,9 @@
 use asrbox_core::{IsolationMode, ModuleId};
-use asrbox_platform_api::{AccentPreset, AppLanguage, ThemeMode, WebDavDirEntry, WidgetLayer};
+use asrbox_platform_api::{
+    AccentPreset, AppLanguage, FontRenderer, ThemeMode, WebDavDirEntry, WidgetLayer,
+};
 
+pub use crate::actions::{SettingsAction, SliderKind};
 use crate::i18n::tr;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -72,18 +75,22 @@ impl BrowserTab {
         !matches!(self, Self::Main)
     }
 }
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppearanceSettingsView {
     pub theme: ThemeMode,
     pub accent: AccentPreset,
     pub language: AppLanguage,
+    pub font_renderer: FontRenderer,
 }
+
 impl Default for AppearanceSettingsView {
     fn default() -> Self {
         Self {
             theme: ThemeMode::Dark,
             accent: AccentPreset::Blue,
             language: AppLanguage::Ru,
+            font_renderer: FontRenderer::GdiClearType,
         }
     }
 }
@@ -115,6 +122,7 @@ pub struct DockSettingsView {
     pub locked: bool,
     pub show_running_indicator: bool,
     pub focus_running_window: bool,
+    pub launch_animation_enabled: bool,
     pub item_count: usize,
     pub items: Vec<DockItemView>,
 }
@@ -262,138 +270,4 @@ pub struct SettingsSnapshot {
     pub backup: BackupSettingsView,
     pub diagnostics: DiagnosticsLiveView,
     pub about: AboutSettingsView,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SettingsAction {
-    // Appearance & general
-    SetThemeMode(ThemeMode),
-    SetAccentPreset(AccentPreset),
-    SetLanguage(AppLanguage),
-    ResetSection(SettingsTab),
-    SetIsolation(IsolationMode),
-    SetAutostart(bool),
-    SetModuleEnabled { id: ModuleId, enabled: bool },
-    RestartModule(ModuleId),
-    // Dock
-    AddDock,
-    RemoveDock(String),
-    AddDockSeparator(String),
-    SetDockEdge { dock_id: String, edge_index: u8 },
-    SetDockLayer { dock_id: String, layer: WidgetLayer },
-    SetDockLabelMode { dock_id: String, mode_index: u8 },
-    SetDockIconSize { dock_id: String, size_px: u32 },
-    SetDockOpacity { dock_id: String, opacity: u8 },
-    SetDockLocked { dock_id: String, locked: bool },
-    SetDockShowRunning { dock_id: String, enabled: bool },
-    SetDockFocusRunning { dock_id: String, enabled: bool },
-    RenameDockItemFromInput { dock_id: String, item_id: u64 },
-    ResetDockItemLabel { dock_id: String, item_id: u64 },
-    OpenDocksConfig,
-    // Calendar
-    SetCalendarVisible(bool),
-    SetCalendarOpacity(u8),
-    SetCalendarLayer(WidgetLayer),
-    SetCalendarPeriod(u8),
-    SetCalendarSyncInterval(u32),
-    SetCalendarWidth(u32),
-    SetCalendarRows(u8),
-    MatchCalendarToSysMonitor,
-    AddCalendarUrlFromInput,
-    RemoveCalendarSource(usize),
-    UncommentCalendarSources,
-    RefreshCalendarNow,
-    OpenWidgetsConfig,
-    // System Monitor
-    SetSysMonitorVisible(bool),
-    SetSysMonitorOpacity(u8),
-    SetSysMonitorLayer(WidgetLayer),
-    SetSysMonitorRefreshMs(u32),
-    SetSysMonitorWidth(u32),
-    SetSysMonitorHeight(u32),
-    MatchSysMonitorToCalendar,
-    RefreshSysMonitorNow,
-    OpenSysMonitorConfig,
-    // Game Overlay
-    SetOverlayAutoGamesOnly(bool),
-    SetOverlayForceTopmost(bool),
-    SetOverlaySetupMode(bool),
-    SetOverlayAnchor(u8),
-    SetOverlayOpacity(u8),
-    SetOverlayWidth(u32),
-    SetOverlayHeight(u32),
-    SetOverlaySizePreset(u32, u32),
-    SetOverlayRefreshMs(u32),
-    OpenOverlayConfig,
-    // Backup, Multi-server WebDAV & Sync
-    BackupSettingsNow,
-    BackupFullNow,
-    UploadLatestBackupNow,
-    OpenBackupsFolder,
-    SetAutoUploadBackup(bool),
-    ToggleBackupTargetServer(String),
-    OpenAddWebDavMenu,
-    TestWebDavDraft,
-    SaveWebDavDraft,
-    CancelWebDavDraft,
-    TestWebDavServer(String),
-    DeleteWebDavServer(String),
-    SaveWebDavServerRemoteDir(String),
-    OpenWebDavBrowser(String),
-    WebDavBrowseDir { server_id: String, path: String },
-    WebDavBrowseUp(String),
-    WebDavCreateFolderFromInput(String),
-    WebDavSelectCurrentFolder(String),
-    PickSyncFiles,
-    PickSyncFolder,
-    RemoveSyncItem(String),
-    ToggleSyncServer(String),
-    SetSyncIntervalMin(u32),
-    SyncFilesNow,
-    // Diagnostics & Version History (browser tabs) & Paths
-    OpenDiagnosticsTab,
-    SetDiagnosticsMonitorEnabled(bool),
-    SetDebugVerbose(bool),
-    SetDebugFileLog(bool),
-    CycleDebugFilter,
-    ClearDebugLogs,
-    CopyDebugReport,
-    SaveDebugReport,
-    OpenVersionHistoryTab,
-    CopyVersionInfo,
-    OpenDataFolder,
-    CopyPathsToClipboard,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SliderKind {
-    DockIconSize,
-    DockOpacity,
-    CalendarOpacity,
-    CalendarWidth,
-    CalendarRows,
-    SysMonitorOpacity,
-    SysMonitorWidth,
-    SysMonitorHeight,
-    OverlayOpacity,
-    OverlayWidth,
-    OverlayHeight,
-}
-
-impl SliderKind {
-    pub fn range(self) -> (u32, u32) {
-        match self {
-            Self::DockIconSize => (24, 128),
-            Self::DockOpacity
-            | Self::CalendarOpacity
-            | Self::SysMonitorOpacity
-            | Self::OverlayOpacity => (20, 100),
-            Self::CalendarWidth => (280, 860),
-            Self::CalendarRows => (3, 16),
-            Self::SysMonitorWidth => (440, 900),
-            Self::SysMonitorHeight => (380, 780),
-            Self::OverlayWidth => (220, 640),
-            Self::OverlayHeight => (132, 380),
-        }
-    }
 }

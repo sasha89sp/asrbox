@@ -26,7 +26,10 @@ impl SettingsUiState {
             }
             SettingsUiEvent::PointerMove { x, y } => self.on_pointer_move(x, y, snap),
             SettingsUiEvent::MouseDown { x, y } => self.on_mouse_down(x, y, snap),
-            SettingsUiEvent::MouseUp { .. } => (self.dragging_slider.take().is_some(), None),
+            SettingsUiEvent::MouseUp { .. } => {
+                self.last_slider_val = None;
+                (self.dragging_slider.take().is_some(), None)
+            }
             SettingsUiEvent::InputChanged { slot, text } => {
                 if slot == 3 && self.search_query != text {
                     self.search_query = text;
@@ -38,6 +41,7 @@ impl SettingsUiState {
             SettingsUiEvent::AnimTick { .. } => (self.anim_start.is_some(), None),
             SettingsUiEvent::Closed => {
                 self.dragging_slider = None;
+                self.last_slider_val = None;
                 self.hovered_id = None;
                 self.anim_start = None;
                 (false, None)
@@ -53,6 +57,10 @@ impl SettingsUiState {
     ) -> (bool, Option<SettingsAction>) {
         if let Some((kind, rect)) = self.dragging_slider {
             let val = slider_value_from_x(kind, rect, x);
+            if self.last_slider_val == Some(val) {
+                return (false, None);
+            }
+            self.last_slider_val = Some(val);
             return (true, self.slider_action(kind, val, snap));
         }
         let hit = self.hit_control(x, y).map(|c| c.id);
@@ -126,6 +134,7 @@ impl SettingsUiState {
             HitKind::Slider { kind, .. } => {
                 self.dragging_slider = Some((kind, ctrl.rect));
                 let val = slider_value_from_x(kind, ctrl.rect, x);
+                self.last_slider_val = Some(val);
                 (true, self.slider_action(kind, val, snap))
             }
         }

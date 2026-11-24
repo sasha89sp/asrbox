@@ -180,15 +180,39 @@ impl AppLanguage {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FontRenderer {
+    #[default]
+    GdiClearType,
+    DirectWrite,
+}
+
+impl FontRenderer {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::GdiClearType => "gdi_cleartype",
+            Self::DirectWrite => "directwrite",
+        }
+    }
+
+    pub fn parse(raw: &str) -> Self {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "directwrite" | "dwrite" => Self::DirectWrite,
+            _ => Self::GdiClearType,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct AppearanceConfig {
     pub theme: ThemeMode,
     pub accent: AccentPreset,
     pub language: AppLanguage,
+    pub font_renderer: FontRenderer,
 }
 
 impl AppearanceConfig {
     pub fn palette(self) -> FluentPalette {
-        FluentPalette::from_theme(self.theme, self.accent)
+        FluentPalette::from_theme(self.theme, self.accent).with_font_renderer(self.font_renderer)
     }
 }
 
@@ -225,6 +249,7 @@ pub fn parse_appearance_config(raw: &str) -> AppearanceConfig {
             "theme" => cfg.theme = ThemeMode::parse(v),
             "accent" => cfg.accent = AccentPreset::parse(v),
             "language" => cfg.language = AppLanguage::parse(v),
+            "font_renderer" => cfg.font_renderer = FontRenderer::parse(v),
             _ => {}
         }
     }
@@ -237,10 +262,12 @@ pub fn serialize_appearance_config(cfg: &AppearanceConfig) -> String {
          settings_version=1\n\
          theme={}\n\
          accent={}\n\
-         language={}\n",
+         language={}\n\
+         font_renderer={}\n",
         cfg.theme.as_str(),
         cfg.accent.as_str(),
         cfg.language.as_str(),
+        cfg.font_renderer.as_str(),
     )
 }
 

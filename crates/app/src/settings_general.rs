@@ -93,6 +93,12 @@ impl<I: IconProvider> AppController<I> {
                     self.apply_appearance_change(host, true);
                 }
             }
+            SettingsAction::SetFontRenderer(renderer) => {
+                if self.appearance.font_renderer != *renderer {
+                    self.appearance.font_renderer = *renderer;
+                    self.apply_appearance_change(host, false);
+                }
+            }
             SettingsAction::SetLanguage(lang) => {
                 if self.appearance.language != *lang {
                     self.appearance.language = *lang;

@@ -15,6 +15,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 use crate::dock_menu::show_dock_context_menu;
 use crate::dock_proc::{remove_dock_layer_meta, set_dock_layer_meta};
+use crate::font_engine::set_active_font_renderer;
 use crate::present_layered_bgra;
 use crate::query_primary_work_area;
 use crate::running::{activate_or_launch_target, query_running_exe_names, resolve_target_exe_name};
@@ -207,6 +208,7 @@ impl DockPlatform for WindowsDockHost {
 
     fn set_theme(&mut self, palette: asrbox_platform_api::FluentPalette) {
         self.theme = palette;
+        set_active_font_renderer(palette.font_renderer);
     }
 
     fn request_quit(&mut self) {

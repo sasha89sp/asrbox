@@ -1,3 +1,4 @@
+pub mod actions;
 pub mod draw;
 mod events;
 pub mod i18n;
@@ -50,6 +51,7 @@ pub struct SettingsUiState {
     pub scroll_y: i32,
     pub(crate) hovered_id: Option<usize>,
     pub(crate) dragging_slider: Option<(SliderKind, PixelRect)>,
+    pub(crate) last_slider_val: Option<u32>,
     pub(crate) last_dock_input_key: Option<(String, u64)>,
     pub(crate) pending_aux_prefill: Option<String>,
     pub(crate) anim_from: FluentPalette,
@@ -74,6 +76,7 @@ impl Default for SettingsUiState {
             scroll_y: 0,
             hovered_id: None,
             dragging_slider: None,
+            last_slider_val: None,
             last_dock_input_key: None,
             pending_aux_prefill: None,
             anim_from: pal,

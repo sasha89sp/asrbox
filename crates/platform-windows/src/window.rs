@@ -17,7 +17,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 use crate::app_icon::{cleanup_app_icons, large_app_icon, small_app_icon};
 use crate::dock_proc::dock_wnd_proc;
+use crate::dwrite_text::cleanup_dwrite_cache;
 use crate::fluent_menu::fluent_menu_wnd_proc;
+use crate::font_engine::cleanup_font_cache;
 use crate::http::{drain_http_results, WM_HTTP_DONE};
 use crate::metrics::ProcessMetricsSampler;
 use crate::overlay_telemetry::{drain_overlay_results, WM_OVERLAY_DONE};
@@ -218,6 +220,8 @@ impl Drop for WindowsDockHost {
             let _ = DestroyWindow(self.host_hwnd);
         }
         cleanup_app_icons();
+        cleanup_font_cache();
+        cleanup_dwrite_cache();
         HOST_HWND_RAW.with(|cell| cell.set(0));
         WAKE_POSTED.with(|cell| cell.set(false));
     }

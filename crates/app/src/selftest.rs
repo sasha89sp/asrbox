@@ -22,8 +22,8 @@ use asrbox_mod_widgets::{
 };
 use asrbox_platform_api::{
     parse_appearance_config, serialize_appearance_config, AccentPreset, AppLanguage,
-    AppearanceConfig, FluentPalette, LocalDateTime, OverlayTelemetry, PixelRect, SysTelemetry,
-    ThemeMode, WidgetLayer,
+    AppearanceConfig, FluentPalette, FontRenderer, LocalDateTime, OverlayTelemetry, PixelRect,
+    SysTelemetry, ThemeMode, WidgetLayer,
 };
 
 use crate::selftest_tools::{
@@ -65,6 +65,7 @@ fn selftest_core_and_theme() -> Result<(), String> {
         theme: ThemeMode::Light,
         accent: AccentPreset::Emerald,
         language: AppLanguage::En,
+        font_renderer: FontRenderer::DirectWrite,
     };
     if parse_appearance_config(&serialize_appearance_config(&app_cfg)) != app_cfg {
         return Err("appearance.cfg roundtrip mismatch".to_owned());
@@ -85,6 +86,7 @@ fn selftest_dock(app_version: &str) -> Result<(), String> {
     cfg.icon_size_px = 54;
     cfg.layer = WidgetLayer::Wallpaper;
     cfg.label_mode = DockLabelMode::IconAndLabel;
+    cfg.launch_animation_enabled = false;
     let item =
         DockItem::from_dropped_path(1, PathBuf::from("C:\\app.exe")).map_err(|e| e.to_string())?;
     cfg.items.push(item);
@@ -118,6 +120,7 @@ fn selftest_dock(app_version: &str) -> Result<(), String> {
         || parsed[0].locked
         || parsed[0].layer != WidgetLayer::Wallpaper
         || parsed[0].label_mode != DockLabelMode::IconAndLabel
+        || parsed[0].launch_animation_enabled
     {
         return Err("dock config roundtrip mismatch".to_owned());
     }

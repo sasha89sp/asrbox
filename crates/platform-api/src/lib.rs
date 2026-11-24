@@ -18,7 +18,7 @@ pub use telemetry::{
 pub use theme::{
     lerp_rgba, load_appearance_config, parse_appearance_config, save_appearance_config,
     serialize_appearance_config, AccentPreset, AppLanguage, AppearanceConfig, FluentPalette,
-    ThemeMode,
+    FontRenderer, ThemeMode,
 };
 pub use tools::{
     AboutUiCommand, DebugUiCommand, FluentMenuItem, FluentMenuSpec, FluentQuickBtn, ProcessMetrics,

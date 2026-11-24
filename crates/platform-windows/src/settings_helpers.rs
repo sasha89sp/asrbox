@@ -112,7 +112,9 @@ pub(crate) unsafe fn paint_settings(hwnd: HWND) -> LRESULT {
     let mut ps = PAINTSTRUCT::default();
     let hdc = BeginPaint(hwnd, &mut ps);
     SETTINGS_UI.with(|ui| {
-        let st = ui.borrow();
+        let Ok(st) = ui.try_borrow() else {
+            return;
+        };
         if let Some(frame) = &st.frame {
             let w = i32::try_from(frame.width).unwrap_or(0);
             let h = i32::try_from(frame.height).unwrap_or(0);

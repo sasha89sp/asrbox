@@ -73,6 +73,7 @@ fn sample_settings_snapshot(app_version: &str) -> SettingsSnapshot {
             locked: true,
             show_running_indicator: true,
             focus_running_window: true,
+            launch_animation_enabled: true,
             label_mode_index: 2,
             item_count: 1,
             items: vec![DockItemView {

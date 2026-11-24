@@ -274,6 +274,9 @@ fn apply_dock_prop(cfgs: &mut Vec<DockConfig>, action: &SettingsAction) -> Optio
         SettingsAction::SetDockFocusRunning { dock_id, enabled } => {
             edit_dock(cfgs, dock_id, |c| c.focus_running_window = *enabled)
         }
+        SettingsAction::SetDockLaunchAnimation { dock_id, enabled } => {
+            edit_dock(cfgs, dock_id, |c| c.launch_animation_enabled = *enabled)
+        }
         SettingsAction::SetDockLabelMode {
             dock_id,
             mode_index,

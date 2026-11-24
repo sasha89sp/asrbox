@@ -8,13 +8,14 @@ use windows::Win32::System::Com::{
     COINIT_APARTMENTTHREADED, STGM_READ,
 };
 use windows::Win32::System::Threading::{
-    OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+    AttachThreadInput, GetCurrentThreadId, OpenProcess, QueryFullProcessImageNameW,
+    PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 use windows::Win32::UI::Shell::{IShellLinkW, ShellLink, SLGP_RAWPATH};
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, GetWindowLongW, GetWindowTextLengthW, GetWindowThreadProcessId, IsIconic,
-    IsWindowVisible, SetForegroundWindow, ShowWindow, GWL_EXSTYLE, SW_RESTORE, SW_SHOW,
-    WS_EX_TOOLWINDOW,
+    AllowSetForegroundWindow, BringWindowToTop, EnumWindows, GetForegroundWindow, GetWindowLongW,
+    GetWindowTextLengthW, GetWindowThreadProcessId, IsIconic, IsWindowVisible, SetForegroundWindow,
+    ShowWindow, ASFW_ANY, GWL_EXSTYLE, SW_RESTORE, SW_SHOW, WS_EX_TOOLWINDOW,
 };
 
 use crate::shell::{encode_wide_str, launch_path};
@@ -62,14 +63,42 @@ pub(crate) fn activate_or_launch_target(path: &Path, focus_running: bool) -> Res
 }
 
 fn focus_existing_window(hwnd: HWND) {
-    // SAFETY: Restoring/bringing an existing visible top-level window to foreground.
+    // SAFETY: Restoring and bringing an existing application window to foreground from a WS_EX_NOACTIVATE dock.
     unsafe {
+        let _ = AllowSetForegroundWindow(ASFW_ANY);
         if IsIconic(hwnd).as_bool() {
             let _ = ShowWindow(hwnd, SW_RESTORE);
         } else {
             let _ = ShowWindow(hwnd, SW_SHOW);
         }
+        let _ = BringWindowToTop(hwnd);
+        if SetForegroundWindow(hwnd).as_bool() {
+            return;
+        }
+        let fg = GetForegroundWindow();
+        let fg_tid = if !fg.is_invalid() {
+            GetWindowThreadProcessId(fg, None)
+        } else {
+            0
+        };
+        let cur_tid = GetCurrentThreadId();
+        let tgt_tid = GetWindowThreadProcessId(hwnd, None);
+        let attach_fg = fg_tid != 0 && fg_tid != cur_tid;
+        let attach_tgt = tgt_tid != 0 && tgt_tid != cur_tid && tgt_tid != fg_tid;
+        if attach_fg {
+            let _ = AttachThreadInput(cur_tid, fg_tid, true);
+        }
+        if attach_tgt {
+            let _ = AttachThreadInput(cur_tid, tgt_tid, true);
+        }
+        let _ = BringWindowToTop(hwnd);
         let _ = SetForegroundWindow(hwnd);
+        if attach_tgt {
+            let _ = AttachThreadInput(cur_tid, tgt_tid, false);
+        }
+        if attach_fg {
+            let _ = AttachThreadInput(cur_tid, fg_tid, false);
+        }
     }
 }
 
@@ -117,7 +146,7 @@ unsafe extern "system" fn find_window_cb(hwnd: HWND, lparam: LPARAM) -> BOOL {
 }
 
 unsafe fn is_app_window(hwnd: HWND) -> bool {
-    if !IsWindowVisible(hwnd).as_bool() {
+    if !IsWindowVisible(hwnd).as_bool() && !IsIconic(hwnd).as_bool() {
         return false;
     }
     let ex = GetWindowLongW(hwnd, GWL_EXSTYLE) as u32;

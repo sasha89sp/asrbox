@@ -158,14 +158,14 @@ fn add_dock_rename_card(b: &mut LayoutBuilder, d: &DockSettingsView, selected_it
     let rows = vec![
         row(
             0,
-            44,
+            52,
             "Выберите значок этой панели",
             Some("Имя отображается в подсказке и на панели в режимах с подписями"),
             Some(format!("{} шт.", d.items.len())),
             true,
         ),
-        row(44, chips_h, "", None, None, true),
-        row(44 + chips_h as i32, 54, "", None, None, false),
+        row(52, chips_h, "", None, None, true),
+        row(52 + chips_h as i32, 54, "", None, None, false),
     ];
     let cy = b.add_card(Some("ЯРЛЫКИ И ПЕРЕИМЕНОВАНИЕ"), false, rows);
 
@@ -176,7 +176,7 @@ fn add_dock_rename_card(b: &mut LayoutBuilder, d: &DockSettingsView, selected_it
         let col = (idx % cols) as u32;
         let r_idx = (idx / cols) as u32;
         let x = b.content_x + 16 + (col * (chip_w + gap)) as i32;
-        let y_log = cy + 54 + (r_idx * 34) as i32;
+        let y_log = cy + 62 + (r_idx * 34) as i32;
         b.push_control(
             PixelRect {
                 x,
@@ -192,7 +192,7 @@ fn add_dock_rename_card(b: &mut LayoutBuilder, d: &DockSettingsView, selected_it
         );
     }
 
-    let edit_y = cy + 44 + chips_h as i32 + 12;
+    let edit_y = cy + 52 + chips_h as i32 + 12;
     let save_w = 132u32;
     let reset_w = 96u32;
     let input_w = b
@@ -252,8 +252,16 @@ fn add_dock_behavior_card(b: &mut LayoutBuilder, d: &DockSettingsView, can_delet
         row(
             104,
             52,
-            "Активировать запущенное окно",
-            Some("Клик поднимает открытое окно"),
+            "Не запускать вторую копию",
+            Some("Если программа уже запущена — открывать её текущее окно"),
+            None,
+            true,
+        ),
+        row(
+            156,
+            52,
+            "Анимация запуска",
+            Some("Лёгкое подпрыгивание значка при запуске программы"),
             None,
             false,
         ),
@@ -286,6 +294,15 @@ fn add_dock_behavior_card(b: &mut LayoutBuilder, d: &DockSettingsView, can_delet
         SettingsAction::SetDockFocusRunning {
             dock_id: id.clone(),
             enabled: !d.focus_running_window,
+        },
+    );
+    b.push_toggle(
+        tx,
+        cy + 170,
+        d.launch_animation_enabled,
+        SettingsAction::SetDockLaunchAnimation {
+            dock_id: id.clone(),
+            enabled: !d.launch_animation_enabled,
         },
     );
     let y = b.cursor_y;

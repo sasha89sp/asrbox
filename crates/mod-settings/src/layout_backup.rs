@@ -54,11 +54,11 @@ fn add_backup_card(b: &mut LayoutBuilder, bk: &BackupSettingsView) {
     };
     let has_servers = !bk.servers.is_empty();
     let chip_rows = if has_servers {
-        bk.servers.len().div_ceil(3) as u32
+        bk.servers.len().div_ceil(2) as u32
     } else {
         0
     };
-    let chips_h = if has_servers { 36 + chip_rows * 34 } else { 0 };
+    let chips_h = if has_servers { 56 + chip_rows * 34 } else { 0 };
     let mut rows = vec![row(
         0,
         52,
@@ -89,15 +89,15 @@ fn add_backup_card(b: &mut LayoutBuilder, bk: &BackupSettingsView) {
     }
     rows.push(row(
         off,
-        46,
+        52,
         tr(lang, "Последний бэкап", "Last backup"),
         Some(&last_info),
         None,
         true,
     ));
     rows.push(row(
-        off + 46,
-        46,
+        off + 52,
+        52,
         tr(lang, "Статус облака", "Cloud status"),
         Some(&cloud_info),
         None,
@@ -122,7 +122,7 @@ fn add_backup_card(b: &mut LayoutBuilder, bk: &BackupSettingsView) {
     if has_servers {
         push_server_chips(
             b,
-            cy + 52 + 34,
+            cy + 52 + 52,
             &bk.servers,
             &bk.target_server_ids,
             SettingsAction::ToggleBackupTargetServer,
@@ -237,15 +237,15 @@ fn add_saved_server_card(
         row(0, 52, &srv.name, Some(&sub1), None, true),
         row(
             52,
-            48,
+            52,
             tr(lang, "Путь хранения на сервере", "Remote storage path"),
             dir_sub,
             None,
             true,
         ),
         row(
-            100,
-            46,
+            104,
+            52,
             tr(lang, "Обзор папок WebDAV", "WebDAV Folder Browser"),
             Some(tr(
                 lang,
@@ -311,7 +311,7 @@ fn add_saved_server_card(
         );
     }
     b.push_btn(
-        (rx - 148, cy + 109, 148, 28),
+        (rx - 148, cy + 116, 148, 28),
         tr(lang, "Открыть папку →", "Open Folder →"),
         ButtonTone::Secondary,
         SettingsAction::OpenWebDavBrowser(srv.id.clone()),

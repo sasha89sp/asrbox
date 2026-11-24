@@ -26,6 +26,7 @@ const CMD_SIZE_LARGE: u32 = 122;
 const CMD_TOGGLE_ZOOM: u32 = 130;
 const CMD_TOGGLE_RUNNING: u32 = 131;
 const CMD_TOGGLE_FOCUS_RUN: u32 = 132;
+const CMD_TOGGLE_LAUNCH_ANIM: u32 = 133;
 const CMD_CHOOSE_ICON: u32 = 140;
 const CMD_RESET_ICON: u32 = 141;
 const CMD_REMOVE_ITEM: u32 = 142;
@@ -244,34 +245,11 @@ fn build_dock_menu_spec(state: &DockMenuState) -> FluentMenuSpec {
                 true,
             ),
             FluentMenuItem::Separator,
-            act(
-                CMD_TOGGLE_ZOOM,
-                "Увеличение при наведении",
-                None,
-                state.hover_zoom_enabled,
-                true,
-            ),
-            act(
-                CMD_TOGGLE_RUNNING,
-                "Индикатор запущенных",
-                None,
-                state.show_running_indicator,
-                true,
-            ),
-            act(
-                CMD_TOGGLE_FOCUS_RUN,
-                "Активировать окно",
-                None,
-                state.focus_running_window,
-                true,
-            ),
-            act(
-                CMD_TOGGLE_SETTINGS_BTN,
-                "Кнопка ⚙ на панели",
-                None,
-                state.show_settings_button,
-                true,
-            ),
+            act(CMD_TOGGLE_ZOOM, "Увеличение при наведении", None, state.hover_zoom_enabled, true),
+            act(CMD_TOGGLE_LAUNCH_ANIM, "Анимация запуска", None, state.launch_animation_enabled, true),
+            act(CMD_TOGGLE_RUNNING, "Индикатор запущенных", None, state.show_running_indicator, true),
+            act(CMD_TOGGLE_FOCUS_RUN, "Не запускать 2-ю копию", None, state.focus_running_window, true),
+            act(CMD_TOGGLE_SETTINGS_BTN, "Кнопка ⚙ на панели", None, state.show_settings_button, true),
         ],
     });
     items.push(FluentMenuItem::Separator);
@@ -348,6 +326,7 @@ fn decode_dock_command(cmd: u32, hovered: Option<u64>) -> Option<DockMenuAction>
         CMD_TOGGLE_ZOOM => Some(DockMenuAction::ToggleHoverZoom),
         CMD_TOGGLE_RUNNING => Some(DockMenuAction::ToggleRunningIndicator),
         CMD_TOGGLE_FOCUS_RUN => Some(DockMenuAction::ToggleFocusRunning),
+        CMD_TOGGLE_LAUNCH_ANIM => Some(DockMenuAction::ToggleLaunchAnimation),
         CMD_CHOOSE_ICON => hovered.map(DockMenuAction::ChooseItemIcon),
         CMD_RESET_ICON => hovered.map(DockMenuAction::ResetItemIcon),
         CMD_REMOVE_ITEM => hovered.map(DockMenuAction::RemoveItem),

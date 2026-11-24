@@ -20,23 +20,23 @@ pub(crate) fn add_webdav_draft_card(b: &mut LayoutBuilder, draft: &WebDavDraftVi
     let rows = vec![
         row(
             0,
-            46,
+            52,
             tr(lang, "Сервер HTTPS", "HTTPS Server"),
             url_sub,
             None,
             true,
         ),
         row(
-            46,
-            46,
+            52,
+            52,
             tr(lang, "Логин / Email", "Login / Email"),
             None,
             None,
             true,
         ),
         row(
-            92,
-            50,
+            104,
+            52,
             tr(lang, "Пароль приложения", "App Password"),
             Some(tr(
                 lang,
@@ -47,8 +47,8 @@ pub(crate) fn add_webdav_draft_card(b: &mut LayoutBuilder, draft: &WebDavDraftVi
             true,
         ),
         row(
-            142,
-            44,
+            156,
+            52,
             tr(lang, "Состояние", "Status"),
             Some(status),
             None,
@@ -66,20 +66,20 @@ pub(crate) fn add_webdav_draft_card(b: &mut LayoutBuilder, draft: &WebDavDraftVi
     if draft.is_custom {
         b.out.input_rects.extra = Some(PixelRect {
             x: inp_x,
-            y: b.sy(cy + 9),
+            y: b.sy(cy + 12),
             width: inp_w,
             height: 28,
         });
     }
     b.out.input_rects.primary = Some(PixelRect {
         x: inp_x,
-        y: b.sy(cy + 55),
+        y: b.sy(cy + 64),
         width: inp_w,
         height: 28,
     });
     b.out.input_rects.secret = Some(PixelRect {
         x: inp_x,
-        y: b.sy(cy + 103),
+        y: b.sy(cy + 116),
         width: inp_w,
         height: 28,
     });
@@ -113,15 +113,15 @@ pub(crate) fn add_file_sync_card(
     let lang = b.lang;
     let has_servers = !servers.is_empty();
     let chip_rows = if has_servers {
-        servers.len().div_ceil(3) as u32
+        servers.len().div_ceil(2) as u32
     } else {
         0
     };
-    let chips_h = if has_servers { 34 + chip_rows * 34 } else { 0 };
+    let chips_h = if has_servers { 56 + chip_rows * 34 } else { 0 };
     let items_count = sync.items.len();
     let mut rows = vec![row(
         0,
-        50,
+        52,
         tr(
             lang,
             "Выбранные файлы и папки Windows",
@@ -135,7 +135,7 @@ pub(crate) fn add_file_sync_card(
         Some(format!("{items_count}")),
         true,
     )];
-    let mut off = 50i32;
+    let mut off = 52i32;
     for item in &sync.items {
         let kind = if item.is_dir {
             tr(lang, "Папка", "Folder")
@@ -143,8 +143,8 @@ pub(crate) fn add_file_sync_card(
             tr(lang, "Файл", "File")
         };
         let sub = format!("{kind} → {}", item.remote_subdir);
-        rows.push(row(off, 46, &item.local_path, Some(&sub), None, true));
-        off += 46;
+        rows.push(row(off, 52, &item.local_path, Some(&sub), None, true));
+        off += 52;
     }
     let servers_row_off = off;
     if has_servers {
@@ -181,7 +181,7 @@ pub(crate) fn add_file_sync_card(
     };
     rows.push(row(
         off,
-        44,
+        52,
         tr(lang, "Статус", "Status"),
         Some(st),
         None,
@@ -198,7 +198,7 @@ pub(crate) fn add_file_sync_card(
     );
     let rx = b.content_x + b.content_w as i32 - 14;
     for (idx, item) in sync.items.iter().enumerate() {
-        let ry = cy + 50 + (idx as i32) * 46 + 9;
+        let ry = cy + 52 + (idx as i32) * 52 + 12;
         b.push_btn(
             (rx - 32, ry, 32, 28),
             "×",
@@ -209,7 +209,7 @@ pub(crate) fn add_file_sync_card(
     if has_servers {
         push_server_chips(
             b,
-            cy + servers_row_off + 32,
+            cy + servers_row_off + 52,
             servers,
             &sync.target_server_ids,
             SettingsAction::ToggleSyncServer,
@@ -261,7 +261,7 @@ pub(crate) fn push_server_chips(
     selected: &[String],
     make_action: fn(String) -> SettingsAction,
 ) {
-    let cols = 3u32;
+    let cols = 2u32;
     let gap = 8u32;
     let inner_w = b.content_w.saturating_sub(28);
     let chip_w = (inner_w.saturating_sub(gap * (cols - 1))) / cols;

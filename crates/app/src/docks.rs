@@ -9,10 +9,14 @@ use asrbox_mod_dock::{
 };
 use asrbox_platform_api::{
     DockPlatform, FluentPalette, IconProvider, PixelPoint, PixelRect, RgbaImage, TrayMenuEntry,
+    WidgetLayer,
 };
 
 use crate::dock_drag::{DockDragState, DragReleaseOutcome};
-use crate::dock_ops::{build_runtimes, present_dock};
+use crate::dock_ops::{build_runtimes, present_dock, reload_runtimes_in_place};
+use crate::dock_shortcuts::{
+    localize_existing_docks, localize_shortcut_path, shortcuts_dir_for_config,
+};
 
 pub struct DockRuntime {
     pub instance: DockInstance,
@@ -21,6 +25,7 @@ pub struct DockRuntime {
     pub running_items: HashSet<u64>,
     pub window_open: bool,
     pub timer_active: bool,
+    pub applied_layer: Option<WidgetLayer>,
 }
 
 pub struct DockManager<I: IconProvider> {
@@ -47,6 +52,10 @@ impl<I: IconProvider> DockManager<I> {
         if configs.is_empty() {
             configs.push(DockConfig::new(1, "Док 1"));
         }
+        let sc_dir = shortcuts_dir_for_config(&config_path);
+        if localize_existing_docks(&mut configs, &sc_dir) {
+            let _ = save_docks_to_file(&config_path, &configs, app_version);
+        }
         let max_id = configs.iter().map(|c| c.id).max().unwrap_or(0);
         let docks = build_runtimes(configs, work_area, &icon_provider, host)?;
         Ok(Self {
@@ -60,6 +69,10 @@ impl<I: IconProvider> DockManager<I> {
             running_timer_on: false,
             palette: FluentPalette::default(),
         })
+    }
+
+    pub(crate) fn config_path(&self) -> &std::path::Path {
+        &self.config_path
     }
 
     pub fn set_palette(&mut self, host: &mut dyn DockPlatform, palette: FluentPalette) {
@@ -99,13 +112,19 @@ impl<I: IconProvider> DockManager<I> {
                 if !dock.window_open {
                     host.create_dock_window(id, &dock.instance.config().name, rect)?;
                     dock.window_open = true;
+                    dock.applied_layer = None;
                 }
-                let _ = host.set_dock_layer(id, dock.instance.config().layer);
+                let layer = dock.instance.config().layer;
+                if dock.applied_layer != Some(layer) {
+                    let _ = host.set_dock_layer(id, layer);
+                    dock.applied_layer = Some(layer);
+                }
                 present_dock(host, dock, self.drag.overlay_for(dock), self.palette)?;
             } else if dock.window_open {
                 let _ = host.destroy_dock_window(id);
                 dock.window_open = false;
                 dock.timer_active = false;
+                dock.applied_layer = None;
             }
         }
         self.sync_running_timer(host);
@@ -129,13 +148,10 @@ impl<I: IconProvider> DockManager<I> {
         if configs.is_empty() {
             configs.push(DockConfig::new(1, "Док 1"));
         }
-        for dock in self.docks.drain(..) {
-            if dock.window_open {
-                let _ = host.destroy_dock_window(dock.instance.config().id);
-            }
-        }
         let max_id = configs.iter().map(|c| c.id).max().unwrap_or(0);
-        self.docks = build_runtimes(configs, self.work_area, &self.icon_provider, host)?;
+        let existing = std::mem::take(&mut self.docks);
+        self.docks =
+            reload_runtimes_in_place(existing, configs, self.work_area, &self.icon_provider, host)?;
         self.next_dock_id = max_id.saturating_add(1);
         self.sync_windows(host, safe_mode)?;
         Ok(self.docks.len())
@@ -253,11 +269,16 @@ impl<I: IconProvider> DockManager<I> {
         paths: Vec<PathBuf>,
         pt: Point,
     ) -> usize {
+        let sc_dir = shortcuts_dir_for_config(&self.config_path);
+        let localized: Vec<PathBuf> = paths
+            .into_iter()
+            .map(|p| localize_shortcut_path(&p, &sc_dir))
+            .collect();
         let Some(dock) = self.docks.iter_mut().find(|d| d.instance.config().id == id) else {
             return 0;
         };
         let effect = dock.instance.handle_event(DockEvent::DropFiles {
-            paths,
+            paths: localized,
             local_point: pt,
         });
         let added = effect.added_item_ids.len();
@@ -339,6 +360,7 @@ impl<I: IconProvider> DockManager<I> {
                 running_items: HashSet::new(),
                 window_open: false,
                 timer_active: false,
+                applied_layer: None,
             });
             *safe_mode = false;
             let _ = self.sync_windows(host, false);
@@ -365,6 +387,7 @@ impl<I: IconProvider> DockManager<I> {
                 let _ = host.destroy_dock_window(id);
             }
             self.persist();
+            self.cleanup_orphaned_shortcuts();
             self.sync_running_timer(host);
         }
     }

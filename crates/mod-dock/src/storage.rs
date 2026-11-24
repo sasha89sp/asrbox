@@ -50,6 +50,10 @@ pub fn serialize_docks(docks: &[DockConfig], app_version: &str) -> String {
             "focus_running_window={}\n",
             dock.focus_running_window
         ));
+        out.push_str(&format!(
+            "launch_animation_enabled={}\n",
+            dock.launch_animation_enabled
+        ));
         out.push_str(&format!("hover_zoom_enabled={}\n", dock.hover_zoom.enabled));
         out.push_str(&format!("hover_zoom_scale={:.3}\n", dock.hover_zoom.scale));
         out.push_str(&format!(
@@ -165,6 +169,7 @@ fn apply_field(dock: &mut DockConfig, key: &str, val: &str) -> Result<(), String
         "show_settings_button" => dock.show_settings_button = parse_bool(val),
         "show_running_indicator" => dock.show_running_indicator = parse_bool(val),
         "focus_running_window" => dock.focus_running_window = parse_bool(val),
+        "launch_animation_enabled" => dock.launch_animation_enabled = parse_bool(val),
         "hover_zoom_enabled" => dock.hover_zoom.enabled = parse_bool(val),
         "hover_zoom_scale" => {
             let scale: f32 = val.parse().map_err(|e| format!("bad zoom_scale: {e}"))?;
@@ -353,6 +358,7 @@ mod tests {
         first.show_settings_button = false;
         first.show_running_indicator = false;
         first.focus_running_window = false;
+        first.launch_animation_enabled = false;
         first.items.push(DockItem {
             id: 1,
             kind: DockItemKind::Shortcut,

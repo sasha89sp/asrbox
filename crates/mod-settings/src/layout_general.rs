@@ -1,4 +1,4 @@
-use asrbox_platform_api::{AccentPreset, AppLanguage, PixelRect, ThemeMode};
+use asrbox_platform_api::{AccentPreset, AppLanguage, FontRenderer, PixelRect, ThemeMode};
 
 use crate::i18n::tr;
 use crate::layout::{ButtonTone, HitKind, LayoutBuilder};
@@ -37,8 +37,9 @@ pub(crate) fn build_general_tab(
 
 fn add_theme_card(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
     let lang = b.lang;
-    if !b.matches_search("тема оформление светлая тёмная акцент цвет theme dark light accent color")
-    {
+    if !b.matches_search(
+        "тема оформление светлая тёмная акцент цвет шрифт directwrite cleartype theme dark light accent font",
+    ) {
         return;
     }
     let app = &snap.appearance;
@@ -63,6 +64,18 @@ fn add_theme_card(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
                 lang,
                 "Цвет активных элементов, переключателей и индикаторов",
                 "Highlight color for active controls, toggles and indicators",
+            )),
+            None,
+            true,
+        ),
+        row(
+            112,
+            56,
+            tr(lang, "Рендеринг шрифтов", "Font rendering"),
+            Some(tr(
+                lang,
+                "Segoe UI Variable (Win 11): лёгкий GDI ClearType или DirectWrite",
+                "Segoe UI Variable (Win 11): lightweight GDI ClearType or DirectWrite",
             )),
             None,
             false,
@@ -107,6 +120,22 @@ fn add_theme_card(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
             },
         );
     }
+    b.add_segmented_row(
+        cy + 112,
+        56,
+        vec![
+            (
+                "GDI ClearType",
+                app.font_renderer == FontRenderer::GdiClearType,
+                SettingsAction::SetFontRenderer(FontRenderer::GdiClearType),
+            ),
+            (
+                "DirectWrite",
+                app.font_renderer == FontRenderer::DirectWrite,
+                SettingsAction::SetFontRenderer(FontRenderer::DirectWrite),
+            ),
+        ],
+    );
 }
 
 fn add_language_card(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
@@ -258,39 +287,39 @@ fn add_paths_card(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
     let rows = vec![
         row(
             0,
-            48,
+            52,
             tr(lang, "Исполняемый файл", "Executable"),
             Some(&a.exe_path),
             None,
             true,
         ),
         row(
-            48,
-            48,
+            52,
+            52,
             tr(lang, "Папка данных (data)", "Data directory"),
             Some(&a.data_dir),
             None,
             true,
         ),
         row(
-            96,
-            48,
+            104,
+            52,
             tr(lang, "Папка конфигов", "Config directory"),
             Some(&a.config_dir),
             None,
             true,
         ),
         row(
-            144,
-            48,
+            156,
+            52,
             tr(lang, "Папка бэкапов", "Backups directory"),
             Some(&a.backups_dir),
             None,
             true,
         ),
         row(
-            192,
-            48,
+            208,
+            52,
             tr(lang, "Папка логов", "Logs directory"),
             Some(&a.logs_dir),
             None,

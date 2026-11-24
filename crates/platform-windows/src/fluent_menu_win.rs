@@ -16,71 +16,56 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
 };
 
-use crate::fluent_menu::{ActiveMenuSession, MenuWindow};
+use crate::fluent_menu::MenuWindow;
 use crate::fluent_menu_render::{
     clamp_submenu_origin, measure_menu, render_fluent_menu, MenuLayout,
 };
 use crate::icons::make_top_down_bmi;
 
-pub(crate) fn sync_submenu_for_row(s: &mut ActiveMenuSession, hovered_row: Option<usize>) {
-    let Some(idx) = hovered_row else {
-        return;
-    };
-    if s.open_sub_row == Some(idx) {
-        return;
+pub(crate) struct SubmenuPlan {
+    pub row_idx: usize,
+    pub hinstance: HINSTANCE,
+    pub work_area: PixelRect,
+    pub palette: FluentPalette,
+    pub root_origin: PixelPoint,
+    pub root_layout: MenuLayout,
+    pub row_y: i32,
+    pub items: Vec<FluentMenuItem>,
+}
+
+pub(crate) fn destroy_hwnd(hwnd: HWND) {
+    // SAFETY: Destroying an owned submenu popup HWND after releasing RefCell borrows.
+    unsafe {
+        let _ = DestroyWindow(hwnd);
     }
-    let sub_items = match s.root.spec.items.get(idx) {
-        Some(FluentMenuItem::Submenu {
-            items,
-            enabled: true,
-            ..
-        }) => Some(items.clone()),
-        _ => None,
-    };
-    if let Some(old) = s.sub.take() {
-        // SAFETY: Destroying previous submenu popup window on UI thread.
-        unsafe {
-            let _ = DestroyWindow(old.hwnd);
-        }
-    }
-    s.open_sub_row = None;
-    let Some(items) = sub_items else {
-        return;
-    };
-    let row_y = s
-        .root
-        .layout
-        .rows
-        .iter()
-        .find(|r| r.item_index == idx)
-        .map_or(0, |r| r.y);
+}
+
+pub(crate) fn create_submenu_window(plan: SubmenuPlan) -> Option<MenuWindow> {
     let sub_spec = FluentMenuSpec {
         quick_actions: Vec::new(),
-        items,
+        items: plan.items,
         min_width: 196,
     };
     let sub_layout = measure_menu(&sub_spec);
     let sub_origin = clamp_submenu_origin(
-        s.root.origin,
-        &s.root.layout,
-        row_y,
+        plan.root_origin,
+        &plan.root_layout,
+        plan.row_y,
         &sub_layout,
-        s.work_area,
+        plan.work_area,
     );
-    let Ok(sub_hwnd) = create_menu_hwnd(s.hinstance, sub_origin, &sub_layout, true) else {
-        return;
-    };
-    let Ok(sub_frame) = render_fluent_menu(&sub_spec, &sub_layout, &s.palette, None, None, None)
+    let sub_hwnd = create_menu_hwnd(plan.hinstance, sub_origin, &sub_layout, true).ok()?;
+    let Ok(sub_frame) = render_fluent_menu(&sub_spec, &sub_layout, &plan.palette, None, None, None)
     else {
-        return;
+        destroy_hwnd(sub_hwnd);
+        return None;
     };
     let _ = present_with_alpha(sub_hwnd, sub_origin, &sub_frame, 255);
     // SAFETY: Showing non-activating submenu popup alongside active root menu.
     unsafe {
         let _ = ShowWindow(sub_hwnd, SW_SHOWNOACTIVATE);
     }
-    s.open_sub_row = Some(idx);
-    s.sub = Some(MenuWindow {
+    Some(MenuWindow {
         hwnd: sub_hwnd,
         spec: sub_spec,
         layout: sub_layout,
@@ -89,7 +74,7 @@ pub(crate) fn sync_submenu_for_row(s: &mut ActiveMenuSession, hovered_row: Optio
         hovered_quick: None,
         alpha: 255,
         frame: Some(sub_frame),
-    });
+    })
 }
 
 pub(crate) fn repaint_window(

@@ -34,6 +34,8 @@ pub struct DockStepEffect {
     pub added_item_ids: Vec<u64>,
 }
 
+const LAUNCH_BOUNCE_TOTAL_MS: u16 = 460;
+
 #[derive(Debug, Clone)]
 pub struct DockInstance {
     config: DockConfig,
@@ -41,6 +43,8 @@ pub struct DockInstance {
     hovered_item: Option<u64>,
     active_zoom_item: Option<u64>,
     zoom_progress: f32,
+    bounce_item: Option<u64>,
+    bounce_elapsed_ms: u16,
     layout: DockLayout,
     metrics: DockMetrics,
     next_item_id: u64,
@@ -57,6 +61,8 @@ impl DockInstance {
             hovered_item: None,
             active_zoom_item: None,
             zoom_progress: 0.0,
+            bounce_item: None,
+            bounce_elapsed_ms: 0,
             layout,
             metrics: DockMetrics::default(),
             next_item_id,
@@ -103,6 +109,21 @@ impl DockInstance {
         self.record_redraw();
     }
 
+    pub fn trigger_launch_bounce(&mut self, item_id: u64) -> DockStepEffect {
+        if !self.config.launch_animation_enabled {
+            return DockStepEffect::default();
+        }
+        self.bounce_item = Some(item_id);
+        self.bounce_elapsed_ms = 0;
+        self.recompute_layout();
+        self.record_redraw();
+        DockStepEffect {
+            needs_redraw: true,
+            animation_active: true,
+            added_item_ids: Vec::new(),
+        }
+    }
+
     pub fn move_item_within(&mut self, item_id: u64, mut target_idx: usize) -> bool {
         let Some(old_idx) = self.config.items.iter().position(|i| i.id == item_id) else {
             return false;
@@ -130,6 +151,10 @@ impl DockInstance {
         if self.active_zoom_item == Some(item_id) {
             self.active_zoom_item = None;
             self.zoom_progress = 0.0;
+        }
+        if self.bounce_item == Some(item_id) {
+            self.bounce_item = None;
+            self.bounce_elapsed_ms = 0;
         }
         self.recompute_layout();
         self.record_redraw();
@@ -217,19 +242,24 @@ impl DockInstance {
         if !self.is_animation_pending() || dt_ms == 0 {
             return DockStepEffect::default();
         }
-        let target = if self.hovered_item.is_some() {
-            1.0
-        } else {
-            0.0
-        };
-        let duration = f32::from(self.config.hover_zoom.duration_ms).max(1.0);
-        let delta = f32::from(dt_ms) / duration;
-        if target > self.zoom_progress {
-            self.zoom_progress = (self.zoom_progress + delta).min(1.0);
-        } else {
-            self.zoom_progress = (self.zoom_progress - delta).max(0.0);
-            if self.zoom_progress <= 0.0 {
-                self.active_zoom_item = None;
+        if self.is_zoom_pending() {
+            let target = if self.hovered_item.is_some() { 1.0 } else { 0.0 };
+            let duration = f32::from(self.config.hover_zoom.duration_ms).max(1.0);
+            let delta = f32::from(dt_ms) / duration;
+            if target > self.zoom_progress {
+                self.zoom_progress = (self.zoom_progress + delta).min(1.0);
+            } else {
+                self.zoom_progress = (self.zoom_progress - delta).max(0.0);
+                if self.zoom_progress <= 0.0 {
+                    self.active_zoom_item = None;
+                }
+            }
+        }
+        if self.bounce_item.is_some() {
+            self.bounce_elapsed_ms = self.bounce_elapsed_ms.saturating_add(dt_ms);
+            if self.bounce_elapsed_ms >= LAUNCH_BOUNCE_TOTAL_MS {
+                self.bounce_item = None;
+                self.bounce_elapsed_ms = 0;
             }
         }
         self.recompute_layout();
@@ -289,7 +319,7 @@ impl DockInstance {
         }
     }
 
-    fn is_animation_pending(&self) -> bool {
+    fn is_zoom_pending(&self) -> bool {
         if !self.config.hover_zoom.enabled || self.config.hover_zoom.duration_ms == 0 {
             return false;
         }
@@ -299,16 +329,35 @@ impl DockInstance {
         }
     }
 
+    fn is_animation_pending(&self) -> bool {
+        self.is_zoom_pending() || self.bounce_item.is_some()
+    }
+
     fn recompute_layout(&mut self) {
         let hover = HoverVisualState {
             item_id: self.active_zoom_item,
             progress: self.zoom_progress,
+            bounce_item_id: self.bounce_item,
+            bounce_offset_px: bounce_offset_px(self.bounce_elapsed_ms),
         };
         self.layout = compute_layout(&self.config, self.work_area, hover);
     }
 
     fn record_redraw(&mut self) {
         self.metrics.redraws_requested = self.metrics.redraws_requested.saturating_add(1);
+    }
+}
+
+fn bounce_offset_px(elapsed_ms: u16) -> i32 {
+    let pi = std::f32::consts::PI;
+    if elapsed_ms < 240 {
+        let t = f32::from(elapsed_ms) / 240.0;
+        ((pi * t).sin() * 14.0).round() as i32
+    } else if elapsed_ms < LAUNCH_BOUNCE_TOTAL_MS {
+        let t = f32::from(elapsed_ms - 240) / f32::from(LAUNCH_BOUNCE_TOTAL_MS - 240);
+        ((pi * t).sin() * 7.0).round() as i32
+    } else {
+        0
     }
 }
 
@@ -366,6 +415,13 @@ mod tests {
                 .handle_event(DockEvent::AnimationTick { dt_ms: 120 })
                 .animation_active
         );
+        let b0 = dock.trigger_launch_bounce(1);
+        assert!(b0.needs_redraw && b0.animation_active);
+        let b_mid = dock.handle_event(DockEvent::AnimationTick { dt_ms: 120 });
+        assert!(b_mid.animation_active);
+        assert!(dock.layout().slots[0].visual_rect.y < dock.layout().slots[0].base_rect.y);
+        let b_end = dock.handle_event(DockEvent::AnimationTick { dt_ms: 400 });
+        assert!(!b_end.animation_active);
         Ok(())
     }
 }

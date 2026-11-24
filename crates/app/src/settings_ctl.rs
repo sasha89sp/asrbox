@@ -114,6 +114,7 @@ impl<I: IconProvider> AppController<I> {
                 locked: d.locked,
                 show_running_indicator: d.show_running_indicator,
                 focus_running_window: d.focus_running_window,
+                launch_animation_enabled: d.launch_animation_enabled,
                 label_mode_index: d.label_mode.to_index(),
                 item_count: d.items.len(),
                 items: d
@@ -175,6 +176,7 @@ impl<I: IconProvider> AppController<I> {
                 theme: self.appearance.theme,
                 accent: self.appearance.accent,
                 language: self.appearance.language,
+                font_renderer: self.appearance.font_renderer,
             },
             isolation: self.modules_cfg.isolation,
             autostart_enabled: host.is_autostart_enabled(),

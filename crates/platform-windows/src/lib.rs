@@ -9,6 +9,8 @@ mod dock_proc;
 #[cfg(windows)]
 mod dock_win;
 #[cfg(windows)]
+mod dwrite_text;
+#[cfg(windows)]
 mod fluent_menu;
 #[cfg(windows)]
 mod fluent_menu_layout;
@@ -16,6 +18,8 @@ mod fluent_menu_layout;
 mod fluent_menu_render;
 #[cfg(windows)]
 mod fluent_menu_win;
+#[cfg(windows)]
+mod font_engine;
 #[cfg(windows)]
 mod http;
 #[cfg(windows)]

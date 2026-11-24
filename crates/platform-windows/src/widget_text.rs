@@ -1,16 +1,19 @@
 use std::ffi::c_void;
 
-use asrbox_platform_api::{BgraFrame, LocalDateTime, TextAlign, WidgetFrame, WidgetTextCmd};
+use asrbox_platform_api::{
+    BgraFrame, FontRenderer, LocalDateTime, TextAlign, WidgetFrame, WidgetTextCmd,
+};
 use windows::Win32::Foundation::{COLORREF, RECT};
 use windows::Win32::Graphics::Gdi::{
-    CreateCompatibleDC, CreateDIBSection, CreateFontIndirectW, DeleteDC, DeleteObject, DrawTextW,
-    GetDC, ReleaseDC, SelectObject, SetBkMode, SetTextColor, ANTIALIASED_QUALITY, DEFAULT_CHARSET,
-    DIB_RGB_COLORS, DT_CENTER, DT_END_ELLIPSIS, DT_LEFT, DT_NOPREFIX, DT_RIGHT, DT_SINGLELINE,
-    DT_VCENTER, FW_NORMAL, FW_SEMIBOLD, LOGFONTW, TRANSPARENT,
+    CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, DrawTextW, GetDC, ReleaseDC,
+    SelectObject, SetBkMode, SetTextColor, DIB_RGB_COLORS, DT_CENTER, DT_END_ELLIPSIS, DT_LEFT,
+    DT_NOPREFIX, DT_RIGHT, DT_SINGLELINE, DT_VCENTER, TRANSPARENT,
 };
 use windows::Win32::System::SystemInformation::GetLocalTime;
 use windows::Win32::System::Time::{GetTimeZoneInformation, TIME_ZONE_INFORMATION};
 
+use crate::dwrite_text::try_render_dwrite_cmd;
+use crate::font_engine::{active_font_renderer, blend_cleartype_mask, get_or_create_ui_font};
 use crate::icons::make_top_down_bmi;
 
 pub(crate) fn query_local_time() -> LocalDateTime {
@@ -42,6 +45,25 @@ pub(crate) fn composite_widget_frame(frame: &WidgetFrame) -> Result<BgraFrame, S
     if frame.texts.is_empty() || out.width == 0 || out.height == 0 {
         return Ok(out);
     }
+    let use_dwrite = active_font_renderer() == FontRenderer::DirectWrite;
+    let mut pending_gdi: Vec<&WidgetTextCmd> = Vec::new();
+    if use_dwrite {
+        for cmd in &frame.texts {
+            if !try_render_dwrite_cmd(&mut out, cmd) {
+                pending_gdi.push(cmd);
+            }
+        }
+        if pending_gdi.is_empty() {
+            return Ok(out);
+        }
+    } else {
+        pending_gdi.extend(frame.texts.iter());
+    }
+    composite_gdi_texts(&mut out, &pending_gdi)?;
+    Ok(out)
+}
+
+fn composite_gdi_texts(out: &mut BgraFrame, cmds: &[&WidgetTextCmd]) -> Result<(), String> {
     let w = i32::try_from(out.width).map_err(|_| "widget width overflow".to_owned())?;
     let h = i32::try_from(out.height).map_err(|_| "widget height overflow".to_owned())?;
     let bmi = make_top_down_bmi(w, h);
@@ -67,8 +89,8 @@ pub(crate) fn composite_widget_frame(frame: &WidgetFrame) -> Result<BgraFrame, S
         if !bits.is_null() {
             let total_bytes = (out.width as usize) * (out.height as usize) * 4;
             let scratch = std::slice::from_raw_parts_mut(bits as *mut u8, total_bytes);
-            for cmd in &frame.texts {
-                draw_and_blend_cmd(hdc_mem, scratch, &mut out, cmd);
+            for cmd in cmds {
+                draw_and_blend_gdi_cmd(hdc_mem, scratch, out, cmd);
             }
         }
 
@@ -77,10 +99,10 @@ pub(crate) fn composite_widget_frame(frame: &WidgetFrame) -> Result<BgraFrame, S
         let _ = DeleteDC(hdc_mem);
         let _ = ReleaseDC(None, hdc_screen);
     }
-    Ok(out)
+    Ok(())
 }
 
-unsafe fn draw_and_blend_cmd(
+unsafe fn draw_and_blend_gdi_cmd(
     hdc: windows::Win32::Graphics::Gdi::HDC,
     scratch: &mut [u8],
     out: &mut BgraFrame,
@@ -95,7 +117,7 @@ unsafe fn draw_and_blend_cmd(
     }
 
     clear_scratch_rect(scratch, out.width as usize, x0, y0, x1, y1);
-    let font = create_segoe_font(cmd.font_size_px, cmd.bold);
+    let font = get_or_create_ui_font(cmd.font_size_px, cmd.bold);
     let prev_font = SelectObject(hdc, font.into());
 
     let mut rect = RECT {
@@ -112,29 +134,23 @@ unsafe fn draw_and_blend_cmd(
     let flags = DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX | align_flag;
     let mut wide: Vec<u16> = cmd.text.encode_utf16().collect();
     let _ = DrawTextW(hdc, &mut wide, &mut rect, flags);
-
     let _ = SelectObject(hdc, prev_font);
-    let _ = DeleteObject(font.into());
 
-    blend_text_mask(scratch, out, x0, y0, x1, y1, cmd.color_rgba);
-}
-
-unsafe fn create_segoe_font(size_px: i32, bold: bool) -> windows::Win32::Graphics::Gdi::HFONT {
-    let mut lf = LOGFONTW {
-        lfHeight: -size_px.max(8),
-        lfWeight: if bold {
-            FW_SEMIBOLD.0 as i32
-        } else {
-            FW_NORMAL.0 as i32
-        },
-        lfCharSet: DEFAULT_CHARSET,
-        lfQuality: ANTIALIASED_QUALITY,
-        ..Default::default()
-    };
-    for (dst, src) in lf.lfFaceName.iter_mut().zip("Segoe UI".encode_utf16()) {
-        *dst = src;
-    }
-    CreateFontIndirectW(&lf)
+    let stride_bytes = (out.width as usize) * 4;
+    blend_cleartype_mask(
+        scratch,
+        stride_bytes,
+        out.height as usize,
+        true,
+        0,
+        0,
+        out,
+        x0,
+        y0,
+        x1,
+        y1,
+        cmd.color_rgba,
+    );
 }
 
 fn clear_scratch_rect(scratch: &mut [u8], stride_px: usize, x0: i32, y0: i32, x1: i32, y1: i32) {
@@ -143,46 +159,6 @@ fn clear_scratch_rect(scratch: &mut [u8], stride_px: usize, x0: i32, y0: i32, x1
         let row_end = ((y as usize) * stride_px + (x1 as usize)) * 4;
         if row_end <= scratch.len() {
             scratch[row_start..row_end].fill(0);
-        }
-    }
-}
-
-fn blend_text_mask(
-    scratch: &[u8],
-    out: &mut BgraFrame,
-    x0: i32,
-    y0: i32,
-    x1: i32,
-    y1: i32,
-    rgba: [u8; 4],
-) {
-    let stride = out.width as usize;
-    let base_alpha = f32::from(rgba[3]) / 255.0;
-    for y in y0..y1 {
-        for x in x0..x1 {
-            let idx = ((y as usize) * stride + (x as usize)) * 4;
-            if idx + 3 >= scratch.len() || idx + 3 >= out.pixels.len() {
-                continue;
-            }
-            let lum = scratch[idx].max(scratch[idx + 1]).max(scratch[idx + 2]);
-            if lum == 0 {
-                continue;
-            }
-            let sa = (f32::from(lum) / 255.0) * base_alpha;
-            let inv = 1.0 - sa;
-            let sr = f32::from(rgba[0]) * sa;
-            let sg = f32::from(rgba[1]) * sa;
-            let sb = f32::from(rgba[2]) * sa;
-
-            let db = f32::from(out.pixels[idx]);
-            let dg = f32::from(out.pixels[idx + 1]);
-            let dr = f32::from(out.pixels[idx + 2]);
-            let da = f32::from(out.pixels[idx + 3]);
-
-            out.pixels[idx] = (sb + db * inv).round().clamp(0.0, 255.0) as u8;
-            out.pixels[idx + 1] = (sg + dg * inv).round().clamp(0.0, 255.0) as u8;
-            out.pixels[idx + 2] = (sr + dr * inv).round().clamp(0.0, 255.0) as u8;
-            out.pixels[idx + 3] = (sa * 255.0 + da * inv).round().clamp(0.0, 255.0) as u8;
         }
     }
 }

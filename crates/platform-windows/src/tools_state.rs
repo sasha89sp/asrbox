@@ -9,6 +9,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     SW_RESTORE,
 };
 
+use crate::font_engine::preferred_ui_font_face;
 use crate::settings_proc::cleanup_settings_window;
 use crate::shell::encode_wide_str;
 use crate::tools_proc::{
@@ -40,27 +41,35 @@ impl ToolsWinState {
 
     pub(crate) fn cleanup(&mut self) {
         cleanup_settings_window();
-        DEBUG_UI.with(|ui| {
-            let mut st = ui.borrow_mut();
-            if let Some(hwnd) = st.hwnd.take() {
-                // SAFETY: Destroying owned debug window on UI teardown.
-                unsafe {
-                    let _ = KillTimer(Some(hwnd), DEBUG_TICK_TIMER_ID);
-                    let _ = DestroyWindow(hwnd);
-                }
-            }
+        let debug_hwnd = DEBUG_UI.with(|ui| {
+            let Ok(mut st) = ui.try_borrow_mut() else {
+                return None;
+            };
+            let h = st.hwnd.take();
             *st = DebugControls::default();
+            h
         });
-        ABOUT_UI.with(|ui| {
-            let mut st = ui.borrow_mut();
-            if let Some(hwnd) = st.hwnd.take() {
-                // SAFETY: Destroying owned about window on UI teardown.
-                unsafe {
-                    let _ = DestroyWindow(hwnd);
-                }
+        if let Some(hwnd) = debug_hwnd {
+            // SAFETY: Destroying owned debug window after releasing DEBUG_UI borrow.
+            unsafe {
+                let _ = KillTimer(Some(hwnd), DEBUG_TICK_TIMER_ID);
+                let _ = DestroyWindow(hwnd);
             }
+        }
+        let about_hwnd = ABOUT_UI.with(|ui| {
+            let Ok(mut st) = ui.try_borrow_mut() else {
+                return None;
+            };
+            let h = st.hwnd.take();
             *st = AboutControls::default();
+            h
         });
+        if let Some(hwnd) = about_hwnd {
+            // SAFETY: Destroying owned about window after releasing ABOUT_UI borrow.
+            unsafe {
+                let _ = DestroyWindow(hwnd);
+            }
+        }
         cleanup_tool_brushes();
         // SAFETY: Deleting owned GDI font handles once on teardown.
         unsafe {
@@ -75,7 +84,7 @@ impl ToolsWinState {
 
     pub(crate) fn ensure_fonts(&mut self) -> (HFONT, HFONT) {
         if self.ui_font.is_none() {
-            self.ui_font = Some(create_font("Segoe UI", 15));
+            self.ui_font = Some(create_font(preferred_ui_font_face(), 15));
         }
         if self.mono_font.is_none() {
             self.mono_font = Some(create_font("Consolas", 14));

@@ -18,6 +18,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 use crate::app_icon::apply_window_icon;
+use crate::font_engine::set_active_font_renderer;
 use crate::settings_helpers::{
     apply_dwm_dark_mode, make_child_edit, paint_settings, position_child_edit, rgba_to_colorref,
 };
@@ -70,27 +71,31 @@ pub(crate) fn settings_hwnd_or(fallback: HWND) -> HWND {
 }
 
 pub(crate) fn apply_settings_window_theme(palette: FluentPalette) {
+    set_active_font_renderer(palette.font_renderer);
     let bg = rgba_to_colorref(palette.input_bg);
     let fg = rgba_to_colorref(palette.text_primary);
-    SETTINGS_UI.with(|ui| {
+    // SAFETY: Creating a GDI solid brush owned by SETTINGS_UI.
+    let new_brush = unsafe { CreateSolidBrush(bg) };
+    let (old_brush, hwnd, edits) = SETTINGS_UI.with(|ui| {
         let mut st = ui.borrow_mut();
         st.edit_bg = bg;
         st.edit_fg = fg;
         st.dark_title = palette.is_dark;
-        // SAFETY: Replacing cached GDI brush and updating DWM dark titlebar on owned HWND.
-        unsafe {
-            if let Some(old) = st.edit_brush.take() {
-                let _ = DeleteObject(old.into());
-            }
-            st.edit_brush = Some(CreateSolidBrush(bg));
-            if let Some(hwnd) = st.hwnd {
-                apply_dwm_dark_mode(hwnd, palette.is_dark);
-                for eh in st.edits.into_iter().flatten() {
-                    let _ = InvalidateRect(Some(eh), None, true);
-                }
+        let old = st.edit_brush.replace(new_brush);
+        (old, st.hwnd, st.edits)
+    });
+    // SAFETY: Deleting old GDI brush and updating DWM/child edits after releasing SETTINGS_UI borrow.
+    unsafe {
+        if let Some(old) = old_brush {
+            let _ = DeleteObject(old.into());
+        }
+        if let Some(hwnd) = hwnd {
+            apply_dwm_dark_mode(hwnd, palette.is_dark);
+            for eh in edits.into_iter().flatten() {
+                let _ = InvalidateRect(Some(eh), None, true);
             }
         }
-    });
+    }
 }
 
 pub(crate) fn set_settings_window_anim_timer(active: bool) {
@@ -213,21 +218,24 @@ pub(crate) fn is_settings_open() -> bool {
 }
 
 pub(crate) fn cleanup_settings_window() {
-    SETTINGS_UI.with(|ui| {
-        let mut st = ui.borrow_mut();
-        // SAFETY: Destroying owned settings HWND, animation timer, and GDI brush on teardown.
-        unsafe {
-            if let Some(hwnd) = st.hwnd.take() {
-                let _ = KillTimer(Some(hwnd), SETTINGS_ANIM_TIMER_ID);
-                let _ = DestroyWindow(hwnd);
-            }
-            if let Some(br) = st.edit_brush.take() {
-                let _ = DeleteObject(br.into());
-            }
-        }
+    let (hwnd, brush) = SETTINGS_UI.with(|ui| {
+        let Ok(mut st) = ui.try_borrow_mut() else {
+            return (None, None);
+        };
         st.edits = [None; EDIT_SLOTS];
         st.frame = None;
+        (st.hwnd.take(), st.edit_brush.take())
     });
+    // SAFETY: Destroying owned settings HWND, animation timer, and GDI brush after releasing RefCell borrow.
+    unsafe {
+        if let Some(hwnd) = hwnd {
+            let _ = KillTimer(Some(hwnd), SETTINGS_ANIM_TIMER_ID);
+            let _ = DestroyWindow(hwnd);
+        }
+        if let Some(br) = brush {
+            let _ = DeleteObject(br.into());
+        }
+    }
 }
 
 pub(crate) unsafe extern "system" fn settings_wnd_proc(
@@ -268,7 +276,8 @@ pub(crate) unsafe extern "system" fn settings_wnd_proc(
             let notify = ((wparam.0 >> 16) & 0xFFFF) as u32;
             let ctrl_id = wparam.0 & 0xFFFF;
             if notify == EN_CHANGE && (EDIT_ID_BASE..EDIT_ID_BASE + EDIT_SLOTS).contains(&ctrl_id) {
-                let suppressed = SETTINGS_UI.with(|ui| ui.borrow().suppress_change);
+                let suppressed =
+                    SETTINGS_UI.with(|ui| ui.try_borrow().map_or(true, |st| st.suppress_change));
                 if !suppressed {
                     let slot = (ctrl_id - EDIT_ID_BASE) as u8;
                     let text = read_settings_input_text(slot);
@@ -315,8 +324,10 @@ pub(crate) unsafe extern "system" fn settings_wnd_proc(
         WM_CTLCOLOREDIT => {
             let hdc = HDC(wparam.0 as *mut c_void);
             let (fg, bg, br) = SETTINGS_UI.with(|ui| {
-                let st = ui.borrow();
-                (st.edit_fg, st.edit_bg, st.edit_brush.unwrap_or_default())
+                ui.try_borrow().map_or(
+                    (COLORREF(0x00FF_FFFF), COLORREF(0x002B_2B2B), HBRUSH::default()),
+                    |st| (st.edit_fg, st.edit_bg, st.edit_brush.unwrap_or_default()),
+                )
             });
             SetTextColor(hdc, fg);
             SetBkColor(hdc, bg);

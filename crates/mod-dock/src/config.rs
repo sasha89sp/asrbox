@@ -158,6 +158,7 @@ pub struct DockConfig {
     pub show_settings_button: bool,
     pub show_running_indicator: bool,
     pub focus_running_window: bool,
+    pub launch_animation_enabled: bool,
     pub hover_zoom: HoverZoomConfig,
     pub items: Vec<DockItem>,
 }
@@ -184,6 +185,7 @@ impl DockConfig {
             show_settings_button: true,
             show_running_indicator: true,
             focus_running_window: true,
+            launch_animation_enabled: true,
             hover_zoom: HoverZoomConfig::default(),
             items: Vec::new(),
         }

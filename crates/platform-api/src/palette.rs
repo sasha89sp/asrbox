@@ -1,10 +1,11 @@
-use crate::theme::{AccentPreset, ThemeMode};
+use crate::theme::{AccentPreset, FontRenderer, ThemeMode};
 
 /// Complete Windows 11 Fluent Design color palette supporting Light, Deep Dark,
 /// custom Accent presets, and smooth per-channel interpolation (`lerp`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FluentPalette {
     pub is_dark: bool,
+    pub font_renderer: FontRenderer,
     pub window_bg: [u8; 4],
     pub sidebar_bg: [u8; 4],
     pub card_bg: [u8; 4],
@@ -45,12 +46,18 @@ impl FluentPalette {
         Self::from_theme(ThemeMode::Dark, accent_preset)
     }
 
+    pub fn with_font_renderer(mut self, renderer: FontRenderer) -> Self {
+        self.font_renderer = renderer;
+        self
+    }
+
     pub fn from_theme(mode: ThemeMode, accent_preset: AccentPreset) -> Self {
         let dark = mode.is_dark();
         let (accent, accent_hover, accent_on) = accent_preset.colors(dark);
         if dark {
             Self {
                 is_dark: true,
+                font_renderer: FontRenderer::GdiClearType,
                 window_bg: [32, 32, 32, 255],      // #202020
                 sidebar_bg: [25, 25, 25, 255],     // #191919
                 card_bg: [43, 43, 43, 255],        // #2B2B2B
@@ -82,6 +89,7 @@ impl FluentPalette {
         } else {
             Self {
                 is_dark: false,
+                font_renderer: FontRenderer::GdiClearType,
                 window_bg: [243, 243, 243, 255],      // #F3F3F3
                 sidebar_bg: [243, 243, 243, 255],     // #F3F3F3
                 card_bg: [255, 255, 255, 255],        // #FFFFFF
@@ -117,6 +125,7 @@ impl FluentPalette {
         let k = t.clamp(0.0, 1.0);
         Self {
             is_dark: if k < 0.5 { a.is_dark } else { b.is_dark },
+            font_renderer: b.font_renderer,
             window_bg: lerp_rgba(a.window_bg, b.window_bg, k),
             sidebar_bg: lerp_rgba(a.sidebar_bg, b.sidebar_bg, k),
             card_bg: lerp_rgba(a.card_bg, b.card_bg, k),
@@ -176,11 +185,13 @@ mod tests {
             theme: ThemeMode::Light,
             accent: AccentPreset::Emerald,
             language: AppLanguage::En,
+            font_renderer: FontRenderer::DirectWrite,
         };
         assert_eq!(
             parse_appearance_config(&serialize_appearance_config(&cfg)),
             cfg
         );
+        assert_eq!(cfg.palette().font_renderer, FontRenderer::DirectWrite);
         let dark = FluentPalette::from_theme(ThemeMode::Dark, AccentPreset::Blue);
         let light = FluentPalette::from_theme(ThemeMode::Light, AccentPreset::Blue);
         assert_eq!(dark.accent, [76, 194, 255, 255]);

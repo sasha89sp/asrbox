@@ -26,6 +26,7 @@ fn sample_snapshot() -> SettingsSnapshot {
             locked: true,
             show_running_indicator: true,
             focus_running_window: true,
+            launch_animation_enabled: true,
             item_count: 1,
             items: vec![DockItemView {
                 id: 1,
@@ -142,3 +143,42 @@ fn renders_all_tabs_and_browser_tabs_in_light_and_dark() {
     ui.close_browser_tab(1);
     assert_eq!(ui.browser_tabs.len(), 3);
 }
+
+#[test]
+fn backup_and_sync_server_chips_do_not_overlap_subtitles() {
+    let snap = sample_snapshot();
+    let mut ui = SettingsUiState::default();
+    ui.active_tab = SettingsTab::General;
+    let _ = ui.render(&snap);
+
+    for card in &ui.layout.cards {
+        for row in &card.rows {
+            if row.subtitle.is_none() {
+                continue;
+            }
+            let sub_bottom = row.y + 46;
+            assert!(
+                row.height >= 50,
+                "row '{}' has tight height {}",
+                row.title,
+                row.height
+            );
+            for ctrl in &ui.layout.controls {
+                if let layout::HitKind::Chip { .. } = ctrl.kind {
+                    let inside_row =
+                        ctrl.rect.y >= row.y && ctrl.rect.y < row.y + row.height as i32;
+                    if inside_row {
+                        assert!(
+                            ctrl.rect.y >= sub_bottom,
+                            "chip at y={} overlaps subtitle ending at {} in row '{}'",
+                            ctrl.rect.y,
+                            sub_bottom,
+                            row.title
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
