@@ -67,6 +67,7 @@ pub enum DockMenuAction {
     ToggleRunningIndicator,
     ToggleFocusRunning,
     ToggleLaunchAnimation,
+    OpenItemFolder(u64),
     ChooseItemIcon(u64),
     ResetItemIcon(u64),
     RemoveItem(u64),

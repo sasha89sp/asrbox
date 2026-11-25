@@ -51,6 +51,10 @@ pub struct DockDragState {
 }
 
 impl DockDragState {
+    pub fn cancel(&mut self) -> bool {
+        self.mode.take().is_some()
+    }
+
     pub fn on_left_down(
         &mut self,
         docks: &[DockRuntime],

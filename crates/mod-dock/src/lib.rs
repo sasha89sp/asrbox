@@ -139,7 +139,8 @@ pub fn apply_menu_action(
         DockMenuAction::ToggleSettingsButton => {
             cfg.show_settings_button = !cfg.show_settings_button;
         }
-        DockMenuAction::OpenSettings
+        DockMenuAction::OpenItemFolder(_)
+        | DockMenuAction::OpenSettings
         | DockMenuAction::OpenDockConfig
         | DockMenuAction::ReloadDockConfig
         | DockMenuAction::AddNewDock

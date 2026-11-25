@@ -20,7 +20,7 @@ use windows::Win32::Graphics::Gdi::{
 };
 
 use crate::dwrite_vtable::{static_renderer_raw, DrawCtx};
-use crate::font_engine::{blend_cleartype_mask, font_face_for_size};
+use crate::font_engine::{blend_cleartype_mask, dwrite_font_face};
 use crate::shell::encode_wide_str;
 
 struct DWriteContext {
@@ -116,7 +116,7 @@ fn get_or_create_format(
     if let Some(fmt) = ctx.formats.get(&(clamped, bold, align_key)) {
         return Ok(fmt.clone());
     }
-    let face_w = encode_wide_str(font_face_for_size(clamped));
+    let face_w = encode_wide_str(dwrite_font_face());
     let locale_w = encode_wide_str("");
     let weight = if bold {
         DWRITE_FONT_WEIGHT_SEMI_BOLD
@@ -231,6 +231,7 @@ fn render_with_context(
             x1,
             y1,
             cmd.color_rgba,
+            false,
         );
     }
     Ok(())

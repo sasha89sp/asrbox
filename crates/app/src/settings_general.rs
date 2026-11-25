@@ -17,6 +17,7 @@ use asrbox_platform_api::{
     WidgetPlatform,
 };
 
+use crate::dock_shortcuts::{cleanup_unused_shortcuts, shortcuts_dir_for_config};
 use crate::{AppController, APP_VERSION};
 
 impl<I: IconProvider> AppController<I> {
@@ -275,6 +276,8 @@ impl<I: IconProvider> AppController<I> {
             SettingsTab::Dock => {
                 let def = vec![DockConfig::new(1, "Док 1")];
                 let _ = save_docks_to_file(&self.paths.docks_cfg, &def, APP_VERSION);
+                let dir = shortcuts_dir_for_config(&self.paths.docks_cfg);
+                cleanup_unused_shortcuts(&def, &dir);
                 self.reload_module_config(host, ModuleId::Dock);
             }
             SettingsTab::Widgets => match self.settings_ui.selected_widget {

@@ -15,6 +15,7 @@ use asrbox_mod_widgets::{
 };
 use asrbox_platform_api::{DockPlatform, IconProvider, ToolsPlatform, WidgetPlatform};
 
+use crate::dock_shortcuts::{cleanup_unused_shortcuts, shortcuts_dir_for_config};
 use crate::{AppController, APP_VERSION};
 
 impl<I: IconProvider> AppController<I> {
@@ -214,6 +215,10 @@ impl<I: IconProvider> AppController<I> {
             },
         };
         if changed && save_docks_to_file(&self.paths.docks_cfg, &cfgs, APP_VERSION).is_ok() {
+            if matches!(action, SettingsAction::RemoveDock(_)) {
+                let dir = shortcuts_dir_for_config(&self.paths.docks_cfg);
+                cleanup_unused_shortcuts(&cfgs, &dir);
+            }
             self.reload_module_config(host, ModuleId::Dock);
         }
         true

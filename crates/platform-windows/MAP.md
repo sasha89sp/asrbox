@@ -4,7 +4,7 @@
 
 ## Файлы
 - `src/lib.rs` — экспорт `WindowsDockHost`, `WindowsIconProvider`, `SingleInstanceGuard`, `JobObject`, `is_process_alive`, `wake_host_window`, `present_layered_bgra`, `query_primary_work_area`.
-- `src/app_icon.rs` — процедурный 32-bit BGRA `HICON` в стиле Windows 11 Fluent (16×16 трей и 32×32 панель задач/окна) с кэшированием и `WM_SETICON`.
+- `src/app_icon.rs` — DPI-aware загрузка встроенной многоразмерной иконки PE (`LoadImageW` + `RT_GROUP_ICON #1`) с bottom-up фолбэком `CreateIconIndirect`, кэшем и `WM_SETICON`.
 - `src/autostart.rs` — автозагрузка Windows (`HKCU\...\Run\asrbox`) и Windows Credential Manager (`CredWriteW`/`CredReadW`/`CredDeleteW`).
 - `src/fluent_menu.rs` — точка входа и цикл кастомного слоистого Fluent-меню (`show_fluent_popup_menu`).
 - `src/fluent_menu_win.rs` — Win32-окно `AsrboxFluentMenuWindow`, презентация, вложенные подменю, hit-test и обработка мыши/клавиатуры.
@@ -17,7 +17,7 @@
 - `src/window.rs` — `WindowsDockHost` (master с треем и `new_worker()`), хранение `FluentPalette`, регистрация классов, таймеры, `WM_IPC_WAKE`, `WM_WEBDAV_DONE` и цикл сообщений.
 - `src/dock_win.rs` — реализация `DockPlatform` для `WindowsDockHost` (окна доков, слои, рендер, Fluent-меню, тема, запуск/фокус).
 - `src/dock_proc.rs` — оконная процедура док-панели (`dock_wnd_proc`), удержание слоя `Wallpaper`, захват ЛКМ, ПКМ, анимация и `WM_DROPFILES`.
-- `src/dock_menu.rs` — Fluent ПКМ-меню док-панели (верхний ряд быстрых действий + подменю положения, слоя, имён, прозрачности и поведения).
+- `src/dock_menu.rs` — Fluent ПКМ-меню док-панели (открытие расположения файла/папки ярлыка, быстрые действия + подменю положения, слоя, имён, прозрачности и поведения).
 - `src/running.rs` — определение запущенных приложений (`EnumWindows` + `QueryFullProcessImageNameW`), резолв `.lnk` (`IShellLinkW`) и усиленная активация открытого/свёрнутого окна (`AllowSetForegroundWindow`/`SW_RESTORE`/`AttachThreadInput`).
 - `src/job.rs` — Win32 `JobObject` (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK`) для изоляции дочерних процессов модулей без закрытия запущенных из дока программ.
 - `src/settings_proc.rs` — изменяемое Fluent-окно настроек (`AsrboxSettingsWindow`, защита `try_borrow`, события мыши/клавиатуры/колеса, 5 слотов `EDIT` с `EN_CHANGE`, таймер анимации темы).
@@ -40,7 +40,7 @@
 - `src/icons_lnk.rs` — разрешение `.lnk` (`IShellLinkW::GetIconLocation`/`GetPath`, `ExpandEnvironmentStringsW`), `SHGetFileInfoW` и `has_explorer_frame_box`.
 - `src/tray.rs` — Fluent-иконка в трее и показ кастомного Fluent-меню.
 - `src/tray_menu.rs` — сборка `FluentMenuSpec` системного трея (быстрый ряд + подменю модулей) и декодирование `TrayAction`.
-- `src/shell.rs` — диалоги выбора иконки, нескольких файлов (`OFN_ALLOWMULTISELECT`) и папки (`IFileOpenDialog`), буфер обмена, запуск программ/URL/Explorer/Блокнота.
+- `src/shell.rs` — диалоги выбора иконки, нескольких файлов (`OFN_ALLOWMULTISELECT`) и папки (`IFileOpenDialog`), `ReleaseCapture`, буфер обмена, открытие расположения файла (`explorer /select`), запуск программ/URL/Блокнота.
 - `src/metrics.rs` — `ProcessMetricsSampler` (RAM, % CPU, GDI/USER, uptime).
 - `src/tools_win.rs` — `impl ToolsPlatform for WindowsDockHost`.
 - `src/tools_state.rs` — состояние `ToolsWinState`, кэш GDI-шрифтов и чтение/запись текста контролов.

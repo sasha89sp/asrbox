@@ -284,6 +284,7 @@ pub trait DockPlatform {
     ) -> Result<Option<TrayAction>, String>;
     fn pick_icon_file(&mut self) -> Result<Option<PathBuf>, String>;
     fn activate_or_launch_target(&self, path: &Path, focus_running: bool) -> Result<bool, String>;
+    fn open_item_location(&self, path: &Path) -> Result<(), String>;
     fn open_text_file(&self, path: &Path) -> Result<(), String>;
     fn set_theme(&mut self, palette: FluentPalette);
     fn request_quit(&mut self);

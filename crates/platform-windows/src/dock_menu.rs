@@ -27,6 +27,7 @@ const CMD_TOGGLE_ZOOM: u32 = 130;
 const CMD_TOGGLE_RUNNING: u32 = 131;
 const CMD_TOGGLE_FOCUS_RUN: u32 = 132;
 const CMD_TOGGLE_LAUNCH_ANIM: u32 = 133;
+const CMD_OPEN_ITEM_FOLDER: u32 = 139;
 const CMD_CHOOSE_ICON: u32 = 140;
 const CMD_RESET_ICON: u32 = 141;
 const CMD_REMOVE_ITEM: u32 = 142;
@@ -88,6 +89,13 @@ fn build_dock_menu_spec(state: &DockMenuState) -> FluentMenuSpec {
                 true,
             ));
         } else {
+            items.push(act(
+                CMD_OPEN_ITEM_FOLDER,
+                "Открыть расположение файла",
+                Some("↗"),
+                false,
+                true,
+            ));
             items.push(act(
                 CMD_CHOOSE_ICON,
                 "Сменить иконку...",
@@ -357,6 +365,7 @@ fn decode_dock_command(cmd: u32, hovered: Option<u64>) -> Option<DockMenuAction>
         CMD_TOGGLE_RUNNING => Some(DockMenuAction::ToggleRunningIndicator),
         CMD_TOGGLE_FOCUS_RUN => Some(DockMenuAction::ToggleFocusRunning),
         CMD_TOGGLE_LAUNCH_ANIM => Some(DockMenuAction::ToggleLaunchAnimation),
+        CMD_OPEN_ITEM_FOLDER => hovered.map(DockMenuAction::OpenItemFolder),
         CMD_CHOOSE_ICON => hovered.map(DockMenuAction::ChooseItemIcon),
         CMD_RESET_ICON => hovered.map(DockMenuAction::ResetItemIcon),
         CMD_REMOVE_ITEM => hovered.map(DockMenuAction::RemoveItem),

@@ -50,7 +50,7 @@ use asrbox_mod_dock::{to_dock_rect, Rect};
 #[cfg(windows)]
 use asrbox_mod_overlay::GameOverlay;
 #[cfg(windows)]
-use asrbox_mod_settings::{SettingsTab, SettingsUiState};
+use asrbox_mod_settings::{SettingsSnapshot, SettingsTab, SettingsUiState};
 #[cfg(windows)]
 use asrbox_mod_widgets::{CalendarWidget, SysMonitorWidget, CALENDAR_WIDGET_ID, SYS_WIDGET_ID};
 #[cfg(windows)]
@@ -179,6 +179,7 @@ pub(crate) struct AppController<I: IconProvider> {
     pub(crate) overlay_setup_mode: bool,
     pub(crate) backup: BackupController,
     pub(crate) settings_ui: SettingsUiState,
+    pub(crate) cached_settings_snap: Option<SettingsSnapshot>,
     pub(crate) last_settings_tab: Option<SettingsTab>,
     pub(crate) diagnostics_monitor_enabled: bool,
     pub(crate) debug: DebugHub,
@@ -216,6 +217,7 @@ impl<I: IconProvider> AppController<I> {
             overlay_setup_mode: false,
             backup,
             settings_ui,
+            cached_settings_snap: None,
             last_settings_tab: None,
             diagnostics_monitor_enabled: true,
             debug,

@@ -9,6 +9,7 @@ use windows::Win32::Graphics::Gdi::{
     LOGFONTW, TEXTMETRICW,
 };
 
+const SEGOE_VAR_DWRITE: &str = "Segoe UI Variable";
 const SEGOE_VAR_TEXT: &str = "Segoe UI Variable Text";
 const SEGOE_VAR_DISPLAY: &str = "Segoe UI Variable Display";
 const SEGOE_VAR_SMALL: &str = "Segoe UI Variable Small";
@@ -31,6 +32,14 @@ pub(crate) fn active_font_renderer() -> FontRenderer {
 pub(crate) fn preferred_ui_font_face() -> &'static str {
     if has_segoe_ui_variable() {
         SEGOE_VAR_TEXT
+    } else {
+        SEGOE_FALLBACK
+    }
+}
+
+pub(crate) fn dwrite_font_face() -> &'static str {
+    if has_segoe_ui_variable() {
+        SEGOE_VAR_DWRITE
     } else {
         SEGOE_FALLBACK
     }
@@ -174,6 +183,7 @@ pub(crate) fn blend_cleartype_mask(
     x1: i32,
     y1: i32,
     rgba: [u8; 4],
+    apply_gamma_tune: bool,
 ) {
     let dst_stride = out.width as usize;
     let base_alpha = f32::from(rgba[3]) / 255.0;
@@ -212,6 +222,7 @@ pub(crate) fn blend_cleartype_mask(
                     rgb,
                     base_alpha,
                     is_light,
+                    apply_gamma_tune,
                 );
             }
         }
@@ -219,10 +230,24 @@ pub(crate) fn blend_cleartype_mask(
 }
 
 #[inline]
-fn blend_pixel(dst: &mut [u8], mask_bgr: [u8; 3], rgb: [f32; 3], base_alpha: f32, is_light: bool) {
-    let cr = tune_coverage(mask_bgr[2], is_light) * base_alpha;
-    let cg = tune_coverage(mask_bgr[1], is_light) * base_alpha;
-    let cb = tune_coverage(mask_bgr[0], is_light) * base_alpha;
+fn blend_pixel(
+    dst: &mut [u8],
+    mask_bgr: [u8; 3],
+    rgb: [f32; 3],
+    base_alpha: f32,
+    is_light: bool,
+    apply_gamma_tune: bool,
+) {
+    let cov = |raw: u8| {
+        if apply_gamma_tune {
+            tune_coverage(raw, is_light)
+        } else {
+            f32::from(raw) / 255.0
+        }
+    };
+    let cr = cov(mask_bgr[2]) * base_alpha;
+    let cg = cov(mask_bgr[1]) * base_alpha;
+    let cb = cov(mask_bgr[0]) * base_alpha;
     let (db, dg, dr) = (f32::from(dst[0]), f32::from(dst[1]), f32::from(dst[2]));
     let da = dst[3];
     if da == 255 {

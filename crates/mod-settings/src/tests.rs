@@ -190,3 +190,30 @@ fn backup_and_sync_server_chips_do_not_overlap_subtitles() {
         }
     }
 }
+
+#[test]
+fn scrolled_content_texts_do_not_overlap_sticky_header() {
+    let snap = sample_snapshot();
+    let mut ui = SettingsUiState {
+        active_tab: SettingsTab::General,
+        scroll_y: 42,
+        ..Default::default()
+    };
+    let (frame, _) = ui.render(&snap);
+    let top_y = ui.layout.content_top_y;
+    let sidebar_x = layout::SIDEBAR_WIDTH as i32;
+    for cmd in &frame.texts {
+        if cmd.x >= sidebar_x && cmd.y < top_y {
+            let is_header = cmd.text == ui.layout.header_title
+                || cmd.text == ui.layout.header_subtitle
+                || cmd.text == "⌕"
+                || cmd.text == "Сбросить"
+                || cmd.text == "Reset";
+            assert!(
+                is_header,
+                "content text '{}' at y={} bled into sticky header (top_y={})",
+                cmd.text, cmd.y, top_y
+            );
+        }
+    }
+}

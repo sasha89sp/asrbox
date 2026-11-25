@@ -19,7 +19,7 @@ use crate::font_engine::set_active_font_renderer;
 use crate::present_layered_bgra;
 use crate::query_primary_work_area;
 use crate::running::{activate_or_launch_target, query_running_exe_names, resolve_target_exe_name};
-use crate::shell::{open_in_notepad, pick_icon_dialog};
+use crate::shell::{open_in_notepad, open_item_location, pick_icon_dialog};
 use crate::tray::show_tray_context_menu;
 use crate::widget_proc::apply_widget_layer;
 use crate::widget_text::composite_widget_frame;
@@ -200,6 +200,10 @@ impl DockPlatform for WindowsDockHost {
 
     fn activate_or_launch_target(&self, path: &Path, focus_running: bool) -> Result<bool, String> {
         activate_or_launch_target(path, focus_running)
+    }
+
+    fn open_item_location(&self, path: &Path) -> Result<(), String> {
+        open_item_location(path)
     }
 
     fn open_text_file(&self, path: &Path) -> Result<(), String> {

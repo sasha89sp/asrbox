@@ -8,8 +8,7 @@ use asrbox_mod_dock::{
     to_dock_rect, to_pixel_rect, DockConfig, DockEdge, DockEvent, DockInstance, Point, Rect,
 };
 use asrbox_platform_api::{
-    DockPlatform, FluentPalette, IconProvider, PixelPoint, PixelRect, RgbaImage, TrayMenuEntry,
-    WidgetLayer,
+    DockPlatform, FluentPalette, IconProvider, PixelPoint, PixelRect, RgbaImage, WidgetLayer,
 };
 
 use crate::dock_drag::{DockDragState, DragReleaseOutcome};
@@ -30,7 +29,7 @@ pub struct DockRuntime {
 
 pub struct DockManager<I: IconProvider> {
     config_path: PathBuf,
-    app_version: &'static str,
+    pub(crate) app_version: &'static str,
     pub(crate) work_area: Rect,
     pub(crate) icon_provider: I,
     pub(crate) docks: Vec<DockRuntime>,
@@ -153,6 +152,7 @@ impl<I: IconProvider> DockManager<I> {
         self.docks =
             reload_runtimes_in_place(existing, configs, self.work_area, &self.icon_provider, host)?;
         self.next_dock_id = max_id.saturating_add(1);
+        self.cleanup_orphaned_shortcuts();
         self.sync_windows(host, safe_mode)?;
         Ok(self.docks.len())
     }
@@ -187,6 +187,7 @@ impl<I: IconProvider> DockManager<I> {
     }
 
     pub fn step_dock(&mut self, host: &mut dyn DockPlatform, id: u64, ev: DockEvent) -> bool {
+        let drag_cancelled = matches!(ev, DockEvent::PointerLeave) && self.drag.cancel();
         let update_tip = matches!(ev, DockEvent::PointerMove(_) | DockEvent::PointerLeave);
         let Some(dock) = self.docks.iter_mut().find(|d| d.instance.config().id == id) else {
             return false;
@@ -194,18 +195,18 @@ impl<I: IconProvider> DockManager<I> {
         let effect = dock.instance.handle_event(ev);
         if update_tip && dock.window_open {
             let ov = self.drag.overlay_for(dock);
-            let tip = if ov.dragged_item_id.is_some() {
-                None
-            } else {
-                dock.instance.hovered_tooltip()
-            };
+            let tip = ov
+                .dragged_item_id
+                .is_none()
+                .then(|| dock.instance.hovered_tooltip())
+                .flatten();
             let _ = host.set_dock_tooltip(id, tip.as_deref());
         }
         if dock.timer_active != effect.animation_active {
             dock.timer_active = effect.animation_active;
             let _ = host.set_animation_timer(id, effect.animation_active);
         }
-        if effect.needs_redraw && dock.window_open {
+        if (effect.needs_redraw || drag_cancelled) && dock.window_open {
             let _ = present_dock(host, dock, self.drag.overlay_for(dock), self.palette);
             return true;
         }
@@ -239,6 +240,7 @@ impl<I: IconProvider> DockManager<I> {
             DragReleaseOutcome::Mutated(msg) => {
                 self.redraw_open_docks(host);
                 self.persist();
+                self.cleanup_orphaned_shortcuts();
                 self.refresh_running_apps(host);
                 Some(msg)
             }
@@ -331,17 +333,6 @@ impl<I: IconProvider> DockManager<I> {
         Some(self.apply_dock_action(host, id, action, safe_mode))
     }
 
-    pub fn tray_entries(&self) -> Vec<TrayMenuEntry> {
-        self.docks
-            .iter()
-            .map(|d| TrayMenuEntry {
-                dock_id: d.instance.config().id,
-                title: d.instance.config().name.clone(),
-                enabled: d.instance.config().enabled,
-            })
-            .collect()
-    }
-
     pub fn add_new_dock(&mut self, host: &mut dyn DockPlatform, safe_mode: &mut bool) {
         let id = self.next_dock_id;
         self.next_dock_id = self.next_dock_id.saturating_add(1);
@@ -390,14 +381,5 @@ impl<I: IconProvider> DockManager<I> {
             self.cleanup_orphaned_shortcuts();
             self.sync_running_timer(host);
         }
-    }
-
-    pub fn persist(&self) {
-        let cfgs: Vec<DockConfig> = self
-            .docks
-            .iter()
-            .map(|d| d.instance.config().clone())
-            .collect();
-        let _ = save_docks_to_file(&self.config_path, &cfgs, self.app_version);
     }
 }

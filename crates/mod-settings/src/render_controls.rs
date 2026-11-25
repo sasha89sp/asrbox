@@ -41,9 +41,7 @@ pub(crate) fn draw_control(
     lang: AppLanguage,
 ) {
     let r = ctrl.rect;
-    if !is_chrome_control(&ctrl.kind)
-        && (r.y + r.height as i32 <= top_y || r.y >= bgra.height as i32)
-    {
+    if !is_chrome_control(&ctrl.kind) && (r.y < top_y || r.y >= bgra.height as i32) {
         return;
     }
     match &ctrl.kind {
@@ -119,22 +117,22 @@ fn draw_sidebar_tab(
     lang: AppLanguage,
 ) {
     if active {
-        fill_rounded_rect(bgra, r, 6, pal.nav_active_bg);
+        fill_rounded_rect(bgra, r, 4, pal.nav_active_bg);
         fill_rounded_rect(
             bgra,
-            pr(r.x + 2, r.y + 8, 3, r.height.saturating_sub(16)),
+            pr(r.x + 2, r.y + 9, 3, r.height.saturating_sub(18)),
             2,
             pal.accent,
         );
     } else if hovered {
-        fill_rounded_rect(bgra, r, 6, pal.nav_hover_bg);
+        fill_rounded_rect(bgra, r, 4, pal.nav_hover_bg);
     }
     push_text(
         texts,
         pr(r.x + 14, r.y + 7, r.width.saturating_sub(20), 22),
         format!("{}  {}", tab.icon(), tab.label(lang)),
         13,
-        active,
+        false,
         if active {
             pal.text_primary
         } else {
@@ -156,8 +154,8 @@ fn draw_browser_tab(
     pal: &FluentPalette,
 ) {
     if active {
-        fill_rounded_rect(bgra, r, 6, pal.window_bg);
-        stroke_rounded_rect(bgra, r, 6, pal.divider);
+        fill_rounded_rect(bgra, r, 4, pal.card_bg);
+        stroke_rounded_rect(bgra, r, 4, pal.card_border);
         fill_rounded_rect(
             bgra,
             pr(r.x + 10, r.y + 1, r.width.saturating_sub(20), 2),
@@ -165,7 +163,7 @@ fn draw_browser_tab(
             pal.accent,
         );
     } else if hovered {
-        fill_rounded_rect(bgra, r, 6, pal.nav_hover_bg);
+        fill_rounded_rect(bgra, r, 4, pal.nav_hover_bg);
     }
     let text_w = r.width.saturating_sub(if closable { 34 } else { 16 });
     push_text(
@@ -173,7 +171,7 @@ fn draw_browser_tab(
         pr(r.x + 10, r.y + 4, text_w, 20),
         label,
         12,
-        active,
+        false,
         if active {
             pal.text_primary
         } else {
@@ -192,30 +190,52 @@ fn draw_segment_or_chip(
     hovered: bool,
     pal: &FluentPalette,
 ) {
-    let (bg, fg) = if active {
-        (
-            if hovered {
-                pal.accent_hover
-            } else {
-                pal.accent
-            },
-            pal.accent_on,
-        )
-    } else {
-        (
-            if hovered {
-                pal.control_hover
-            } else {
-                pal.control_bg
-            },
+    if active {
+        let tint = if pal.is_dark { 0.18 } else { 0.12 };
+        let base_bg = asrbox_platform_api::lerp_rgba(pal.control_bg, pal.accent, tint);
+        let bg = if hovered {
+            asrbox_platform_api::lerp_rgba(base_bg, pal.accent, 0.10)
+        } else {
+            base_bg
+        };
+        let border = asrbox_platform_api::lerp_rgba(pal.control_border, pal.accent, 0.55);
+        fill_rounded_rect(bgra, r, 4, bg);
+        stroke_rounded_rect(bgra, r, 4, border);
+        let bar_w = r.width.saturating_sub(18).max(16);
+        let bar_x = r.x + ((r.width - bar_w) / 2) as i32;
+        fill_rounded_rect(
+            bgra,
+            pr(bar_x, r.y + r.height as i32 - 3, bar_w, 2),
+            1,
+            pal.accent,
+        );
+        push_text(
+            texts,
+            r,
+            label,
+            12,
+            false,
             pal.text_primary,
-        )
-    };
-    fill_rounded_rect(bgra, r, 6, bg);
-    if !active {
-        stroke_rounded_rect(bgra, r, 6, pal.control_border);
+            TextAlign::Center,
+        );
+    } else {
+        let bg = if hovered {
+            pal.control_hover
+        } else {
+            pal.control_bg
+        };
+        fill_rounded_rect(bgra, r, 4, bg);
+        stroke_rounded_rect(bgra, r, 4, pal.control_border);
+        push_text(
+            texts,
+            r,
+            label,
+            12,
+            false,
+            pal.text_secondary,
+            TextAlign::Center,
+        );
     }
-    push_text(texts, r, label, 12, active, fg, TextAlign::Center);
 }
 
 fn draw_fluent_btn(
@@ -232,14 +252,18 @@ fn draw_fluent_btn(
         (ButtonTone::Primary, true) => (pal.accent_hover, pal.accent_on, false),
         (ButtonTone::Danger, false) => (pal.danger_bg, [255, 255, 255, 255], false),
         (ButtonTone::Danger, true) => (pal.danger_hover, [255, 255, 255, 255], false),
-        (ButtonTone::Amber, false) => (pal.warn_border, [255, 255, 255, 255], false),
-        (ButtonTone::Amber, true) => (pal.warn_border, [255, 255, 255, 255], false),
+        (ButtonTone::Amber, false) => (pal.warn_border, [20, 20, 20, 255], false),
+        (ButtonTone::Amber, true) => (
+            asrbox_platform_api::lerp_rgba(pal.warn_border, [255, 255, 255, 255], 0.14),
+            [20, 20, 20, 255],
+            false,
+        ),
         (ButtonTone::Secondary, false) => (pal.control_bg, pal.text_primary, true),
         (ButtonTone::Secondary, true) => (pal.control_hover, pal.text_primary, true),
     };
-    fill_rounded_rect(bgra, r, 6, bg);
+    fill_rounded_rect(bgra, r, 4, bg);
     if bordered {
-        stroke_rounded_rect(bgra, r, 6, pal.control_border);
+        stroke_rounded_rect(bgra, r, 4, pal.control_border);
     }
     push_text(texts, r, label, 12, !bordered, fg, TextAlign::Center);
 }

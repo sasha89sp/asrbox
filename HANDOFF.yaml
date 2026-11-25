@@ -1,33 +1,32 @@
-version: 0.0.6
-updated: 2026-11-24
+version: 0.0.7
+updated: 2026-11-25
 spec_ids: [NF-001, NF-002, NF-005, NF-006, NF-007, NF-010, ST-001, ST-002, ST-005, ST-007]
 atlas_updated: true
 last_session:
-  goal: "Версия 0.0.6: исправление BUG-006/BUG-007 и вёрстки настроек, шрифты Windows 11 (GDI ClearType + DirectWrite), неубиваемые ярлыки data/shortcuts/, безморганный ресайз дока, «Не запускать вторую копию», анимация запуска и 4-вкладочные настройки с ленивой диагностикой"
+  goal: "Версия 0.0.7: дизайн Настроек в стиле Windows 11 Settings, встроенная PE-иконка asrbox.exe (BUG-008), «Открыть расположение файла» в ПКМ-меню дока и исправления по итогам аудита кода"
   done:
-    - "Версия workspace поднята до 0.0.6 (Cargo.toml + CHANGELOG.md + ADR-017 + BUGS.md + specs/mod-settings.md + ATLAS.md + MAP.md)"
-    - "BUG-006 (job.rs): JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK отвязывает запущенные через док программы от Job супервизора (+ unit-тест)"
-    - "BUG-007 (fluent_menu*.rs, settings_proc.rs, tools_state.rs, main.rs): убраны реентрантные Win32 вызовы внутри RefCell + crash.log panic hook"
-    - "Шрифты Win11 (font_engine.rs, dwrite_text.rs): автоопределение Segoe UI Variable (Display/Text/Small -> Segoe UI) + выбор GDI ClearType / DirectWrite в Общих настройках"
-    - "Док-панели (dock_shortcuts.rs, docks.rs, dock_ops.rs, mod-dock, running.rs): портативные копии .lnk/.url в data/shortcuts/, обновление окон на месте без моргания, усиленный фокус «Не запускать вторую копию» и 460 мс анимация запуска с вкл/выкл"
-    - "Настройки (mod-settings, app): 4 вкладки слева (Общие, Док-панели, Виджеты [Календарь|Монитор], Оверлей), карточка МОДУЛЬ И ПРОЦЕСС в каждом модуле, Изоляция + «Перезапустить все модули» в Общих, фикс наложения чипов и строго ленивая диагностика вне своей вкладки"
+    - "Версия workspace поднята до 0.0.7 (Cargo.toml + CHANGELOG.md + ADR-018 + BUG-008 + MAP.md + HANDOFF.yaml)"
+    - "Дизайн Windows 11 Settings (palette.rs, render.rs, render_controls.rs): единый фон #202020/#F3F3F3, раздельные карточки #2B2B2B с зазором 3px, мягкие сегменты с нижней акцентной полоской и клиппинг скролла под шапкой"
+    - "BUG-008 (crates/app/build.rs, app_icon.rs): zero-dependency генератор Win32 .res (6 размеров 16..128px) для asrbox.exe + DPI-aware LoadImageW и исправленный bottom-up фолбэк CreateIconIndirect"
+    - "ПКМ-меню дока (menu.rs, lib.rs, mod-dock, dock_menu.rs, shell.rs, dock_win.rs, dock_ops.rs): добавлен пункт «Открыть расположение файла» с разыменованием .lnk и explorer.exe /select"
+    - "Аудит кода (settings_ctl.rs, dock_proc.rs, fluent_menu.rs, shell.rs, dwrite_text.rs, font_engine.rs, docks.rs, settings_widgets.rs): кэш SettingsSnapshot, фикс WM_CAPTURECHANGED и ReleaseCapture, «Segoe UI Variable» и гамма в DirectWrite, очистка data/shortcuts/"
   not_done:
     - "Прогон GitHub Actions (.github/workflows/ci.yml) на windows-latest"
-    - "Ручная проверка на Windows 10/11: BUG-006, BUG-007, GDI ClearType vs DirectWrite, ресайз дока без моргания, удаление ярлыка с рабочего стола, анимация запуска и 4-вкладочные настройки"
+    - "Ручная проверка v0.0.7 на Windows 10/11: дизайн Настроек, иконка в Диспетчере задач/панели задач/трее и «Открыть расположение файла» в док-панели"
   verified:
     ci_build: false
     tests: true
     manual_run: false
-open_bugs: [BUG-003, BUG-004, BUG-005, BUG-006, BUG-007]
-next_step: "Запустить GitHub Actions (windows-latest), скачать asrbox.exe v0.0.6 и проверить BUG-006/BUG-007, шрифты Win11, ярлыки и 4-вкладочные настройки; после подтверждения перенести закрытые баги в docs/archive/bugs-closed.md"
+open_bugs: [BUG-003, BUG-004, BUG-005, BUG-006, BUG-007, BUG-008]
+next_step: "Запустить GitHub Actions (windows-latest), скачать asrbox.exe v0.0.7, проверить дизайн Настроек, иконку в Диспетчере задач/панели задач и пункт «Открыть расположение файла»; после подтверждения закрыть исправленные баги"
 touched_files:
-  - Cargo.toml, CHANGELOG.md, BUGS.md, DECISIONS.md, ATLAS.md, ARCHITECTURE.md, HANDOFF.yaml, specs/mod-settings.md
-  - crates/platform-api/src/ (lib.rs, theme.rs, palette.rs, menu.rs)
-  - crates/platform-windows/ (Cargo.toml, MAP.md, src/job.rs, src/font_engine.rs, src/dwrite_text.rs, src/dwrite_vtable.rs, src/widget_text.rs, src/fluent_menu*.rs, src/settings_*.rs, src/tools_state.rs, src/running.rs, src/dock_*.rs, src/widget_win.rs, src/window.rs, src/lib.rs)
-  - crates/mod-dock/ (MAP.md, src/config.rs, src/storage.rs, src/layout.rs, src/state.rs, src/lib.rs)
-  - crates/mod-settings/ (MAP.md, src/actions.rs, src/types.rs, src/lib.rs, src/events.rs, src/layout*.rs, src/render_controls.rs, src/tests.rs)
-  - crates/app/ (MAP.md, src/main.rs, src/dock_shortcuts.rs, src/docks.rs, src/dock_ops.rs, src/settings_*.rs, src/worker_bus.rs, src/selftest*.rs)
+  - Cargo.toml, CHANGELOG.md, BUGS.md, DECISIONS.md, ARCHITECTURE.md, HANDOFF.yaml
+  - crates/platform-api/src/ (palette.rs, menu.rs, lib.rs)
+  - crates/mod-dock/src/lib.rs
+  - crates/mod-settings/src/ (events.rs, render.rs, render_controls.rs, tests.rs)
+  - crates/platform-windows/ (MAP.md, src/app_icon.rs, src/dock_menu.rs, src/dock_proc.rs, src/dock_win.rs, src/dwrite_text.rs, src/fluent_menu.rs, src/font_engine.rs, src/shell.rs, src/widget_text.rs)
+  - crates/app/ (MAP.md, build.rs, src/main.rs, src/docks.rs, src/dock_ops.rs, src/dock_drag.rs, src/settings_ctl.rs, src/settings_widgets.rs)
 warnings:
-  - "Ожидает сборки на GitHub Actions (windows-latest). Локально проверены cargo fmt, atlas-check, cargo test --workspace, --version, --selftest, host clippy и cargo clippy --workspace --all-targets --no-deps --target x86_64-pc-windows-msvc -- -D warnings"
+  - "Ожидает сборки на GitHub Actions (windows-latest). Локально проверены cargo fmt --check, atlas-check, cargo test --workspace, --version, --selftest, host clippy и cargo clippy --workspace --all-targets --no-deps --target x86_64-pc-windows-msvc -- -D warnings"
 ideas:
   - "Глобальный хоткей показа/скрытия игрового оверлея"

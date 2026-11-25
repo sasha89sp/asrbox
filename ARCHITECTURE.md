@@ -1,6 +1,6 @@
 # ARCHITECTURE.md — Архитектура `asrbox`
 
-Версия: `0.0.6` (рабочие модули `mod-dock`, `mod-widgets`, `mod-overlay`, `mod-settings`, `mod-backup`, `mod-webdav`, `mod-debug`, `mod-about` + мультипроцессный супервизор в `crates/app`, Windows 11 Fluent Design с `Segoe UI Variable` / GDI ClearType + DirectWrite и кастомными Fluent-меню).
+Версия: `0.0.7` (рабочие модули `mod-dock`, `mod-widgets`, `mod-overlay`, `mod-settings`, `mod-backup`, `mod-webdav`, `mod-debug`, `mod-about` + мультипроцессный супервизор в `crates/app`, встроенная многоразмерная PE-иконка, нативный дизайн Windows 11 Settings, `Segoe UI Variable` / GDI ClearType + DirectWrite и кастомные Fluent-меню).
 
 ## 1. Правило зависимостей (строго вниз)
 

@@ -13,13 +13,20 @@ use windows::Win32::UI::Controls::Dialogs::{
     GetOpenFileNameW, OFN_ALLOWMULTISELECT, OFN_EXPLORER, OFN_FILEMUSTEXIST, OFN_NOCHANGEDIR,
     OFN_PATHMUSTEXIST, OPENFILENAMEW,
 };
+use windows::Win32::UI::Input::KeyboardAndMouse::ReleaseCapture;
 use windows::Win32::UI::Shell::{
     FileOpenDialog, IFileOpenDialog, ShellExecuteW, FOS_FORCEFILESYSTEM, FOS_PICKFOLDERS,
     SIGDN_FILESYSPATH,
 };
 use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
+use crate::running::resolve_lnk_target;
+
 pub(crate) fn pick_icon_dialog(owner: HWND) -> Result<Option<PathBuf>, String> {
+    // SAFETY: Release any active mouse capture before running a modal Win32 dialog.
+    unsafe {
+        let _ = ReleaseCapture();
+    }
     let filter = encode_wide_str(concat!(
         "Иконки (*.ico;*.png;*.exe;*.dll)\0",
         "*.ico;*.png;*.exe;*.dll\0",
@@ -50,6 +57,10 @@ pub(crate) fn pick_icon_dialog(owner: HWND) -> Result<Option<PathBuf>, String> {
 }
 
 pub(crate) fn pick_sync_files_dialog(owner: HWND) -> Result<Vec<PathBuf>, String> {
+    // SAFETY: Release any active mouse capture before running a modal Win32 dialog.
+    unsafe {
+        let _ = ReleaseCapture();
+    }
     let filter = encode_wide_str("Все файлы (*.*)\0*.*\0");
     let mut file_buf = vec![0u16; 32_768];
     let mut ofn = OPENFILENAMEW {
@@ -92,8 +103,9 @@ pub(crate) fn pick_sync_files_dialog(owner: HWND) -> Result<Vec<PathBuf>, String
 }
 
 pub(crate) fn pick_sync_folder_dialog(owner: HWND) -> Result<Option<PathBuf>, String> {
-    // SAFETY: Initializing STA COM for IFileOpenDialog, releasing COM objects and CoTaskMem before uninit.
+    // SAFETY: Release mouse capture and initialize STA COM for IFileOpenDialog.
     unsafe {
+        let _ = ReleaseCapture();
         let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
         let need_uninit = hr.is_ok();
         let res = run_folder_dialog(owner);
@@ -157,6 +169,29 @@ pub(crate) fn open_in_explorer(path: &Path) -> Result<(), String> {
     let exe = encode_wide_str("explorer.exe");
     let args = encode_wide_str(&format!("\"{}\"", path.display()));
     shell_exec(&verb, &exe, Some(&args))
+}
+
+pub(crate) fn open_item_location(path: &Path) -> Result<(), String> {
+    let resolved = path
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("lnk"))
+        .then(|| resolve_lnk_target(path))
+        .flatten()
+        .filter(|target| target.exists() || target.parent().is_some_and(Path::exists));
+    let effective = resolved.as_deref().unwrap_or(path);
+    if effective.is_dir() {
+        return open_in_explorer(effective);
+    }
+    if effective.exists() {
+        let verb = encode_wide_str("open");
+        let exe = encode_wide_str("explorer.exe");
+        let args = encode_wide_str(&format!("/select,\"{}\"", effective.display()));
+        return shell_exec(&verb, &exe, Some(&args));
+    }
+    if let Some(parent) = effective.parent().filter(|p| p.exists()) {
+        return open_in_explorer(parent);
+    }
+    Err(format!("Путь не найден: {}", effective.display()))
 }
 
 fn shell_exec(verb: &[u16], file: &[u16], params: Option<&[u16]>) -> Result<(), String> {

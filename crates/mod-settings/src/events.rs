@@ -40,13 +40,17 @@ impl SettingsUiState {
             }
             SettingsUiEvent::AnimTick { .. } => (self.anim_start.is_some(), None),
             SettingsUiEvent::Closed => {
-                self.dragging_slider = None;
-                self.last_slider_val = None;
-                self.hovered_id = None;
-                self.anim_start = None;
+                self.on_closed();
                 (false, None)
             }
         }
+    }
+
+    pub fn on_closed(&mut self) {
+        self.dragging_slider = None;
+        self.last_slider_val = None;
+        self.hovered_id = None;
+        self.anim_start = None;
     }
 
     fn on_pointer_move(

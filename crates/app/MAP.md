@@ -3,6 +3,7 @@
 Исполняемый бинарник `asrbox.exe`. Работает как мастер-супервизор (Fluent-трей, Настройки с браузерными вкладками, бэкап/WebDAV/синхронизация) с изолированными дочерними процессами модулей (`--worker dock|widgets|overlay`) и резервным `inproc`-режимом (`--inproc`).
 
 ## Файлы
+- `build.rs` — zero-dependency генератор Win32-ресурса `.res` (`RT_GROUP_ICON` + 6 размеров 16..128 px) для встраивания фирменной иконки в `asrbox.exe` (Проводник, Диспетчер задач, панель задач).
 - `src/main.rs` — точка входа, CLI (`--version`, `--selftest`, `--safe-mode`, `--inproc`, `--worker`, `--parent-pid`) и `AppController` (включая плавную анимацию темы).
 - `src/supervisor.rs` — `ModuleSupervisor`: запуск/остановка процессов модулей в Win32 `JobObject`, stdin/stdout IPC и автоперезапуск при сбое.
 - `src/worker.rs` — изолированный цикл воркера док-панелей (`--worker dock`), чтение `SupervisorCmd` (включая `SetTheme`), watchdog PID и отправка логов/метрик.

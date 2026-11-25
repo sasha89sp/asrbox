@@ -67,6 +67,16 @@
 - **Попытка 1**: все вызовы `DestroyWindow`/`CreateWindowExW`/`InvalidateRect` вынесены за пределы заимствований `RefCell` (передача владения `HWND` локально до вызова Win32), все обработчики в `fluent_menu_wnd_proc` и `settings_wnd_proc` переведены на безопасный `try_borrow()`/`try_borrow_mut()`, добавлена защита от осиротевших подменю, а в `crates/app/src/main.rs` установлен `std::panic::set_hook` с записью диагностики в `data/logs/crash.log`.
 - **Статус**: правка готова (`v0.0.6`), ожидает проверки CI (`windows-latest`) и ручной проверки на Windows.
 
+### BUG-008 — Отсутствует иконка `asrbox` в Диспетчере задач и на панели задач при открытых Настройках
+- **Версия**: `0.0.6`
+- **Крейты / файлы**: `crates/app/build.rs`, `crates/platform-windows/src/app_icon.rs`
+- **Воспроизведение**: запустить `asrbox.exe` на Windows 11, открыть Диспетчер задач и окно «Настройки» — вместо фирменной иконки отображается стандартный системный значок пустого окна.
+- **Локализация**:
+  1. У `asrbox.exe` отсутствовал встроенный PE-ресурс `RT_GROUP_ICON` (нет `build.rs` / `.res`), из-за чего Проводник и Диспетчер задач всегда подставляли дефолтный значок исполняемого файла.
+  2. В `crates/platform-windows/src/app_icon.rs` фолбэк `create_fluent_hicon` передавал в `CreateIconIndirect` top-down DIB (`biHeight = -side`) вместо ожидаемого Win32 bottom-up `BITMAPV5HEADER` и невыровненную маску, из-за чего панель задач сбрасывала значок окна настроек.
+- **Попытка 1**: добавлен zero-dependency `crates/app/build.rs`, встраивающий 6-размерный Win32 `.res` (`16/24/32/48/64/128 px`) в `asrbox.exe`; `app_icon.rs` переведён на DPI-aware `LoadImageW(LR_SHARED)` для ресурса `#1` с исправленным bottom-up `BITMAPV5HEADER` фолбэком.
+- **Статус**: правка готова (`v0.0.7`), ожидает проверки CI (`windows-latest`) и ручной проверки на Windows.
+
 (Закрытые `BUG-001`, `BUG-002` перенесены в `docs/archive/bugs-closed.md`.)
 
 ---

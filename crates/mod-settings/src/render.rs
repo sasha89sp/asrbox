@@ -92,33 +92,28 @@ fn draw_sidebar(
     lang: AppLanguage,
 ) {
     fill_rect(bgra, pr(0, 0, SIDEBAR_WIDTH, height), pal.sidebar_bg);
-    fill_rect(
-        bgra,
-        pr(SIDEBAR_WIDTH as i32 - 1, 0, 1, height),
-        pal.divider,
-    );
-    fill_rounded_rect(bgra, pr(16, 18, 32, 32), 8, pal.accent);
+    fill_rounded_rect(bgra, pr(16, 18, 30, 30), 6, pal.accent);
     push_text(
         texts,
-        pr(16, 18, 32, 32),
+        pr(16, 18, 30, 30),
         "A",
-        16,
+        15,
         true,
         pal.accent_on,
         TextAlign::Center,
     );
     push_text(
         texts,
-        pr(58, 16, 138, 20),
+        pr(56, 16, 140, 19),
         "asrbox",
-        15,
+        14,
         true,
         pal.text_primary,
         TextAlign::Left,
     );
     push_text(
         texts,
-        pr(58, 36, 138, 16),
+        pr(56, 35, 140, 16),
         tr(lang, "Настройки", "Settings"),
         12,
         false,
@@ -142,7 +137,6 @@ fn draw_content_header(
     }
     let hy = if l.has_tab_strip { TAB_STRIP_H } else { 0 };
     fill_rect(bgra, pr(x, hy, w, HEADER_H as u32), pal.window_bg);
-    fill_rect(bgra, pr(x, hy + HEADER_H - 1, w, 1), pal.divider);
     let title_w = if l.search_rect.is_some() {
         w.saturating_sub(334).max(160)
     } else {
@@ -150,9 +144,9 @@ fn draw_content_header(
     };
     push_text(
         texts,
-        pr(x + 24, hy + 14, title_w, 26),
+        pr(x + 24, hy + 13, title_w, 28),
         &l.header_title,
-        20,
+        22,
         true,
         pal.text_primary,
         TextAlign::Left,
@@ -167,15 +161,25 @@ fn draw_content_header(
         TextAlign::Left,
     );
     if let Some(sr) = l.search_rect {
-        fill_rounded_rect(bgra, sr, 6, pal.input_bg);
-        stroke_rounded_rect(bgra, sr, 6, pal.control_border);
+        fill_rounded_rect(bgra, sr, 4, pal.input_bg);
+        stroke_rounded_rect(bgra, sr, 4, pal.control_border);
+        fill_rect(
+            bgra,
+            pr(
+                sr.x + 2,
+                sr.y + sr.height as i32 - 1,
+                sr.width.saturating_sub(4),
+                1,
+            ),
+            pal.text_muted,
+        );
         push_text(
             texts,
             pr(sr.x + 6, sr.y, 18, sr.height),
             "⌕",
             14,
             false,
-            pal.text_muted,
+            pal.text_secondary,
             TextAlign::Center,
         );
         let _ = lang;
@@ -201,9 +205,9 @@ fn draw_content_cards(
                     texts,
                     pr(cr.x + 2, cr.y - 22, cr.width, 18),
                     title,
-                    11,
+                    12,
                     true,
-                    pal.text_muted,
+                    pal.text_secondary,
                     TextAlign::Left,
                 );
             }
@@ -214,9 +218,45 @@ fn draw_content_cards(
         } else {
             pal.card_border
         };
-        fill_rounded_rect(bgra, cr, 8, bg);
-        stroke_rounded_rect(bgra, cr, 8, brd);
-        draw_card_rows(bgra, texts, cr, card.amber, &card.rows, top_y, win_h, pal);
+        let has_splits = !card.amber && card.rows.iter().any(|r| r.divider);
+        if has_splits {
+            draw_split_win11_cards(bgra, cr, &card.rows, bg, brd, top_y, win_h);
+        } else {
+            fill_rounded_rect(bgra, cr, 5, bg);
+            stroke_rounded_rect(bgra, cr, 5, brd);
+        }
+        draw_card_rows(
+            bgra, texts, cr, card.amber, has_splits, &card.rows, top_y, win_h, pal,
+        );
+    }
+}
+
+/// Renders each divider-separated setting group as an individual Windows 11 Fluent card
+/// with a crisp 3px canvas gap between cards (matching native Win11 Settings rows).
+fn draw_split_win11_cards(
+    bgra: &mut BgraFrame,
+    cr: PixelRect,
+    rows: &[crate::layout::CardRow],
+    bg: [u8; 4],
+    brd: [u8; 4],
+    top_y: i32,
+    win_h: i32,
+) {
+    let mut group_start = 0usize;
+    for (idx, row) in rows.iter().enumerate() {
+        let is_last = idx + 1 == rows.len();
+        if row.divider || is_last {
+            let first_y = rows[group_start].y;
+            let last_end = row.y + row.height as i32;
+            let gap_bottom = if is_last { 0 } else { 3 };
+            let sub_h = (last_end - first_y - gap_bottom).max(24) as u32;
+            if first_y + sub_h as i32 > top_y && first_y < win_h {
+                let sub = pr(cr.x, first_y, cr.width, sub_h);
+                fill_rounded_rect(bgra, sub, 5, bg);
+                stroke_rounded_rect(bgra, sub, 5, brd);
+            }
+            group_start = idx + 1;
+        }
     }
 }
 
@@ -226,6 +266,7 @@ fn draw_card_rows(
     texts: &mut Vec<WidgetTextCmd>,
     cr: PixelRect,
     amber: bool,
+    split_cards: bool,
     rows: &[crate::layout::CardRow],
     top_y: i32,
     win_h: i32,
@@ -240,7 +281,7 @@ fn draw_card_rows(
         } else {
             row.y + (row.height as i32 - 20) / 2
         };
-        if !row.title.is_empty() {
+        if !row.title.is_empty() && ty >= top_y {
             push_text(
                 texts,
                 pr(cr.x + 16, ty, cr.width.saturating_sub(180), 20),
@@ -267,33 +308,33 @@ fn draw_card_rows(
             } else {
                 cr.width.saturating_sub(180)
             };
-            push_text(
-                texts,
-                pr(cr.x + 16, sy, sw, 18),
-                sub,
-                12,
-                false,
-                col,
-                TextAlign::Left,
-            );
+            if sy >= top_y {
+                push_text(
+                    texts,
+                    pr(cr.x + 16, sy, sw, 18),
+                    sub,
+                    12,
+                    false,
+                    col,
+                    TextAlign::Left,
+                );
+            }
         }
         if let Some(val) = &row.value_label {
-            push_text(
-                texts,
-                pr(
-                    cr.x + cr.width as i32 - 64,
-                    row.y + (row.height as i32 - 20) / 2,
-                    48,
-                    20,
-                ),
-                val,
-                12,
-                true,
-                pal.text_primary,
-                TextAlign::Right,
-            );
+            let vy = row.y + (row.height as i32 - 20) / 2;
+            if vy >= top_y {
+                push_text(
+                    texts,
+                    pr(cr.x + cr.width as i32 - 64, vy, 48, 20),
+                    val,
+                    12,
+                    false,
+                    pal.text_secondary,
+                    TextAlign::Right,
+                );
+            }
         }
-        if row.divider {
+        if row.divider && !split_cards {
             fill_rect(
                 bgra,
                 pr(

@@ -52,15 +52,26 @@ impl<I: IconProvider> AppController<I> {
         if !host.is_settings_window_open() {
             return;
         }
-        self.sync_settings_tab_inputs(host);
         let snap = self.build_settings_snapshot(host);
-        if let Some(txt) = self.settings_ui.take_dock_input_sync(&snap) {
+        self.cached_settings_snap = Some(snap);
+        self.present_cached_settings_ui(host);
+    }
+
+    fn present_cached_settings_ui<H: ToolsPlatform>(&mut self, host: &mut H) {
+        if !host.is_settings_window_open() {
+            return;
+        }
+        self.sync_settings_tab_inputs(host);
+        let Some(snap) = self.cached_settings_snap.as_ref() else {
+            return;
+        };
+        if let Some(txt) = self.settings_ui.take_dock_input_sync(snap) {
             host.set_settings_input_text(0, &txt);
         }
         if let Some(txt) = self.settings_ui.take_aux_prefill() {
             host.set_settings_input_text(4, &txt);
         }
-        let (frame, inputs) = self.settings_ui.render(&snap);
+        let (frame, inputs) = self.settings_ui.render(snap);
         host.present_settings_frame(&frame, inputs);
         if !self.settings_ui.is_animating() {
             host.set_settings_anim_timer(false);
@@ -72,10 +83,14 @@ impl<I: IconProvider> AppController<I> {
         if self.last_settings_tab == Some(cur) {
             return;
         }
+        let prev = self.last_settings_tab;
         self.last_settings_tab = Some(cur);
         match cur {
             SettingsTab::Dock => self.settings_ui.reset_dock_input_sync(),
             SettingsTab::Widgets => host.set_settings_input_text(0, ""),
+            SettingsTab::General if prev == Some(SettingsTab::Dock) => {
+                host.set_settings_input_text(0, "");
+            }
             _ => {}
         }
     }
@@ -87,18 +102,29 @@ impl<I: IconProvider> AppController<I> {
     ) {
         if matches!(ev, SettingsUiEvent::Closed) {
             self.last_settings_tab = None;
+            self.cached_settings_snap = None;
             host.set_settings_anim_timer(false);
             if self.overlay_setup_mode {
                 self.set_overlay_setup_mode(host, false);
             }
+            self.settings_ui.on_closed();
+            return;
         }
-        let snap = self.build_settings_snapshot(host);
-        let (redraw, action) = self.settings_ui.handle_event(ev, &snap);
+        if self.cached_settings_snap.is_none() {
+            self.cached_settings_snap = Some(self.build_settings_snapshot(host));
+        }
+        let prev_browser = self.settings_ui.active_browser_tab.clone();
+        let (redraw, action) = match self.cached_settings_snap.as_ref() {
+            Some(snap) => self.settings_ui.handle_event(ev, snap),
+            None => (false, None),
+        };
         if let Some(act) = action {
             self.apply_settings_action(host, act);
             self.render_settings_ui(host);
-        } else if redraw {
+        } else if self.settings_ui.active_browser_tab != prev_browser {
             self.render_settings_ui(host);
+        } else if redraw {
+            self.present_cached_settings_ui(host);
         }
     }
 

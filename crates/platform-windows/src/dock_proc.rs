@@ -59,12 +59,7 @@ pub(crate) unsafe extern "system" fn dock_wnd_proc(
         WM_CAPTURECHANGED => {
             if CAPTURED_DOCK.with(Cell::get) == Some(dock_id) {
                 CAPTURED_DOCK.with(|c| c.set(None));
-                let screen_point = current_screen_cursor();
-                push_event(PlatformEvent::LeftButtonUp {
-                    dock_id,
-                    point: PixelPoint::default(),
-                    screen_point,
-                });
+                push_event(PlatformEvent::PointerLeave { dock_id });
             }
             LRESULT(0)
         }

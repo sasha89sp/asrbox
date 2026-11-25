@@ -178,7 +178,7 @@ unsafe fn hwnd_exe_name(hwnd: HWND) -> Option<String> {
         .map(|n| n.to_string_lossy().to_ascii_lowercase())
 }
 
-fn resolve_lnk_target(lnk_path: &Path) -> Option<PathBuf> {
+pub(crate) fn resolve_lnk_target(lnk_path: &Path) -> Option<PathBuf> {
     let wide = encode_wide_str(&lnk_path.to_string_lossy());
     // SAFETY: Standard COM IShellLinkW resolution with balanced CoInitializeEx/CoUninitialize.
     unsafe {

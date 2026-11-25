@@ -150,6 +150,7 @@ unsafe fn draw_and_blend_gdi_cmd(
         x1,
         y1,
         cmd.color_rgba,
+        true,
     );
 }
 

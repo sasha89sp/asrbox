@@ -3,10 +3,12 @@
 use std::collections::{HashMap, HashSet};
 
 use asrbox_mod_dock::{
-    apply_menu_action, icon_request_for_item, render_dock_widget_frame, to_pixel_rect, DockConfig,
-    DockInstance, DockRenderOverlay, Rect, SlotKind,
+    apply_menu_action, icon_request_for_item, render_dock_widget_frame, save_docks_to_file,
+    to_pixel_rect, DockConfig, DockInstance, DockRenderOverlay, Rect, SlotKind,
 };
-use asrbox_platform_api::{DockMenuAction, DockPlatform, FluentPalette, IconProvider, RgbaImage};
+use asrbox_platform_api::{
+    DockMenuAction, DockPlatform, FluentPalette, IconProvider, RgbaImage, TrayMenuEntry,
+};
 
 use crate::dock_shortcuts::{cleanup_unused_shortcuts, shortcuts_dir_for_config};
 use crate::docks::{DockManager, DockRuntime};
@@ -96,6 +98,27 @@ impl<I: IconProvider> DockManager<I> {
                     |()| "menu: open docks.cfg".to_owned(),
                 );
             }
+            DockMenuAction::OpenItemFolder(item_id) => {
+                let target = self
+                    .docks
+                    .iter()
+                    .find(|d| d.instance.config().id == id)
+                    .and_then(|d| {
+                        d.instance
+                            .config()
+                            .items
+                            .iter()
+                            .find(|i| i.id == item_id && !i.is_separator())
+                            .map(|i| i.target.clone())
+                    });
+                return match target {
+                    Some(path) => host.open_item_location(&path).map_or_else(
+                        |e| format!("error: dock[{id}] open folder: {e}"),
+                        |()| format!("dock[{id}] open folder: {}", path.display()),
+                    ),
+                    None => format!("dock[{id}] open folder: item #{item_id} not found"),
+                };
+            }
             DockMenuAction::ReloadDockConfig => {
                 return self.reload_from_disk(host, *safe_mode).map_or_else(
                     |e| format!("error: reload docks.cfg: {e}"),
@@ -145,6 +168,26 @@ impl<I: IconProvider> DockManager<I> {
             .collect();
         let dir = shortcuts_dir_for_config(self.config_path());
         cleanup_unused_shortcuts(&cfgs, &dir);
+    }
+
+    pub fn tray_entries(&self) -> Vec<TrayMenuEntry> {
+        self.docks
+            .iter()
+            .map(|d| TrayMenuEntry {
+                dock_id: d.instance.config().id,
+                title: d.instance.config().name.clone(),
+                enabled: d.instance.config().enabled,
+            })
+            .collect()
+    }
+
+    pub fn persist(&self) {
+        let cfgs: Vec<DockConfig> = self
+            .docks
+            .iter()
+            .map(|d| d.instance.config().clone())
+            .collect();
+        let _ = save_docks_to_file(self.config_path(), &cfgs, self.app_version);
     }
 }
 
@@ -218,7 +261,12 @@ pub(crate) fn reload_runtimes_in_place<I: IconProvider>(
     let mut next = Vec::with_capacity(configs.len());
     for cfg in configs {
         if let Some(mut dock) = old_by_id.remove(&cfg.id) {
+            let dock_id = cfg.id;
             update_runtime_in_place(&mut dock, cfg, work_area, icons, host)?;
+            if dock.timer_active {
+                dock.timer_active = false;
+                let _ = host.set_animation_timer(dock_id, false);
+            }
             next.push(dock);
         } else {
             let instance = DockInstance::new(cfg, work_area).map_err(|e| e.to_string())?;

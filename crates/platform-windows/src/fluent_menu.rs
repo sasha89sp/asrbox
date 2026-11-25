@@ -5,7 +5,7 @@ use asrbox_platform_api::{
     BgraFrame, FluentMenuItem, FluentMenuSpec, FluentPalette, PixelPoint, PixelRect,
 };
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
-use windows::Win32::UI::Input::KeyboardAndMouse::VK_ESCAPE;
+use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, VK_ESCAPE};
 use windows::Win32::UI::WindowsAndMessaging::{
     DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW, KillTimer, SetForegroundWindow,
     SetTimer, ShowWindow, TranslateMessage, MSG, SW_SHOW, WA_INACTIVE, WM_ACTIVATE, WM_KEYDOWN,
@@ -55,6 +55,10 @@ pub(crate) fn show_fluent_menu(
     spec: &FluentMenuSpec,
     palette: FluentPalette,
 ) -> Result<Option<u32>, String> {
+    // SAFETY: Release any active mouse capture before running a modal Fluent popup menu.
+    unsafe {
+        let _ = ReleaseCapture();
+    }
     let work_area = monitor_work_area_at(screen_pt);
     let layout = measure_menu(spec);
     let origin = clamp_menu_origin(screen_pt, &layout, work_area);

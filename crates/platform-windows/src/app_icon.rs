@@ -1,22 +1,32 @@
 use std::cell::RefCell;
 use std::ffi::c_void;
+use std::mem;
 
-use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+use windows::core::PCWSTR;
+use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     CreateBitmap, CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GetDC, ReleaseDC,
-    DIB_RGB_COLORS,
+    BITMAPINFO, BITMAPV5HEADER, BI_BITFIELDS, DIB_RGB_COLORS,
 };
+use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateIconIndirect, DestroyIcon, SendMessageW, HICON, ICONINFO, ICON_BIG, ICON_SMALL,
+    CreateIconIndirect, DestroyIcon, GetSystemMetrics, LoadImageW, SendMessageW, HICON, ICONINFO,
+    ICON_BIG, ICON_SMALL, IMAGE_ICON, LR_DEFAULTCOLOR, LR_SHARED, SM_CXICON, SM_CXSMICON,
     WM_SETICON,
 };
 
-use crate::icons::make_top_down_bmi;
+const APP_ICON_RES_ID: usize = 1;
+
+#[derive(Default)]
+struct CachedIconSlot {
+    handle: Option<HICON>,
+    shared: bool,
+}
 
 #[derive(Default)]
 struct CachedIcons {
-    small: Option<HICON>,
-    large: Option<HICON>,
+    small: CachedIconSlot,
+    large: CachedIconSlot,
 }
 
 thread_local! {
@@ -24,31 +34,62 @@ thread_local! {
 }
 
 pub(crate) fn small_app_icon() -> HICON {
+    // SAFETY: Querying standard Windows small icon DPI metric.
+    let size = unsafe { GetSystemMetrics(SM_CXSMICON) }.max(16) as u32;
     APP_ICONS.with(|cell| {
         let mut st = cell.borrow_mut();
-        if let Some(icon) = st.small {
-            return icon;
-        }
-        let icon = create_fluent_hicon(16).unwrap_or_default();
-        if !icon.is_invalid() {
-            st.small = Some(icon);
-        }
-        icon
+        get_or_init_icon(&mut st.small, size)
     })
 }
 
 pub(crate) fn large_app_icon() -> HICON {
+    // SAFETY: Querying standard Windows large icon DPI metric.
+    let size = unsafe { GetSystemMetrics(SM_CXICON) }.max(32) as u32;
     APP_ICONS.with(|cell| {
         let mut st = cell.borrow_mut();
-        if let Some(icon) = st.large {
-            return icon;
-        }
-        let icon = create_fluent_hicon(32).unwrap_or_default();
-        if !icon.is_invalid() {
-            st.large = Some(icon);
-        }
-        icon
+        get_or_init_icon(&mut st.large, size)
     })
+}
+
+fn get_or_init_icon(slot: &mut CachedIconSlot, size: u32) -> HICON {
+    if let Some(icon) = slot.handle {
+        return icon;
+    }
+    if let Some(res_icon) = load_embedded_resource_icon(size) {
+        slot.handle = Some(res_icon);
+        slot.shared = true;
+        return res_icon;
+    }
+    let fallback = create_fluent_hicon(size).unwrap_or_default();
+    if !fallback.is_invalid() {
+        slot.handle = Some(fallback);
+        slot.shared = false;
+    }
+    fallback
+}
+
+fn load_embedded_resource_icon(size: u32) -> Option<HICON> {
+    let side = i32::try_from(size).ok()?;
+    // SAFETY: Loading RT_GROUP_ICON #1 embedded in the current executable via LoadImageW.
+    unsafe {
+        let hmod = GetModuleHandleW(None).ok()?;
+        let hinst = HINSTANCE::from(hmod);
+        let handle = LoadImageW(
+            Some(hinst),
+            PCWSTR(APP_ICON_RES_ID as *const u16),
+            IMAGE_ICON,
+            side,
+            side,
+            LR_DEFAULTCOLOR | LR_SHARED,
+        )
+        .ok()?;
+        let icon = HICON(handle.0);
+        if icon.is_invalid() {
+            None
+        } else {
+            Some(icon)
+        }
+    }
 }
 
 pub(crate) fn apply_window_icon(hwnd: HWND) {
@@ -78,42 +119,60 @@ pub(crate) fn apply_window_icon(hwnd: HWND) {
 pub(crate) fn cleanup_app_icons() {
     APP_ICONS.with(|cell| {
         let mut st = cell.borrow_mut();
-        // SAFETY: Destroying cached HICON handles once during host teardown.
+        // SAFETY: Destroying only non-shared runtime HICON handles during host teardown.
         unsafe {
-            if let Some(h) = st.small.take() {
-                let _ = DestroyIcon(h);
+            if let Some(h) = st.small.handle.take() {
+                if !st.small.shared {
+                    let _ = DestroyIcon(h);
+                }
             }
-            if let Some(h) = st.large.take() {
-                let _ = DestroyIcon(h);
+            if let Some(h) = st.large.handle.take() {
+                if !st.large.shared {
+                    let _ = DestroyIcon(h);
+                }
             }
         }
+        st.small.shared = false;
+        st.large.shared = false;
     });
 }
 
 fn create_fluent_hicon(size: u32) -> Option<HICON> {
-    let pixels = render_fluent_icon_bgra(size);
+    let top_down = render_fluent_icon_bgra(size);
     let side = i32::try_from(size).ok()?;
-    let bmi = make_top_down_bmi(side, side);
+    let v5 = BITMAPV5HEADER {
+        bV5Size: u32::try_from(mem::size_of::<BITMAPV5HEADER>()).ok()?,
+        bV5Width: side,
+        bV5Height: side, // Bottom-up DIB required for reliable Win32 CreateIconIndirect
+        bV5Planes: 1,
+        bV5BitCount: 32,
+        bV5Compression: BI_BITFIELDS,
+        bV5RedMask: 0x00FF_0000,
+        bV5GreenMask: 0x0000_FF00,
+        bV5BlueMask: 0x0000_00FF,
+        bV5AlphaMask: 0xFF00_0000,
+        ..Default::default()
+    };
     let mut bits: *mut c_void = std::ptr::null_mut();
 
-    // SAFETY: Creating color DIB and 1-bpp mask bitmap, turning into HICON, then freeing bitmaps.
+    // SAFETY: Creating bottom-up 32-bit BGRA DIB and aligned 1-bpp AND mask for CreateIconIndirect.
     unsafe {
         let hdc_screen = GetDC(None);
         let hdc_mem = CreateCompatibleDC(Some(hdc_screen));
-        let hcolor = match CreateDIBSection(Some(hdc_mem), &bmi, DIB_RGB_COLORS, &mut bits, None, 0)
-        {
-            Ok(b) => b,
-            Err(_) => {
-                let _ = DeleteDC(hdc_mem);
-                let _ = ReleaseDC(None, hdc_screen);
-                return None;
-            }
-        };
+        let bmi_ptr = (&v5 as *const BITMAPV5HEADER).cast::<BITMAPINFO>();
+        let hcolor =
+            match CreateDIBSection(Some(hdc_mem), bmi_ptr, DIB_RGB_COLORS, &mut bits, None, 0) {
+                Ok(b) => b,
+                Err(_) => {
+                    let _ = DeleteDC(hdc_mem);
+                    let _ = ReleaseDC(None, hdc_screen);
+                    return None;
+                }
+            };
         if !bits.is_null() {
-            std::ptr::copy_nonoverlapping(pixels.as_ptr(), bits.cast::<u8>(), pixels.len());
+            copy_bottom_up_bgra(&top_down, size as usize, bits.cast::<u8>());
         }
-        let mask_stride = (size as usize).div_ceil(8).max(2);
-        let mask_bytes = vec![0u8; mask_stride * (size as usize)];
+        let mask_bytes = build_and_mask(&top_down, size as usize);
         let hmask = CreateBitmap(side, side, 1, 1, Some(mask_bytes.as_ptr().cast()));
         let info = ICONINFO {
             fIcon: true.into(),
@@ -131,8 +190,31 @@ fn create_fluent_hicon(size: u32) -> Option<HICON> {
     }
 }
 
-/// Renders a Windows 11 Fluent Design rounded squircle icon with Fluent Blue gradient
-/// and crisp modular tile grid representing asrbox (32-bit BGRA for Win32 HICON).
+unsafe fn copy_bottom_up_bgra(top_down: &[u8], size: usize, dst: *mut u8) {
+    let row_bytes = size * 4;
+    for y in 0..size {
+        let src_row = (size - 1 - y) * row_bytes;
+        std::ptr::copy_nonoverlapping(
+            top_down.as_ptr().add(src_row),
+            dst.add(y * row_bytes),
+            row_bytes,
+        );
+    }
+}
+
+fn build_and_mask(top_down: &[u8], size: usize) -> Vec<u8> {
+    let stride = size.div_ceil(16) * 2;
+    let mut mask = vec![0u8; stride * size];
+    for y in 0..size {
+        for x in 0..size {
+            if top_down[(y * size + x) * 4 + 3] == 0 {
+                mask[y * stride + x / 8] |= 1u8 << (7 - (x & 7));
+            }
+        }
+    }
+    mask
+}
+
 fn render_fluent_icon_bgra(size: u32) -> Vec<u8> {
     let mut buf = vec![0u8; (size as usize) * (size as usize) * 4];
     let s = size as f32;
@@ -170,26 +252,19 @@ fn render_fluent_icon_bgra(size: u32) -> Vec<u8> {
 }
 
 fn sample_fluent_surface(ux: f32, uy: f32) -> [u8; 3] {
-    // Windows 11 Fluent Blue gradient (#0067C0 -> #0A4D96) with subtle top-left sheen
     let diag = (ux * 0.45 + uy * 0.55).clamp(0.0, 1.0);
     let bg = [
         lerp_u8(22, 0, diag),
         lerp_u8(136, 84, diag),
         lerp_u8(224, 174, diag),
     ];
-
-    // 4 crisp modular Fluent tiles (2x2 asymmetric bento layout)
-    let tile_top_left = in_box(ux, uy, 0.17, 0.17, 0.46, 0.46, 0.07);
-    let tile_top_right = in_box(ux, uy, 0.54, 0.17, 0.83, 0.46, 0.07);
-    let tile_bottom = in_box(ux, uy, 0.17, 0.54, 0.83, 0.83, 0.07);
-
-    if tile_top_left {
+    if in_box(ux, uy, 0.17, 0.17, 0.46, 0.46, 0.07) {
         return [255, 255, 255];
     }
-    if tile_top_right {
+    if in_box(ux, uy, 0.54, 0.17, 0.83, 0.46, 0.07) {
         return [140, 224, 255];
     }
-    if tile_bottom {
+    if in_box(ux, uy, 0.17, 0.54, 0.83, 0.83, 0.07) {
         return [230, 244, 255];
     }
     bg
