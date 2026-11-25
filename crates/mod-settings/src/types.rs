@@ -108,6 +108,7 @@ pub struct ModuleStatusView {
 pub struct DockItemView {
     pub id: u64,
     pub label: String,
+    pub target_path: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -160,6 +161,9 @@ pub struct SysMonitorSettingsView {
 pub struct WeatherSettingsView {
     pub visible: bool,
     pub city: String,
+    pub provider_is_yandex: bool,
+    pub forecast_days: u8,
+    pub has_yandex_key: bool,
     pub opacity_percent: u8,
     pub layer: WidgetLayer,
     pub refresh_interval_min: u32,
@@ -172,6 +176,9 @@ impl Default for WeatherSettingsView {
         Self {
             visible: true,
             city: "Москва".to_owned(),
+            provider_is_yandex: false,
+            forecast_days: 3,
+            has_yandex_key: false,
             opacity_percent: 90,
             layer: WidgetLayer::Wallpaper,
             refresh_interval_min: 30,

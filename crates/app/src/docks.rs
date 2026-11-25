@@ -216,8 +216,20 @@ impl<I: IconProvider> DockManager<I> {
         false
     }
 
-    pub fn on_left_down(&mut self, id: u64, local_pt: Point, screen_pt: PixelPoint) {
-        self.drag.on_left_down(&self.docks, id, local_pt, screen_pt);
+    pub fn on_left_down(
+        &mut self,
+        host: &mut dyn DockPlatform,
+        id: u64,
+        local_pt: Point,
+        screen_pt: PixelPoint,
+    ) {
+        if self.drag.on_left_down(&self.docks, id, local_pt, screen_pt) {
+            if let Some(dock) = self.docks.iter().find(|d| d.instance.config().id == id) {
+                if dock.window_open {
+                    let _ = present_dock(host, dock, self.drag.overlay_for(dock), self.palette);
+                }
+            }
+        }
     }
 
     pub fn on_drag_move(&mut self, host: &mut dyn DockPlatform, screen_pt: PixelPoint) {
@@ -251,7 +263,16 @@ impl<I: IconProvider> DockManager<I> {
                 dock_id,
                 slot_kind,
                 item_id,
-            } => self.handle_slot_click(host, dock_id, slot_kind, item_id),
+            } => {
+                if let Some(dock) = self
+                    .docks
+                    .iter()
+                    .find(|d| d.instance.config().id == dock_id && d.window_open)
+                {
+                    let _ = present_dock(host, dock, self.drag.overlay_for(dock), self.palette);
+                }
+                self.handle_slot_click(host, dock_id, slot_kind, item_id)
+            }
         }
     }
 

@@ -35,6 +35,7 @@ fn sample_snapshot() -> SettingsSnapshot {
             items: vec![DockItemView {
                 id: 1,
                 label: "Browser".to_owned(),
+                target_path: "C:\\Apps\\browser.exe".to_owned(),
             }],
         }],
         calendar: CalendarSettingsView {
@@ -239,4 +240,25 @@ fn scrolled_content_texts_do_not_overlap_sticky_header() {
             assert!(is_header, "content text '{}' bled into header", cmd.text);
         }
     }
+}
+
+#[test]
+fn weather_city_uses_primary_input_and_yandex_key_uses_secret_input() {
+    let mut snap = sample_snapshot();
+    snap.weather.provider_is_yandex = true;
+    let mut ui = SettingsUiState {
+        active_tab: SettingsTab::Widgets,
+        selected_widget: WidgetSubTab::Weather,
+        ..Default::default()
+    };
+    ui.expanded_sections.insert("weather_main".to_owned());
+    let (_, inputs) = ui.render(&snap);
+    assert!(
+        inputs.primary.is_some(),
+        "weather city must bind to primary input slot 0"
+    );
+    assert!(
+        inputs.secret.is_some(),
+        "yandex weather API key must bind to secret input slot 1"
+    );
 }

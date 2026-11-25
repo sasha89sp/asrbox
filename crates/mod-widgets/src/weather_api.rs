@@ -52,7 +52,7 @@ pub fn build_forecast_url(lat: f64, lon: f64) -> String {
          &current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,surface_pressure\
          &hourly=temperature_2m,weather_code\
          &daily=weather_code,temperature_2m_max,temperature_2m_min\
-         &wind_speed_unit=ms&timezone=auto&forecast_days=4"
+         &wind_speed_unit=ms&timezone=auto&forecast_days=7"
     )
 }
 
@@ -158,7 +158,7 @@ pub fn parse_open_meteo_forecast(
         let mins = extract_number_array(d_block, "temperature_2m_min");
         let maxs = extract_number_array(d_block, "temperature_2m_max");
         let codes = extract_number_array(d_block, "weather_code");
-        for (i, date) in dates.iter().enumerate().take(4) {
+        for (i, date) in dates.iter().enumerate().take(7) {
             daily.push(DailySlot {
                 date_iso: date.clone(),
                 min_c: mins.get(i).copied().unwrap_or(0.0).round() as i32,
@@ -182,7 +182,7 @@ pub fn parse_open_meteo_forecast(
     })
 }
 
-fn find_object_after_key<'a>(text: &'a str, key: &str) -> Option<&'a str> {
+pub(crate) fn find_object_after_key<'a>(text: &'a str, key: &str) -> Option<&'a str> {
     let mut pos = 0;
     while let Some(rel) = text[pos..].find(key) {
         let after = pos + rel + key.len();
@@ -198,7 +198,7 @@ fn find_object_after_key<'a>(text: &'a str, key: &str) -> Option<&'a str> {
     None
 }
 
-fn extract_balanced(s: &str, open: u8, close: u8) -> Option<&str> {
+pub(crate) fn extract_balanced(s: &str, open: u8, close: u8) -> Option<&str> {
     let bytes = s.as_bytes();
     let mut depth = 0i32;
     let mut in_str = false;
@@ -228,7 +228,7 @@ fn extract_balanced(s: &str, open: u8, close: u8) -> Option<&str> {
     None
 }
 
-fn extract_json_number(block: &str, field: &str) -> Option<f64> {
+pub(crate) fn extract_json_number(block: &str, field: &str) -> Option<f64> {
     let needle = format!("\"{field}\"");
     let pos = block.find(&needle)?;
     let rest = block[pos + needle.len()..]
@@ -241,7 +241,7 @@ fn extract_json_number(block: &str, field: &str) -> Option<f64> {
     rest[..end].parse::<f64>().ok()
 }
 
-fn extract_json_string(block: &str, field: &str) -> Option<String> {
+pub(crate) fn extract_json_string(block: &str, field: &str) -> Option<String> {
     let needle = format!("\"{field}\"");
     let pos = block.find(&needle)?;
     let rest = block[pos + needle.len()..]

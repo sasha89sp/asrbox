@@ -228,24 +228,53 @@ pub(crate) fn draw_editor_pane(
             fill_rounded_rect(frame, cx, cy + 2, 16, 16, 4.0, pal.control_bg);
             fill_rounded_rect(frame, cx + 1, cy + 3, 14, 14, 3.0, pal.window_bg);
         }
-        let tcol = if task.done {
-            pal.text_muted
+        push_hit(hits, cx, cy, 22, 22, NotesHitTarget::TaskCheck(task.id));
+
+        if inp.inline_mode == InlineEditMode::EditTask(task.id) {
+            inputs.inline_edit = Some(PixelRect {
+                x: cx + 24,
+                y: cy - 1,
+                width: (w - 76).max(60) as u32,
+                height: 22,
+            });
         } else {
-            pal.text_primary
-        };
-        push_txt(
-            texts,
-            (cx + 24, cy + 1, w - 76, 18),
-            &task.text,
-            (12, false),
-            tcol,
-            TextAlign::Left,
-        );
-        if task.done {
-            let line_w = ((task.text.chars().count() as i32) * 7).min(w - 86).max(20);
-            fill_rect(frame, cx + 24, cy + 10, line_w, 1, pal.text_muted);
+            let tcol = if task.done {
+                pal.text_muted
+            } else {
+                pal.text_primary
+            };
+            if inp.hovered == Some(NotesHitTarget::TaskEdit(task.id)) {
+                fill_rounded_rect(
+                    frame,
+                    cx + 22,
+                    cy,
+                    (w - 74).max(40),
+                    20,
+                    4.0,
+                    pal.control_hover,
+                );
+            }
+            push_txt(
+                texts,
+                (cx + 24, cy + 1, w - 76, 18),
+                &task.text,
+                (12, false),
+                tcol,
+                TextAlign::Left,
+            );
+            if task.done {
+                let line_w = ((task.text.chars().count() as i32) * 7).min(w - 86).max(20);
+                fill_rect(frame, cx + 24, cy + 10, line_w, 1, pal.text_muted);
+            }
+            push_hit(
+                hits,
+                cx + 22,
+                cy,
+                (w - 74).max(24),
+                22,
+                NotesHitTarget::TaskEdit(task.id),
+            );
         }
-        push_hit(hits, cx, cy, w - 58, 22, NotesHitTarget::TaskCheck(task.id));
 
         let del_x = x + w - 34;
         let del_hov = inp.hovered == Some(NotesHitTarget::TaskDelete(task.id));

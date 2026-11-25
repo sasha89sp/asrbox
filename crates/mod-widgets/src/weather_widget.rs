@@ -11,19 +11,21 @@ use crate::weather_api::{
     WeatherData,
 };
 use crate::weather_config::{
-    load_weather_config, save_weather_config, WeatherWidgetConfig, MAX_WEATHER_HEIGHT,
-    MAX_WEATHER_WIDTH, MIN_WEATHER_HEIGHT, MIN_WEATHER_WIDTH,
+    load_weather_config, normalize_forecast_days, save_weather_config, WeatherProvider,
+    WeatherWidgetConfig, MAX_WEATHER_HEIGHT, MAX_WEATHER_WIDTH, MIN_WEATHER_HEIGHT,
+    MIN_WEATHER_WIDTH, YANDEX_WEATHER_CRED_TARGET,
 };
 use crate::weather_render::{
     hit_test_weather, render_weather_widget, WeatherHitTarget, WeatherRenderInput, WEATHER_HEADER_H,
 };
+use crate::weather_yandex::{build_yandex_forecast_url, parse_yandex_forecast};
 
 pub const WEATHER_WIDGET_ID: u64 = 3;
 const WEATHER_REQ_BASE: u64 = 100_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PendingKind {
-    Forecast,
+    Forecast(WeatherProvider),
     Geocode,
 }
 
@@ -136,6 +138,7 @@ impl WeatherWidget {
 
     pub fn reload_config(&mut self, host: &mut dyn WidgetPlatform, safe_mode: bool) -> String {
         let prev_city = self.config.city.clone();
+        let prev_provider = self.config.provider;
         match load_weather_config(&self.config_path) {
             Ok(cfg) => self.config = cfg,
             Err(e) => return format!("error: reload weather.cfg: {e}"),
@@ -144,8 +147,10 @@ impl WeatherWidget {
         if self.window_open {
             if self.config.city != prev_city {
                 self.trigger_geocode(host);
-            } else {
+            } else if self.config.provider != prev_provider || !self.data.has_live_data {
                 self.trigger_forecast(host);
+            } else {
+                self.redraw(host);
             }
         }
         format!("reload weather.cfg: {}", self.status_summary())
@@ -170,6 +175,7 @@ impl WeatherWidget {
         let tip = match hit {
             WeatherHitTarget::SettingsBtn => Some("Настройки виджета Погоды".to_owned()),
             WeatherHitTarget::RefreshBtn => Some("Обновить прогноз сейчас".to_owned()),
+            WeatherHitTarget::HorizonDays(d) => Some(format!("Показать прогноз на {d} дн.")),
             _ => None,
         };
         if tip != self.last_tooltip {
@@ -195,6 +201,16 @@ impl WeatherWidget {
             WeatherHitTarget::RefreshBtn => {
                 self.trigger_forecast(host);
                 "weather manual refresh".to_owned()
+            }
+            WeatherHitTarget::HorizonDays(days) => {
+                let norm = normalize_forecast_days(days);
+                self.config.forecast_days = norm;
+                if norm == 7 && self.config.height < 460 {
+                    self.config.height = 460;
+                }
+                self.persist();
+                self.redraw(host);
+                format!("weather horizon={norm}d")
             }
             WeatherHitTarget::HeaderDrag | WeatherHitTarget::None => String::new(),
         }
@@ -325,10 +341,18 @@ impl WeatherWidget {
                     Some((true, "weather geocode: city not found".to_owned()))
                 }
             }
-            PendingKind::Forecast => {
+            PendingKind::Forecast(provider) => {
                 let now = host.local_time_now();
                 let updated = format!("{:02}:{:02}", now.hour, now.minute);
-                match parse_open_meteo_forecast(&result.body, now.hour, updated) {
+                let parsed = match provider {
+                    WeatherProvider::OpenMeteo => {
+                        parse_open_meteo_forecast(&result.body, now.hour, updated)
+                    }
+                    WeatherProvider::Yandex => {
+                        parse_yandex_forecast(&result.body, now.hour, updated)
+                    }
+                };
+                match parsed {
                     Ok(data) => {
                         self.data = data;
                         self.error = None;
@@ -336,13 +360,15 @@ impl WeatherWidget {
                         Some((
                             false,
                             format!(
-                                "weather updated: {} {}°C",
-                                self.config.city, self.data.temp_c
+                                "weather updated ({}): {} {}°C",
+                                provider.as_str(),
+                                self.config.city,
+                                self.data.temp_c
                             ),
                         ))
                     }
                     Err(e) => {
-                        self.error = Some("Ошибка ответа Open-Meteo".to_owned());
+                        self.error = Some(format!("Ошибка ответа {}", provider.display_name()));
                         self.redraw(host);
                         Some((true, format!("weather parse error: {e}")))
                     }
@@ -354,10 +380,32 @@ impl WeatherWidget {
     pub fn trigger_forecast(&mut self, host: &mut dyn WidgetPlatform) {
         let id = self.next_req_id;
         self.next_req_id = self.next_req_id.saturating_add(1);
-        let url = build_forecast_url(self.config.lat, self.config.lon);
-        match host.start_http_get(id, &url) {
+        let provider = self.config.provider;
+        let send_res = match provider {
+            WeatherProvider::OpenMeteo => {
+                let url = build_forecast_url(self.config.lat, self.config.lon);
+                host.start_http_get(id, &url)
+            }
+            WeatherProvider::Yandex => match host.read_secret(YANDEX_WEATHER_CRED_TARGET) {
+                Ok(Some(key)) if !key.trim().is_empty() => {
+                    let url = build_yandex_forecast_url(self.config.lat, self.config.lon);
+                    host.start_http_get_with_headers(
+                        id,
+                        &url,
+                        &[("X-Yandex-Weather-Key".to_owned(), key.trim().to_owned())],
+                    )
+                }
+                Ok(_) => {
+                    self.error = Some("Укажите API-ключ Яндекс.Погоды в настройках".to_owned());
+                    self.redraw(host);
+                    return;
+                }
+                Err(e) => Err(format!("Credential Manager: {e}")),
+            },
+        };
+        match send_res {
             Ok(()) => {
-                self.pending_req = Some((id, PendingKind::Forecast));
+                self.pending_req = Some((id, PendingKind::Forecast(provider)));
                 self.error = None;
             }
             Err(e) => self.error = Some(format!("HTTP: {e}")),
@@ -394,6 +442,8 @@ impl WeatherWidget {
             width: self.config.width,
             height: self.config.height,
             opacity_percent: self.config.opacity_percent,
+            provider: self.config.provider,
+            forecast_days: self.config.forecast_days,
             city: &self.config.city,
             now: host.local_time_now(),
             data: &self.data,

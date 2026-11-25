@@ -18,7 +18,7 @@
 | `crates/mod-monitor` | `asrbox-mod-monitor` | on-open | Онлайн-монитор нагрузки (CPU/RAM/события/функции) и процессов. | `crates/mod-monitor/MAP.md` |
 | `crates/mod-screenshot` | `asrbox-mod-screenshot` | on-demand | Скриншоты (процесс по запросу). | `crates/mod-screenshot/MAP.md` |
 | `crates/mod-huawei` | `asrbox-mod-huawei` | process | Модем Huawei (AT-команды). | `crates/mod-huawei/MAP.md` |
-| `crates/mod-widgets` | `asrbox-mod-widgets` | process | 4 виджета рабочего стола (`AsrGlass` / `Win11Classic`, Light/Dark, ресайз): Google Календарь, интерактивный Системный монитор, Погода (Open-Meteo) и 3-колоночные Заметки и задачи (`data/notes/`). | `crates/mod-widgets/MAP.md` |
+| `crates/mod-widgets` | `asrbox-mod-widgets` | process | 4 виджета рабочего стола (`AsrGlass` / `Win11Classic`, Light/Dark, ресайз): Google Календарь, интерактивный Системный монитор, Погода (Open-Meteo / Яндекс.Погода, `1/3/7` дней) и 3-колоночные Заметки и задачи (`data/notes/`). | `crates/mod-widgets/MAP.md` |
 | `crates/mod-overlay` | `asrbox-mod-overlay` | process | Игровой HUD-оверлей (FPS/1% low, GPU/VRAM, CPU, RAM, NET/PL): автозапуск в играх, FSO/Topmost, Fluent-палитра, авто-выход из setup, 100% click-through, углы/своя точка, прозрачность и ресайз. | `crates/mod-overlay/MAP.md` |
 | `crates/mod-debug` | `asrbox-mod-debug` | on-open | Отладочный модуль: живые логи по модулям, переключатель TRACE/файл, метрики RAM/CPU/GDI и диагностический отчёт (вкладка «Диагностика»). | `crates/mod-debug/MAP.md` |
 | `crates/mod-about` | `asrbox-mod-about` | on-open | Модуль истории версий и путей: портативный статус, текущие пути на диске и встроенная история версий (`CHANGELOG.md`). | `crates/mod-about/MAP.md` |

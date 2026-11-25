@@ -16,13 +16,13 @@ use asrbox_mod_overlay::{
 };
 use asrbox_mod_widgets::{
     parse_ics_bytes, parse_notes_config, parse_notes_db, parse_open_meteo_forecast,
-    parse_sysmon_config, parse_weather_config, parse_widget_config, render_calendar_widget,
-    render_notes_widget, render_sysmon_widget, render_weather_widget, serialize_notes_config,
-    serialize_notes_db, serialize_sysmon_config, serialize_weather_config, serialize_widget_config,
-    CalendarWidgetConfig, DateFormatMode, DisplayRow, IcsDateTime, InlineEditMode, NotesDb,
-    NotesRenderInput, NotesWidgetConfig, ParseOptions, PeriodFilter, RenderView, SysHitTarget,
-    SysMonitorConfig, SysRenderInput, WeatherData, WeatherHitTarget, WeatherRenderInput,
-    WeatherWidgetConfig, WidgetHitTarget,
+    parse_sysmon_config, parse_weather_config, parse_widget_config, parse_yandex_forecast,
+    render_calendar_widget, render_notes_widget, render_sysmon_widget, render_weather_widget,
+    serialize_notes_config, serialize_notes_db, serialize_sysmon_config, serialize_weather_config,
+    serialize_widget_config, CalendarWidgetConfig, DateFormatMode, DisplayRow, IcsDateTime,
+    InlineEditMode, NotesDb, NotesRenderInput, NotesWidgetConfig, ParseOptions, PeriodFilter,
+    RenderView, SysHitTarget, SysMonitorConfig, SysRenderInput, WeatherData, WeatherHitTarget,
+    WeatherProvider, WeatherRenderInput, WeatherWidgetConfig, WidgetHitTarget,
 };
 use asrbox_platform_api::{
     draw_asr_glass_logo, parse_appearance_config, parse_menu_config, serialize_appearance_config,
@@ -118,6 +118,7 @@ fn selftest_dock(app_version: &str) -> Result<(), String> {
         dragged_item_id: None,
         insert_before_index: Some(0),
         hovered_item_id: Some(1),
+        pressed_item_id: Some(1),
         palette: FluentPalette::default(),
     };
     let frame = render_dock_widget_frame(
@@ -230,6 +231,8 @@ fn selftest_widgets() -> Result<(), String> {
         height: w_cfg.height,
         opacity_percent: w_cfg.opacity_percent,
         city: &w_cfg.city,
+        provider: WeatherProvider::OpenMeteo,
+        forecast_days: 7,
         now,
         data: &wdata,
         loading: false,
@@ -239,6 +242,10 @@ fn selftest_widgets() -> Result<(), String> {
     });
     if wframe.bgra.pixels.is_empty() || wframe.texts.is_empty() {
         return Err("weather widget frame render failed".to_owned());
+    }
+    let sample_ya = r#"{"fact":{"temp":3,"feels_like":0,"condition":"partly-cloudy","wind_speed":3.2,"pressure_mm":750,"humidity":74},"forecasts":[{"date":"2026-11-25","parts":{"day_short":{"temp":4,"temp_min":-1,"condition":"cloudy"}},"hours":[{"hour":"12","temp":3,"condition":"cloudy"}]}]}"#;
+    if parse_yandex_forecast(sample_ya.as_bytes(), 12, "12:00".to_owned()).is_err() {
+        return Err("yandex weather parser selftest failed".to_owned());
     }
     let n_cfg = NotesWidgetConfig::default();
     if parse_notes_config(&serialize_notes_config(&n_cfg)) != n_cfg {

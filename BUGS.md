@@ -77,6 +77,27 @@
 - **Попытка 1**: добавлен zero-dependency `crates/app/build.rs`, встраивающий 6-размерный Win32 `.res` (`16/24/32/48/64/128 px`) в `asrbox.exe`; `app_icon.rs` переведён на DPI-aware `LoadImageW(LR_SHARED)` для ресурса `#1` с исправленным bottom-up `BITMAPV5HEADER` фолбэком.
 - **Статус**: правка готова (`v0.0.7`), ожидает проверки CI (`windows-latest`) и ручной проверки на Windows.
 
+### BUG-009 — Невозможно сменить город в виджете «Погода»
+- **Версия**: `0.0.8`
+- **Крейты / файлы**: `crates/mod-settings/src/layout_weather_notes.rs` (`build_weather_body`), `crates/app/src/settings_weather_notes.rs`
+- **Локализация**: поле ввода города размещалось в слоте `input_rects.aux` (4), а обработчик `ApplyWeatherCityFromInput` и предзаполнение читали/писали слот `0` (`primary`).
+- **Попытка 1**: поле города переведено на `input_rects.primary` (0), добавлен регрессионный тест `weather_city_uses_primary_input_and_yandex_key_uses_secret_input`.
+- **Статус**: правка готова (`v0.0.9`), ожидает проверки CI (`windows-latest`) и ручной проверки на Windows.
+
+### BUG-010 — Проблемы и мерцание при редактировании Заметок
+- **Версия**: `0.0.8`
+- **Крейты / файлы**: `crates/platform-windows/src/{notes_win.rs, notes_proc.rs, settings_proc.rs}`, `crates/mod-widgets/src/notes_widget.rs`
+- **Локализация**: отсутствие `WS_CLIPCHILDREN` приводило к затиранию дочерних `EDIT`-полей при `WM_PAINT`; безусловный `MoveWindow`/`ShowWindow` на каждый кадр и DWM backdrop на `WS_EX_LAYERED` окне вызывали мерцание и сброс каретки; синхронная запись `notes_db.cfg` выполнялась на каждый символ.
+- **Попытка 1**: добавлен `WS_CLIPCHILDREN`, убран DWM backdrop на layered-окне Заметок, добавлено кэширование `edit_rects`, запись `notes_db.cfg` переведена на отложенное сохранение `450 мс` (`FlushSaveTick`) + сброс при смене заметки/закрытии.
+- **Статус**: правка готова (`v0.0.9`), ожидает проверки CI (`windows-latest`) и ручной проверки на Windows.
+
+### BUG-011 — Перепутанные пункты и отсутствие режима «Только имена» в ComboBox дока
+- **Версия**: `0.0.8`
+- **Крейты / файлы**: `crates/app/src/settings_combo.rs` (`ComboKind::DockLabelMode`)
+- **Локализация**: список содержал только 3 пункта с перепутанными индексами 1 и 2 и пропускал `DockLabelMode::LabelsOnly` (3).
+- **Попытка 1**: исправлен порядок и добавлен 4-й пункт «Только имена».
+- **Статус**: правка готова (`v0.0.9`), ожидает проверки CI (`windows-latest`) и ручной проверки на Windows.
+
 (Закрытые `BUG-001`, `BUG-002` перенесены в `docs/archive/bugs-closed.md`.)
 
 ---

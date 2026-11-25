@@ -17,33 +17,29 @@ pub(crate) fn build_dock_tab(
         "Док-панели",
         "Индивидуальные панели; при свободном перемещении панель не прилипает к краям автоматически",
     );
+    let Some(dock) = snap.docks.get(selected_idx).or_else(|| snap.docks.first()) else {
+        return;
+    };
     if !b.is_searching() {
         add_module_process_card(b, snap, ModuleId::Dock);
         let sel_y = b.cursor_y;
-        let mut px = b.content_x;
-        for idx in 0..snap.docks.len() {
-            b.push_control(
-                PixelRect {
-                    x: px,
-                    y: b.sy(sel_y),
-                    width: 92,
-                    height: 30,
-                },
-                HitKind::SelectDock(idx),
-            );
-            px += 100;
-        }
+        let sel_label = format!("Док {} ({})", dock.id, edge_label(dock.edge_index));
+        b.push_combo(
+            b.content_x,
+            sel_y,
+            232,
+            &sel_label,
+            None,
+            ComboKind::DockSelect,
+        );
         b.push_btn(
-            (px, sel_y, 112, 30),
+            (b.content_x + 242, sel_y, 118, 30),
             "+ Новый док",
-            ButtonTone::Primary,
+            ButtonTone::Secondary,
             SettingsAction::AddDock,
         );
         b.cursor_y = sel_y + 42;
     }
-    let Some(dock) = snap.docks.get(selected_idx).or_else(|| snap.docks.first()) else {
-        return;
-    };
     add_dock_appearance_card(b, dock);
     add_dock_behavior_card(b, dock, snap.docks.len() > 1);
     add_dock_rename_card(b, dock, selected_item);
@@ -314,21 +310,27 @@ fn add_dock_rename_card(b: &mut LayoutBuilder, d: &DockSettingsView, selected_it
     let cols = 3usize;
     let chip_rows = d.items.len().div_ceil(cols) as u32;
     let chips_h = 12 + chip_rows * 34 + 6;
-    let active_id = selected_item
-        .filter(|id| d.items.iter().any(|i| i.id == *id))
-        .unwrap_or(d.items[0].id);
+    let active_item = selected_item
+        .and_then(|id| d.items.iter().find(|i| i.id == id))
+        .unwrap_or(&d.items[0]);
+    let active_id = active_item.id;
+    let path_sub = if active_item.target_path.is_empty() {
+        "Имя отображается в подсказке и в режимах с подписями".to_owned()
+    } else {
+        active_item.target_path.clone()
+    };
 
     let rows = vec![
         row(
             0,
-            50,
-            "Выберите значок этой панели",
-            Some("Имя отображается в подсказке и в режимах с подписями"),
+            52,
+            "Выберите значок или папку этой панели",
+            Some(&path_sub),
             Some(summary),
             true,
         ),
-        row(50, chips_h, "", None, None, true),
-        row(50 + chips_h as i32, 52, "", None, None, false),
+        row(52, chips_h, "", None, None, true),
+        row(52 + chips_h as i32, 92, "", None, None, false),
     ];
     let cy = b.add_card(None, false, rows);
 
@@ -341,7 +343,7 @@ fn add_dock_rename_card(b: &mut LayoutBuilder, d: &DockSettingsView, selected_it
         b.push_control(
             PixelRect {
                 x: b.content_x + 16 + (col * (chip_w + gap)) as i32,
-                y: b.sy(cy + 60 + (r_idx * 34) as i32),
+                y: b.sy(cy + 62 + (r_idx * 34) as i32),
                 width: chip_w,
                 height: 28,
             },
@@ -353,7 +355,7 @@ fn add_dock_rename_card(b: &mut LayoutBuilder, d: &DockSettingsView, selected_it
         );
     }
 
-    let edit_y = cy + 50 + chips_h as i32 + 11;
+    let edit_y = cy + 52 + chips_h as i32 + 10;
     let (save_w, reset_w) = (130u32, 96u32);
     let input_w = b
         .content_w
@@ -385,6 +387,25 @@ fn add_dock_rename_card(b: &mut LayoutBuilder, d: &DockSettingsView, selected_it
         "Сбросить",
         ButtonTone::Secondary,
         SettingsAction::ResetDockItemLabel {
+            dock_id: d.id.clone(),
+            item_id: active_id,
+        },
+    );
+    let act_y = edit_y + 40;
+    b.push_btn(
+        (input_x, act_y, 168, 28),
+        "Открыть папку объекта",
+        ButtonTone::Secondary,
+        SettingsAction::OpenDockItemFolder {
+            dock_id: d.id.clone(),
+            item_id: active_id,
+        },
+    );
+    b.push_btn(
+        (input_x + 178, act_y, 148, 28),
+        "Удалить значок",
+        ButtonTone::Danger,
+        SettingsAction::RemoveDockItem {
             dock_id: d.id.clone(),
             item_id: active_id,
         },

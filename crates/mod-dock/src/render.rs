@@ -9,8 +9,8 @@ use crate::labels::{
 use crate::layout::{DockLayout, DockSlotLayout, Rect, SlotKind};
 use crate::render_marks::{draw_drag_handle, draw_insert_marker, draw_running_dot, draw_separator};
 use crate::render_ops::{
-    blend_pixel, blit_scaled_icon, draw_fallback_tile, draw_icon_tile, draw_settings_button,
-    rounded_rect_sdf,
+    blend_pixel, blit_scaled_icon, draw_fallback_tile, draw_folder_badge, draw_icon_tile,
+    draw_settings_button, rounded_rect_sdf,
 };
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -18,7 +18,17 @@ pub struct DockRenderOverlay {
     pub dragged_item_id: Option<u64>,
     pub insert_before_index: Option<usize>,
     pub hovered_item_id: Option<u64>,
+    pub pressed_item_id: Option<u64>,
     pub palette: FluentPalette,
+}
+
+#[derive(Clone, Copy)]
+struct SlotFlags {
+    hovered: bool,
+    pressed: bool,
+    dimmed: bool,
+    running: bool,
+    is_folder: bool,
 }
 
 pub fn render_dock_frame(
@@ -62,17 +72,19 @@ pub fn render_dock_widget_frame(
             if is_zoomed != pass_zoomed {
                 continue;
             }
-            let dimmed = overlay.dragged_item_id == Some(slot.item_id);
-            let hovered = overlay.hovered_item_id == Some(slot.item_id);
-            let running = config.show_running_indicator
-                && slot.kind == SlotKind::Shortcut
-                && running_items.contains(&slot.item_id);
-            let label = config
-                .items
-                .iter()
-                .find(|i| i.id == slot.item_id)
-                .map(|i| i.label.as_str())
-                .unwrap_or("");
+            let item = config.items.iter().find(|i| i.id == slot.item_id);
+            let label = item.map(|i| i.label.as_str()).unwrap_or("");
+            let is_folder =
+                slot.kind == SlotKind::Shortcut && item.is_some_and(|i| path_is_folder(&i.target));
+            let flags = SlotFlags {
+                hovered: overlay.hovered_item_id == Some(slot.item_id),
+                pressed: overlay.pressed_item_id == Some(slot.item_id),
+                dimmed: overlay.dragged_item_id == Some(slot.item_id),
+                running: config.show_running_indicator
+                    && slot.kind == SlotKind::Shortcut
+                    && running_items.contains(&slot.item_id),
+                is_folder,
+            };
             draw_slot(
                 &mut frame,
                 &mut texts,
@@ -80,9 +92,7 @@ pub fn render_dock_widget_frame(
                 icons.get(&slot.item_id),
                 label,
                 config,
-                hovered,
-                dimmed,
-                running,
+                flags,
                 pal,
             );
         }
@@ -91,6 +101,18 @@ pub fn render_dock_widget_frame(
         draw_insert_marker(&mut frame, layout, config.edge, ins_idx, pal);
     }
     WidgetFrame { bgra: frame, texts }
+}
+
+fn path_is_folder(path: &std::path::Path) -> bool {
+    let skip_ext = path.extension().is_some_and(|e| {
+        e.eq_ignore_ascii_case("exe")
+            || e.eq_ignore_ascii_case("lnk")
+            || e.eq_ignore_ascii_case("bat")
+            || e.eq_ignore_ascii_case("cmd")
+            || e.eq_ignore_ascii_case("msi")
+            || e.eq_ignore_ascii_case("url")
+    });
+    !skip_ext && path.is_dir()
 }
 
 fn draw_capsule_shadow(
@@ -202,17 +224,22 @@ fn draw_slot(
     icon: Option<&RgbaImage>,
     label: &str,
     config: &DockConfig,
-    hovered: bool,
-    dimmed: bool,
-    running: bool,
+    flags: SlotFlags,
     pal: &FluentPalette,
 ) {
+    let vis = if flags.pressed {
+        scale_centered_rect(slot.visual_rect, 0.95)
+    } else {
+        slot.visual_rect
+    };
     match slot.kind {
         SlotKind::DragHandle => draw_drag_handle(frame, slot.base_rect, config.edge, pal),
-        SlotKind::Separator => draw_separator(frame, slot.base_rect, config.edge, dimmed, pal),
+        SlotKind::Separator => {
+            draw_separator(frame, slot.base_rect, config.edge, flags.dimmed, pal)
+        }
         SlotKind::SettingsButton => {
-            let r = square_centered_rect(slot.visual_rect);
-            draw_settings_button(frame, r, hovered, pal);
+            let r = square_centered_rect(vis);
+            draw_settings_button(frame, r, flags.hovered, pal);
         }
         SlotKind::Shortcut => match config.label_mode {
             DockLabelMode::LabelsOnly => {
@@ -221,24 +248,29 @@ fn draw_slot(
                     texts,
                     slot.base_rect,
                     label,
-                    hovered,
-                    dimmed,
-                    running,
+                    flags.hovered,
+                    flags.dimmed,
+                    flags.running,
                     pal,
                 );
             }
             DockLabelMode::IconAndLabel => {
                 let (icon_r, text_r) =
                     icon_and_label_rects(slot, config.edge, u32::from(config.icon_size_px));
-                draw_icon_or_fallback(frame, icon_r, icon, hovered, dimmed, pal);
-                push_icon_label_text(texts, text_r, label, config.edge, dimmed, pal);
-                if running {
+                let draw_r = if flags.pressed {
+                    scale_centered_rect(icon_r, 0.95)
+                } else {
+                    icon_r
+                };
+                draw_icon_or_fallback(frame, draw_r, icon, flags, pal);
+                push_icon_label_text(texts, text_r, label, config.edge, flags.dimmed, pal);
+                if flags.running {
                     draw_running_dot(frame, slot.base_rect, config.edge, pal);
                 }
             }
             DockLabelMode::IconsOnly | DockLabelMode::HoverTooltip => {
-                draw_icon_or_fallback(frame, slot.visual_rect, icon, hovered, dimmed, pal);
-                if running {
+                draw_icon_or_fallback(frame, vis, icon, flags, pal);
+                if flags.running {
                     draw_running_dot(frame, slot.base_rect, config.edge, pal);
                 }
             }
@@ -250,13 +282,12 @@ fn draw_icon_or_fallback(
     frame: &mut BgraFrame,
     rect: Rect,
     icon: Option<&RgbaImage>,
-    hovered: bool,
-    dimmed: bool,
+    flags: SlotFlags,
     pal: &FluentPalette,
 ) {
-    let alpha = if dimmed { 0.35 } else { 1.0 };
+    let alpha = if flags.dimmed { 0.35 } else { 1.0 };
     let dst = if pal.design_theme.is_glass() {
-        draw_icon_tile(frame, rect, hovered, dimmed, pal);
+        draw_icon_tile(frame, rect, flags.hovered, flags.dimmed, pal);
         let pad = (rect.width.min(rect.height) as i32 / 7).clamp(4, 9);
         Rect {
             x: rect.x + pad,
@@ -272,6 +303,20 @@ fn draw_icon_or_fallback(
             blit_scaled_icon(frame, dst, image, alpha);
         }
         _ => draw_fallback_tile(frame, dst, alpha),
+    }
+    if flags.is_folder {
+        draw_folder_badge(frame, rect, alpha, pal);
+    }
+}
+
+fn scale_centered_rect(r: Rect, factor: f32) -> Rect {
+    let nw = ((r.width as f32) * factor).round().max(8.0) as u32;
+    let nh = ((r.height as f32) * factor).round().max(8.0) as u32;
+    Rect {
+        x: r.x + (r.width as i32 - nw as i32) / 2,
+        y: r.y + (r.height as i32 - nh as i32) / 2,
+        width: nw,
+        height: nh,
     }
 }
 

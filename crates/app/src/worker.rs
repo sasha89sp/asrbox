@@ -167,7 +167,7 @@ fn handle_dock_worker_event(
             point,
             screen_point,
         } => {
-            docks.on_left_down(dock_id, to_dock_point(point), screen_point);
+            docks.on_left_down(host, dock_id, to_dock_point(point), screen_point);
         }
         PlatformEvent::DockDragMove { screen_point, .. } => {
             docks.on_drag_move(host, screen_point);

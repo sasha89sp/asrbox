@@ -61,10 +61,10 @@ impl DockDragState {
         dock_id: u64,
         local_pt: Point,
         screen_pt: PixelPoint,
-    ) {
+    ) -> bool {
         self.mode = None;
         let Some(dock) = docks.iter().find(|d| d.instance.config().id == dock_id) else {
-            return;
+            return false;
         };
         let win = dock.instance.layout().window_rect;
         if let Some(slot) = hit_test_slot(dock.instance.layout(), local_pt) {
@@ -79,6 +79,7 @@ impl DockDragState {
                             moved: false,
                         });
                     }
+                    false
                 }
                 SlotKind::Shortcut | SlotKind::Separator => {
                     self.mode = Some(DragMode::ItemPending {
@@ -87,6 +88,7 @@ impl DockDragState {
                         slot_kind: slot.kind,
                         start_screen: screen_pt,
                     });
+                    slot.kind == SlotKind::Shortcut
                 }
                 SlotKind::SettingsButton => {
                     self.mode = Some(DragMode::ItemPending {
@@ -95,6 +97,7 @@ impl DockDragState {
                         slot_kind: SlotKind::SettingsButton,
                         start_screen: screen_pt,
                     });
+                    true
                 }
             }
         } else if !dock.instance.config().locked {
@@ -105,6 +108,9 @@ impl DockDragState {
                 start_win_y: win.y,
                 moved: false,
             });
+            false
+        } else {
+            false
         }
     }
 
@@ -239,20 +245,30 @@ impl DockDragState {
 
     pub fn overlay_for(&self, dock: &DockRuntime) -> DockRenderOverlay {
         let mut ov = DockRenderOverlay::default();
-        if let Some(DragMode::ItemDragging {
-            source_dock_id,
-            item_id,
-            target_dock_id,
-            insert_idx,
-        }) = self.mode
-        {
-            let id = dock.instance.config().id;
-            if id == source_dock_id {
-                ov.dragged_item_id = Some(item_id);
+        let id = dock.instance.config().id;
+        match self.mode {
+            Some(DragMode::ItemPending {
+                source_dock_id,
+                item_id,
+                slot_kind,
+                ..
+            }) if id == source_dock_id && slot_kind != SlotKind::Separator => {
+                ov.pressed_item_id = Some(item_id);
             }
-            if target_dock_id == Some(id) {
-                ov.insert_before_index = insert_idx;
+            Some(DragMode::ItemDragging {
+                source_dock_id,
+                item_id,
+                target_dock_id,
+                insert_idx,
+            }) => {
+                if id == source_dock_id {
+                    ov.dragged_item_id = Some(item_id);
+                }
+                if target_dock_id == Some(id) {
+                    ov.insert_before_index = insert_idx;
+                }
             }
+            _ => {}
         }
         ov
     }

@@ -212,13 +212,40 @@ impl<I: IconProvider> AppController<I> {
                     it.label = default_label_for_path(&it.target);
                 })
             }
+            SettingsAction::OpenDockItemFolder { dock_id, item_id } => {
+                if let Ok(id) = dock_id.parse::<u64>() {
+                    if let Some(target) = cfgs
+                        .iter()
+                        .find(|c| c.id == id)
+                        .and_then(|c| c.items.iter().find(|i| i.id == *item_id))
+                        .map(|i| i.target.clone())
+                    {
+                        let _ = DockPlatform::open_item_location(host, &target);
+                    }
+                }
+                return true;
+            }
+            SettingsAction::RemoveDockItem { dock_id, item_id } => {
+                self.settings_ui.selected_dock_item = None;
+                self.settings_ui.reset_dock_input_sync();
+                let mut removed = false;
+                edit_dock(&mut cfgs, dock_id, |c| {
+                    let before = c.items.len();
+                    c.items.retain(|i| i.id != *item_id);
+                    removed = c.items.len() != before;
+                });
+                removed
+            }
             other => match apply_dock_prop(&mut cfgs, other) {
                 Some(v) => v,
                 None => return false,
             },
         };
         if changed && save_docks_to_file(&self.paths.docks_cfg, &cfgs, APP_VERSION).is_ok() {
-            if matches!(action, SettingsAction::RemoveDock(_)) {
+            if matches!(
+                action,
+                SettingsAction::RemoveDock(_) | SettingsAction::RemoveDockItem { .. }
+            ) {
                 let dir = shortcuts_dir_for_config(&self.paths.docks_cfg);
                 cleanup_unused_shortcuts(&cfgs, &dir);
             }

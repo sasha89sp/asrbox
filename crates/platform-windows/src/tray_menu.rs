@@ -40,18 +40,18 @@ pub(crate) fn build_tray_menu_spec(
         glyph: "⚙".to_owned(),
         enabled: true,
     }];
-    if vis.show_backup {
+    if vis.show_widgets {
         quick_actions.push(FluentQuickBtn {
-            id: TRAY_BACKUP_SETTINGS,
-            glyph: "☁".to_owned(),
-            enabled: true,
+            id: TRAY_TOGGLE_SYSMON,
+            glyph: "◫".to_owned(),
+            enabled: flags.widgets_module_enabled,
         });
     }
-    if vis.show_debug {
+    if vis.show_overlay {
         quick_actions.push(FluentQuickBtn {
-            id: TRAY_OPEN_DEBUG,
-            glyph: "◉".to_owned(),
-            enabled: true,
+            id: TRAY_OVERLAY_SETUP,
+            glyph: "◎".to_owned(),
+            enabled: flags.overlay_module_enabled,
         });
     }
     quick_actions.push(FluentQuickBtn {
@@ -152,7 +152,7 @@ pub(crate) fn build_tray_menu_spec(
     FluentMenuSpec {
         quick_actions,
         items,
-        min_width: 248,
+        min_width: 244,
     }
 }
 

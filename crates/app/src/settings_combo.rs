@@ -1,12 +1,9 @@
 #![cfg(windows)]
 
-use asrbox_core::{IsolationMode, ModuleId, SupervisorCmd};
+use asrbox_core::IsolationMode;
 use asrbox_mod_dock::{load_docks_from_file, DockEdge};
 use asrbox_mod_settings::{ComboKind, SettingsAction, SettingsTab, WidgetSubTab};
-use asrbox_mod_widgets::{
-    load_notes_config, load_weather_config, save_notes_config, save_weather_config,
-    MAX_WEATHER_HEIGHT, MAX_WEATHER_WIDTH, MIN_WEATHER_HEIGHT, MIN_WEATHER_WIDTH,
-};
+use asrbox_mod_widgets::{load_notes_config, load_weather_config};
 use asrbox_platform_api::{
     AccentPreset, AppLanguage, DesignTheme, DockPlatform, FluentMenuItem, FluentMenuSpec,
     FontRenderer, IconProvider, PixelPoint, ThemeMode, ToolsPlatform, WidgetLayer, WidgetPlatform,
@@ -26,7 +23,7 @@ impl<I: IconProvider> AppController<I> {
         let spec = FluentMenuSpec {
             quick_actions: Vec::new(),
             items: self.build_combo_items(kind, ru),
-            min_width: 216,
+            min_width: 224,
         };
         let pal = self.appearance.palette();
         let Ok(Some(cmd)) = host.show_fluent_popup_menu(screen_pt, &spec, pal) else {
@@ -107,24 +104,28 @@ impl<I: IconProvider> AppController<I> {
                     self.modules_cfg.isolation == IsolationMode::InProc,
                 ),
             ],
+            ComboKind::DockSelect => {
+                let docks = load_docks_from_file(&self.paths.docks_cfg).unwrap_or_default();
+                docks
+                    .iter()
+                    .enumerate()
+                    .map(|(i, d)| {
+                        let edge = edge_name(d.edge, ru);
+                        let lbl = format!("Док {} ({edge})", d.id);
+                        combo_item((i + 1) as u32, &lbl, i == self.settings_ui.selected_dock)
+                    })
+                    .collect()
+            }
             ComboKind::DockEdge(dock_id) => {
                 let cur = self
                     .find_dock_cfg(dock_id)
                     .map(|d| d.edge)
                     .unwrap_or(DockEdge::Bottom);
                 vec![
-                    combo_item(
-                        1,
-                        if ru { "Снизу" } else { "Bottom" },
-                        cur == DockEdge::Bottom,
-                    ),
-                    combo_item(2, if ru { "Сверху" } else { "Top" }, cur == DockEdge::Top),
-                    combo_item(3, if ru { "Слева" } else { "Left" }, cur == DockEdge::Left),
-                    combo_item(
-                        4,
-                        if ru { "Справа" } else { "Right" },
-                        cur == DockEdge::Right,
-                    ),
+                    combo_item(1, edge_name(DockEdge::Bottom, ru), cur == DockEdge::Bottom),
+                    combo_item(2, edge_name(DockEdge::Top, ru), cur == DockEdge::Top),
+                    combo_item(3, edge_name(DockEdge::Left, ru), cur == DockEdge::Left),
+                    combo_item(4, edge_name(DockEdge::Right, ru), cur == DockEdge::Right),
                 ]
             }
             ComboKind::DockLayer(dock_id) => {
@@ -143,7 +144,7 @@ impl<I: IconProvider> AppController<I> {
                     combo_item(
                         1,
                         if ru {
-                            "Только значки"
+                            "Только иконки"
                         } else {
                             "Icons only"
                         },
@@ -152,20 +153,29 @@ impl<I: IconProvider> AppController<I> {
                     combo_item(
                         2,
                         if ru {
-                            "Значки + подписи"
+                            "При наведении"
                         } else {
-                            "Icons + labels"
+                            "On hover"
                         },
                         cur == 1,
                     ),
                     combo_item(
                         3,
                         if ru {
-                            "Подпись при наведении"
+                            "Иконка + имя"
                         } else {
-                            "Label on hover"
+                            "Icon + label"
                         },
                         cur == 2,
+                    ),
+                    combo_item(
+                        4,
+                        if ru {
+                            "Только имена"
+                        } else {
+                            "Labels only"
+                        },
+                        cur == 3,
                     ),
                 ]
             }
@@ -215,12 +225,17 @@ impl<I: IconProvider> AppController<I> {
                         .map(|c| c.city)
                         .unwrap_or_else(|_| "Москва".to_owned());
                     host.set_settings_input_text(0, &city);
+                    host.set_settings_input_text(1, "");
                 }
-                _ => host.set_settings_input_text(0, ""),
+                _ => {
+                    host.set_settings_input_text(0, "");
+                    host.set_settings_input_text(1, "");
+                }
             },
             SettingsTab::General => {
                 if prev == Some(SettingsTab::Dock) || prev == Some(SettingsTab::Widgets) {
                     host.set_settings_input_text(0, "");
+                    host.set_settings_input_text(1, "");
                 }
                 host.set_settings_input_text(5, "");
                 host.set_settings_input_text(6, &self.backup.github_cfg.repo);
@@ -230,94 +245,18 @@ impl<I: IconProvider> AppController<I> {
             SettingsTab::Overlay => {}
         }
     }
+}
 
-    pub(crate) fn apply_weather_setting<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
-        &mut self,
-        host: &mut H,
-        action: &SettingsAction,
-    ) -> bool {
-        if matches!(action, SettingsAction::RefreshWeatherNow) {
-            self.send_or_run_widgets_cmd(host, SupervisorCmd::RefreshWeather);
-            return true;
-        }
-        if matches!(action, SettingsAction::OpenWeatherConfig) {
-            let _ = ToolsPlatform::open_text_file(host, &self.paths.weather_cfg);
-            return true;
-        }
-        let mut cfg = load_weather_config(&self.paths.weather_cfg).unwrap_or_default();
-        let changed = match action {
-            SettingsAction::SetWeatherVisible(v) => {
-                cfg.visible = *v;
-                true
-            }
-            SettingsAction::ApplyWeatherCityFromInput => {
-                let city = host.settings_input_text(0).trim().to_owned();
-                if city.is_empty() {
-                    false
-                } else {
-                    cfg.city = city;
-                    true
-                }
-            }
-            SettingsAction::SetWeatherLayer(l) => {
-                cfg.layer = *l;
-                true
-            }
-            SettingsAction::SetWeatherOpacity(o) => {
-                cfg.opacity_percent = (*o).clamp(20, 100);
-                true
-            }
-            SettingsAction::SetWeatherRefreshMin(m) => {
-                cfg.refresh_interval_min = (*m).clamp(5, 360);
-                true
-            }
-            SettingsAction::SetWeatherWidth(w) => {
-                cfg.width = (*w).clamp(MIN_WEATHER_WIDTH, MAX_WEATHER_WIDTH);
-                true
-            }
-            SettingsAction::SetWeatherHeight(h) => {
-                cfg.height = (*h).clamp(MIN_WEATHER_HEIGHT, MAX_WEATHER_HEIGHT);
-                true
-            }
-            _ => return false,
-        };
-        if changed && save_weather_config(&self.paths.weather_cfg, &cfg).is_ok() {
-            self.reload_module_config(host, ModuleId::Widgets);
-        }
-        true
-    }
-
-    pub(crate) fn apply_notes_setting<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
-        &mut self,
-        host: &mut H,
-        action: &SettingsAction,
-    ) -> bool {
-        if matches!(action, SettingsAction::OpenNotesFolder) {
-            let _ = std::fs::create_dir_all(&self.paths.notes_dir);
-            let _ = host.open_folder(&self.paths.notes_dir);
-            return true;
-        }
-        let mut cfg = load_notes_config(&self.paths.notes_cfg).unwrap_or_default();
-        let changed = match action {
-            SettingsAction::SetNotesVisible(v) => {
-                cfg.visible = *v;
-                true
-            }
-            SettingsAction::SetNotesLayer(l) => {
-                cfg.layer = *l;
-                true
-            }
-            SettingsAction::SetNotesOpacity(o) => {
-                cfg.opacity_percent = (*o).clamp(20, 100);
-                true
-            }
-            SettingsAction::ToggleNotesPane(idx) => cfg.toggle_pane(*idx),
-            _ => return false,
-        };
-        if changed && save_notes_config(&self.paths.notes_cfg, &cfg).is_ok() {
-            self.reload_module_config(host, ModuleId::Widgets);
-        }
-        true
+fn edge_name(edge: DockEdge, ru: bool) -> &'static str {
+    match (edge, ru) {
+        (DockEdge::Bottom, true) => "Низ экрана",
+        (DockEdge::Top, true) => "Верх экрана",
+        (DockEdge::Left, true) => "Левый край",
+        (DockEdge::Right, true) => "Правый край",
+        (DockEdge::Bottom, false) => "Bottom",
+        (DockEdge::Top, false) => "Top",
+        (DockEdge::Left, false) => "Left",
+        (DockEdge::Right, false) => "Right",
     }
 }
 
@@ -404,6 +343,7 @@ fn decode_combo_selection(kind: &ComboKind, cmd: u32) -> Option<SettingsAction> 
             2 => Some(SettingsAction::SetIsolation(IsolationMode::InProc)),
             _ => None,
         },
+        ComboKind::DockSelect if cmd >= 1 => Some(SettingsAction::SelectDock((cmd - 1) as usize)),
         ComboKind::DockEdge(dock_id) if (1..=4).contains(&cmd) => {
             Some(SettingsAction::SetDockEdge {
                 dock_id: dock_id.clone(),
@@ -416,7 +356,7 @@ fn decode_combo_selection(kind: &ComboKind, cmd: u32) -> Option<SettingsAction> 
                 layer,
             })
         }
-        ComboKind::DockLabelMode(dock_id) if (1..=3).contains(&cmd) => {
+        ComboKind::DockLabelMode(dock_id) if (1..=4).contains(&cmd) => {
             Some(SettingsAction::SetDockLabelMode {
                 dock_id: dock_id.clone(),
                 mode_index: (cmd - 1) as u8,

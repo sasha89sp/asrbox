@@ -350,6 +350,17 @@ pub trait WidgetPlatform {
         state: &WidgetMenuState,
     ) -> Result<Option<WidgetMenuAction>, String>;
     fn start_http_get(&mut self, request_id: u64, url: &str) -> Result<(), String>;
+    fn start_http_get_with_headers(
+        &mut self,
+        request_id: u64,
+        url: &str,
+        _headers: &[(String, String)],
+    ) -> Result<(), String> {
+        self.start_http_get(request_id, url)
+    }
+    fn read_secret(&self, _target: &str) -> Result<Option<String>, String> {
+        Ok(None)
+    }
     fn open_url(&self, url: &str) -> Result<(), String>;
     fn open_text_file(&self, path: &Path) -> Result<(), String>;
     fn launch_system_tool(&self, cmd: &str, args: &str) -> Result<(), String>;

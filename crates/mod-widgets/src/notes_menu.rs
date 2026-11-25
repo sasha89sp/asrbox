@@ -2,7 +2,7 @@ use asrbox_platform_api::{
     FluentMenuItem, FluentMenuSpec, PixelPoint, WidgetLayer, WidgetPlatform,
 };
 
-use crate::notes_model::FolderNode;
+use crate::notes_model::{FolderNode, TaskItem};
 use crate::notes_render::{hit_test_notes, InlineEditMode, NotesHitTarget};
 use crate::notes_widget::NotesWidget;
 use crate::storage::{MAX_OPACITY_PERCENT, MIN_OPACITY_PERCENT};
@@ -198,6 +198,55 @@ impl NotesWidget {
             }
             _ => {}
         }
+    }
+
+    pub(crate) fn commit_inline_edit(&mut self, host: &mut dyn WidgetPlatform) {
+        let text = host.notes_input_text(3).trim().to_owned();
+        let mode = self.inline_mode;
+        self.inline_mode = InlineEditMode::None;
+        if !text.is_empty() {
+            match mode {
+                InlineEditMode::NewFolder => {
+                    let fid = self.db.alloc_id();
+                    self.db.folders.push(FolderNode {
+                        id: fid,
+                        parent_id: None,
+                        name: text,
+                        expanded: true,
+                    });
+                    self.config.active_folder_id = fid;
+                    self.persist_db();
+                    self.persist_cfg();
+                }
+                InlineEditMode::RenameFolder(fid) => {
+                    if let Some(f) = self.db.folders.iter_mut().find(|f| f.id == fid) {
+                        f.name = text;
+                    }
+                    self.persist_db();
+                }
+                InlineEditMode::NewTask => {
+                    let tid = self.db.alloc_id();
+                    if let Some(n) = self.db.note_mut(self.config.active_note_id) {
+                        n.tasks.push(TaskItem {
+                            id: tid,
+                            text,
+                            done: false,
+                        });
+                    }
+                    self.persist_db();
+                }
+                InlineEditMode::EditTask(tid) => {
+                    if let Some(n) = self.db.note_mut(self.config.active_note_id) {
+                        if let Some(t) = n.tasks.iter_mut().find(|t| t.id == tid) {
+                            t.text = text;
+                        }
+                    }
+                    self.persist_db();
+                }
+                InlineEditMode::None => {}
+            }
+        }
+        self.redraw(host);
     }
 }
 

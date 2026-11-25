@@ -10,11 +10,12 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetKeyState, ReleaseCapture, SetCapture, VK_CONTROL, VK_ESCAPE, VK_RETURN,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallWindowProcW, DefWindowProcW, GetWindowRect, HTBOTTOM, HTBOTTOMLEFT, HTBOTTOMRIGHT,
-    HTCAPTION, HTCLIENT, HTLEFT, HTRIGHT, HTTOP, HTTOPLEFT, HTTOPRIGHT, HWND_BOTTOM, MINMAXINFO,
-    WINDOWPOS, WM_CHAR, WM_CLOSE, WM_COMMAND, WM_CTLCOLOREDIT, WM_ERASEBKGND, WM_EXITSIZEMOVE,
-    WM_GETMINMAXINFO, WM_KEYDOWN, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL,
-    WM_MOVE, WM_NCHITTEST, WM_PAINT, WM_RBUTTONUP, WM_SIZE, WM_WINDOWPOSCHANGING, WNDPROC,
+    CallWindowProcW, DefWindowProcW, GetWindowRect, KillTimer, SetTimer, HTBOTTOM, HTBOTTOMLEFT,
+    HTBOTTOMRIGHT, HTCAPTION, HTCLIENT, HTLEFT, HTRIGHT, HTTOP, HTTOPLEFT, HTTOPRIGHT, HWND_BOTTOM,
+    MINMAXINFO, WINDOWPOS, WM_CHAR, WM_CLOSE, WM_COMMAND, WM_CTLCOLOREDIT, WM_ERASEBKGND,
+    WM_EXITSIZEMOVE, WM_GETMINMAXINFO, WM_KEYDOWN, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
+    WM_MOUSEWHEEL, WM_MOVE, WM_NCHITTEST, WM_PAINT, WM_RBUTTONUP, WM_SIZE, WM_TIMER,
+    WM_WINDOWPOSCHANGING, WNDPROC,
 };
 
 use crate::icons::make_top_down_bmi;
@@ -27,6 +28,8 @@ const NOTES_MIN_W: i32 = 300;
 const NOTES_MIN_H: i32 = 320;
 const RESIZE_EDGE_PX: i32 = 6;
 const EN_CHANGE: u32 = 0x0300;
+pub(crate) const NOTES_SAVE_TIMER_ID: usize = 73;
+const NOTES_SAVE_DEBOUNCE_MS: u32 = 450;
 
 pub(crate) unsafe extern "system" fn notes_wnd_proc(
     hwnd: HWND,
@@ -85,7 +88,12 @@ pub(crate) unsafe extern "system" fn notes_wnd_proc(
             }
             LRESULT(0)
         }
-        WM_COMMAND => handle_notes_command(wparam),
+        WM_COMMAND => handle_notes_command(hwnd, wparam),
+        WM_TIMER if wparam.0 == NOTES_SAVE_TIMER_ID => {
+            let _ = KillTimer(Some(hwnd), NOTES_SAVE_TIMER_ID);
+            push_event(PlatformEvent::NotesEvent(NotesUiEvent::FlushSaveTick));
+            LRESULT(0)
+        }
         WM_MOUSEMOVE => {
             let pt = lparam_point(lparam);
             push_event(PlatformEvent::NotesEvent(NotesUiEvent::PointerMove {
@@ -219,7 +227,7 @@ unsafe fn emit_notes_rect(hwnd: HWND, finished: bool) {
     }
 }
 
-fn handle_notes_command(wparam: WPARAM) -> LRESULT {
+unsafe fn handle_notes_command(hwnd: HWND, wparam: WPARAM) -> LRESULT {
     let notify = ((wparam.0 >> 16) & 0xFFFF) as u32;
     let ctrl_id = wparam.0 & 0xFFFF;
     if notify == EN_CHANGE
@@ -229,6 +237,14 @@ fn handle_notes_command(wparam: WPARAM) -> LRESULT {
         if !suppressed {
             let slot = (ctrl_id - NOTES_EDIT_ID_BASE) as u8;
             let text = read_notes_input(slot);
+            if slot == 1 || slot == 2 {
+                let _ = SetTimer(
+                    Some(hwnd),
+                    NOTES_SAVE_TIMER_ID,
+                    NOTES_SAVE_DEBOUNCE_MS,
+                    None,
+                );
+            }
             push_event(PlatformEvent::NotesEvent(NotesUiEvent::InputChanged {
                 slot,
                 text,

@@ -8,9 +8,16 @@ use crate::types::{ComboKind, SettingsAction, SettingsSnapshot, SliderKind};
 pub(crate) fn build_weather_body(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
     let lang = b.lang;
     let w = &snap.weather;
+    let prov = if w.provider_is_yandex {
+        "Яндекс.Погода"
+    } else {
+        "Open-Meteo"
+    };
     let summary = format!(
-        "{} · {}",
+        "{} · {} · {}д · {}",
         w.city,
+        prov,
+        w.forecast_days,
         if w.visible {
             tr(lang, "Вкл", "On")
         } else {
@@ -19,121 +26,223 @@ pub(crate) fn build_weather_body(b: &mut LayoutBuilder, snap: &SettingsSnapshot)
     );
     if !b.accordion(
         "weather_main",
-        tr(
-            lang,
-            "Виджет «Погода» (Open-Meteo)",
-            "Weather Widget (Open-Meteo)",
-        ),
+        tr(lang, "Виджет «Погода»", "Weather Widget"),
         &summary,
-        "погода город open-meteo прогноз ветер влажность давление weather city forecast",
+        "погода город open-meteo яндекс yandex прогноз ветер влажность давление 1 3 7 дней weather city forecast",
     ) {
         return;
     }
-    let rows = vec![
-        row(
-            0,
-            50,
-            tr(lang, "Показывать виджет Погоды", "Show Weather widget"),
-            Some(tr(
-                lang,
-                "Без API-ключей, обновляется через Open-Meteo",
-                "Keyless forecast via Open-Meteo",
-            )),
+    let key_sub = if w.has_yandex_key {
+        tr(
+            lang,
+            "Ключ сохранён в Диспетчере учётных данных Windows (X-Yandex-Weather-Key)",
+            "Saved in Windows Credential Manager (X-Yandex-Weather-Key)",
+        )
+    } else {
+        tr(
+            lang,
+            "Введите X-Yandex-Weather-Key (хранится в Диспетчере учётных данных)",
+            "Enter X-Yandex-Weather-Key (stored in Credential Manager)",
+        )
+    };
+    let mut rows = Vec::new();
+    let mut off = 0i32;
+    let mut push_r =
+        |h: u32, title: &str, sub: Option<&str>, val: Option<String>, sep: bool| -> i32 {
+            let y = off;
+            rows.push(row(y, h, title, sub, val, sep));
+            off += h as i32;
+            y
+        };
+    let y_vis = push_r(
+        50,
+        tr(lang, "Показывать виджет Погоды", "Show Weather widget"),
+        Some(tr(
+            lang,
+            "Выбор источника: Open-Meteo (без ключа) или Яндекс.Погода",
+            "Source: Open-Meteo (keyless) or Yandex Weather",
+        )),
+        None,
+        true,
+    );
+    let y_prov = push_r(
+        52,
+        tr(lang, "Источник погоды", "Weather provider"),
+        Some(tr(
+            lang,
+            "Координаты города определяются автоматически",
+            "City coordinates are resolved automatically",
+        )),
+        None,
+        true,
+    );
+    let y_key = if w.provider_is_yandex {
+        Some(push_r(
+            56,
+            tr(lang, "API-ключ Яндекс.Погоды", "Yandex Weather API key"),
+            Some(key_sub),
             None,
             true,
-        ),
-        row(
-            50,
-            54,
-            tr(lang, "Город", "City"),
-            Some(&format!("{}: {}", tr(lang, "Текущий", "Current"), w.city)),
-            None,
-            true,
-        ),
-        row(
-            104,
-            50,
-            tr(lang, "Слой окна", "Window layer"),
-            None,
-            None,
-            true,
-        ),
-        row(
-            154,
-            52,
-            tr(lang, "Прозрачность фона", "Background opacity"),
-            None,
-            Some(format!("{}%", w.opacity_percent)),
-            true,
-        ),
-        row(
-            206,
-            52,
-            tr(lang, "Интервал обновления", "Refresh interval"),
-            None,
-            None,
-            true,
-        ),
-        row(
-            258,
-            52,
-            tr(lang, "Ширина карточки", "Card width"),
-            None,
-            Some(format!("{} px", w.width)),
-            true,
-        ),
-        row(
-            310,
-            52,
-            tr(lang, "Высота карточки", "Card height"),
-            None,
-            Some(format!("{} px", w.height)),
-            false,
-        ),
-    ];
+        ))
+    } else {
+        None
+    };
+    let y_city = push_r(
+        54,
+        tr(lang, "Город", "City"),
+        Some(&format!("{}: {}", tr(lang, "Текущий", "Current"), w.city)),
+        None,
+        true,
+    );
+    let y_days = push_r(
+        52,
+        tr(lang, "Горизонт прогноза", "Forecast horizon"),
+        Some(tr(
+            lang,
+            "Также можно переключать прямо в виджете (1д | 3д | 7д)",
+            "Also switchable directly on the widget (1d | 3d | 7d)",
+        )),
+        None,
+        true,
+    );
+    let y_layer = push_r(50, tr(lang, "Слой окна", "Window layer"), None, None, true);
+    let y_opac = push_r(
+        52,
+        tr(lang, "Прозрачность фона", "Background opacity"),
+        None,
+        Some(format!("{}%", w.opacity_percent)),
+        true,
+    );
+    let y_ref = push_r(
+        52,
+        tr(lang, "Интервал обновления", "Refresh interval"),
+        None,
+        None,
+        true,
+    );
+    let y_w = push_r(
+        52,
+        tr(lang, "Ширина карточки", "Card width"),
+        None,
+        Some(format!("{} px", w.width)),
+        true,
+    );
+    let y_h = push_r(
+        52,
+        tr(lang, "Высота карточки", "Card height"),
+        None,
+        Some(format!("{} px", w.height)),
+        false,
+    );
+
     let cy = b.add_card(None, false, rows);
     let tx = b.content_x + b.content_w as i32 - 58;
+    let rx = b.content_x + b.content_w as i32 - 14;
+    let sx = b.content_x + b.content_w as i32 - 220;
+
     b.push_toggle(
         tx,
-        cy + 14,
+        cy + y_vis + 14,
         w.visible,
         SettingsAction::SetWeatherVisible(!w.visible),
     );
+    b.add_segmented_row(
+        cy + y_prov,
+        52,
+        vec![
+            (
+                "Open-Meteo",
+                !w.provider_is_yandex,
+                SettingsAction::SetWeatherProvider(false),
+            ),
+            (
+                "Яндекс.Погода",
+                w.provider_is_yandex,
+                SettingsAction::SetWeatherProvider(true),
+            ),
+        ],
+    );
+    if let Some(yk) = y_key {
+        let clear_w = if w.has_yandex_key { 78u32 } else { 0 };
+        let save_w = 104u32;
+        let gap = if clear_w > 0 { 6 } else { 0 };
+        let inp_w = 166u32;
+        let clear_x = rx - clear_w as i32;
+        let save_x = clear_x - gap - save_w as i32;
+        let inp_x = save_x - 8 - inp_w as i32;
+        b.out.input_rects.secret = Some(PixelRect {
+            x: inp_x,
+            y: b.sy(cy + yk + 14),
+            width: inp_w,
+            height: 28,
+        });
+        b.push_btn(
+            (save_x, cy + yk + 14, save_w, 28),
+            tr(lang, "Сохранить", "Save"),
+            ButtonTone::Primary,
+            SettingsAction::SaveYandexWeatherKey,
+        );
+        if clear_w > 0 {
+            b.push_btn(
+                (clear_x, cy + yk + 14, clear_w, 28),
+                tr(lang, "Удалить", "Clear"),
+                ButtonTone::Danger,
+                SettingsAction::ClearYandexWeatherKey,
+            );
+        }
+    }
 
-    let rx = b.content_x + b.content_w as i32 - 14;
     let apply_w = 114u32;
     let inp_w = 180u32;
-    b.out.input_rects.aux = Some(PixelRect {
+    b.out.input_rects.primary = Some(PixelRect {
         x: rx - apply_w as i32 - 8 - inp_w as i32,
-        y: b.sy(cy + 50 + 13),
+        y: b.sy(cy + y_city + 13),
         width: inp_w,
         height: 28,
     });
     b.push_btn(
-        (rx - apply_w as i32, cy + 50 + 13, apply_w, 28),
+        (rx - apply_w as i32, cy + y_city + 13, apply_w, 28),
         tr(lang, "Применить", "Apply"),
         ButtonTone::Primary,
         SettingsAction::ApplyWeatherCityFromInput,
     );
-
+    b.add_segmented_row(
+        cy + y_days,
+        52,
+        vec![
+            (
+                tr(lang, "1 день", "1 day"),
+                w.forecast_days == 1,
+                SettingsAction::SetWeatherForecastDays(1),
+            ),
+            (
+                tr(lang, "3 дня", "3 days"),
+                w.forecast_days == 3,
+                SettingsAction::SetWeatherForecastDays(3),
+            ),
+            (
+                tr(lang, "7 дней", "7 days"),
+                w.forecast_days == 7,
+                SettingsAction::SetWeatherForecastDays(7),
+            ),
+        ],
+    );
     b.push_combo(
         rx - 184,
-        cy + 104 + 11,
+        cy + y_layer + 11,
         184,
         layer_label(w.layer),
         None,
         ComboKind::WeatherLayer,
     );
-
-    let sx = b.content_x + b.content_w as i32 - 220;
     b.push_slider(
         sx,
-        cy + 154 + 14,
+        cy + y_opac + 14,
         SliderKind::WeatherOpacity,
         u32::from(w.opacity_percent),
     );
     b.add_segmented_row(
-        cy + 206,
+        cy + y_ref,
         52,
         vec![
             (
@@ -153,8 +262,8 @@ pub(crate) fn build_weather_body(b: &mut LayoutBuilder, snap: &SettingsSnapshot)
             ),
         ],
     );
-    b.push_slider(sx, cy + 258 + 14, SliderKind::WeatherWidth, w.width);
-    b.push_slider(sx, cy + 310 + 14, SliderKind::WeatherHeight, w.height);
+    b.push_slider(sx, cy + y_w + 14, SliderKind::WeatherWidth, w.width);
+    b.push_slider(sx, cy + y_h + 14, SliderKind::WeatherHeight, w.height);
 
     let (x, y) = (b.content_x, b.cursor_y);
     b.push_btn(

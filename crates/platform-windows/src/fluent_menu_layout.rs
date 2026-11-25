@@ -1,12 +1,12 @@
 use asrbox_platform_api::{FluentMenuItem, FluentMenuSpec, PixelPoint, PixelRect};
 
 pub(crate) const MENU_SHADOW: i32 = 8;
-pub(crate) const MENU_PAD: i32 = 5;
+pub(crate) const MENU_PAD: i32 = 6;
 pub(crate) const MENU_ROW_H: i32 = 32;
 pub(crate) const MENU_SEP_H: i32 = 9;
-pub(crate) const MENU_QUICK_H: i32 = 38;
-pub(crate) const MENU_RADIUS: f32 = 8.0;
-pub(crate) const HOVER_RADIUS: f32 = 5.0;
+pub(crate) const MENU_QUICK_H: i32 = 36;
+pub(crate) const MENU_RADIUS: f32 = 10.0;
+pub(crate) const HOVER_RADIUS: f32 = 6.0;
 
 #[derive(Debug, Clone)]
 pub(crate) struct MenuHitRow {

@@ -7,10 +7,11 @@ use asrbox_platform_api::HttpFetchResult;
 use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{GetLastError, HWND, LPARAM, WPARAM};
 use windows::Win32::Networking::WinHttp::{
-    WinHttpCloseHandle, WinHttpConnect, WinHttpOpen, WinHttpOpenRequest, WinHttpQueryHeaders,
-    WinHttpReadData, WinHttpReceiveResponse, WinHttpSendRequest, WinHttpSetTimeouts,
-    WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_FLAG_SECURE,
-    WINHTTP_OPEN_REQUEST_FLAGS, WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_QUERY_STATUS_CODE,
+    WinHttpAddRequestHeaders, WinHttpCloseHandle, WinHttpConnect, WinHttpOpen, WinHttpOpenRequest,
+    WinHttpQueryHeaders, WinHttpReadData, WinHttpReceiveResponse, WinHttpSendRequest,
+    WinHttpSetTimeouts, WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+    WINHTTP_ADDREQ_FLAG_ADD, WINHTTP_FLAG_SECURE, WINHTTP_OPEN_REQUEST_FLAGS,
+    WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_QUERY_STATUS_CODE,
 };
 use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_APP};
 
@@ -24,11 +25,20 @@ fn queue() -> &'static Mutex<VecDeque<(u64, HttpFetchResult)>> {
 }
 
 pub(crate) fn spawn_http_get(host_hwnd: HWND, request_id: u64, url: String) {
+    spawn_http_get_headers(host_hwnd, request_id, url, Vec::new());
+}
+
+pub(crate) fn spawn_http_get_headers(
+    host_hwnd: HWND,
+    request_id: u64,
+    url: String,
+    headers: Vec<(String, String)>,
+) {
     let hwnd_raw = host_hwnd.0 as usize;
     let _ = thread::Builder::new()
         .name("asrbox-http".to_owned())
         .spawn(move || {
-            let result = fetch_blocking(&url);
+            let result = fetch_blocking(&url, &headers);
             if let Ok(mut guard) = queue().lock() {
                 guard.push_back((request_id, result));
             }
@@ -85,7 +95,7 @@ fn parse_http_url(url: &str) -> Result<ParsedUrl, String> {
     })
 }
 
-fn fetch_blocking(url: &str) -> HttpFetchResult {
+fn fetch_blocking(url: &str, headers: &[(String, String)]) -> HttpFetchResult {
     let parsed = match parse_http_url(url) {
         Ok(p) => p,
         Err(err) => {
@@ -96,7 +106,7 @@ fn fetch_blocking(url: &str) -> HttpFetchResult {
             };
         }
     };
-    match winhttp_get(&parsed) {
+    match winhttp_get(&parsed, headers) {
         Ok((status_code, body)) => HttpFetchResult {
             status_code,
             body,
@@ -110,7 +120,7 @@ fn fetch_blocking(url: &str) -> HttpFetchResult {
     }
 }
 
-fn winhttp_get(parsed: &ParsedUrl) -> Result<(u16, Vec<u8>), String> {
+fn winhttp_get(parsed: &ParsedUrl, headers: &[(String, String)]) -> Result<(u16, Vec<u8>), String> {
     let host_w = wide_null(&parsed.host);
     let path_w = wide_null(&parsed.path);
     let flags = if parsed.secure {
@@ -161,6 +171,17 @@ fn winhttp_get(parsed: &ParsedUrl) -> Result<(u16, Vec<u8>), String> {
             let _ = WinHttpCloseHandle(connect);
             let _ = WinHttpCloseHandle(session);
             return Err(format!("WinHttpOpenRequest ({code:?})"));
+        }
+        if !headers.is_empty() {
+            let mut raw = String::new();
+            for (k, v) in headers {
+                raw.push_str(k);
+                raw.push_str(": ");
+                raw.push_str(v);
+                raw.push_str("\r\n");
+            }
+            let hdrs_w: Vec<u16> = raw.encode_utf16().collect();
+            let _ = WinHttpAddRequestHeaders(req, &hdrs_w, WINHTTP_ADDREQ_FLAG_ADD);
         }
         let res = send_and_read(req);
         let _ = WinHttpCloseHandle(req);

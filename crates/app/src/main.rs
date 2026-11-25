@@ -24,6 +24,8 @@ mod settings_ctl;
 #[cfg(windows)]
 mod settings_general;
 #[cfg(windows)]
+mod settings_weather_notes;
+#[cfg(windows)]
 mod settings_widgets;
 #[cfg(windows)]
 mod supervisor;

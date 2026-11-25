@@ -12,6 +12,7 @@ use asrbox_mod_settings::{
 };
 use asrbox_mod_widgets::{
     load_notes_config, load_sysmon_config, load_weather_config, load_widget_config, PeriodFilter,
+    WeatherProvider, YANDEX_WEATHER_CRED_TARGET,
 };
 use asrbox_platform_api::{
     DockPlatform, IconProvider, SettingsUiEvent, ToolsPlatform, WidgetPlatform,
@@ -148,6 +149,7 @@ impl<I: IconProvider> AppController<I> {
                     .map(|i| DockItemView {
                         id: i.id,
                         label: i.label.clone(),
+                        target_path: i.target.display().to_string(),
                     })
                     .collect(),
             })
@@ -189,9 +191,17 @@ impl<I: IconProvider> AppController<I> {
         };
 
         let w_cfg = load_weather_config(&self.paths.weather_cfg).unwrap_or_default();
+        let has_yandex_key = host
+            .cred_load(YANDEX_WEATHER_CRED_TARGET)
+            .ok()
+            .flatten()
+            .is_some_and(|(_, secret)| !secret.trim().is_empty());
         let weather = WeatherSettingsView {
             visible: w_cfg.visible,
             city: w_cfg.city,
+            provider_is_yandex: w_cfg.provider == WeatherProvider::Yandex,
+            forecast_days: w_cfg.forecast_days,
+            has_yandex_key,
             opacity_percent: w_cfg.opacity_percent,
             layer: w_cfg.layer,
             refresh_interval_min: w_cfg.refresh_interval_min,
@@ -269,6 +279,11 @@ impl<I: IconProvider> AppController<I> {
                 kind,
                 anchor_client,
             } => self.handle_open_combo(host, &kind, anchor_client),
+            SettingsAction::SelectDock(idx) => {
+                self.settings_ui.selected_dock = idx;
+                self.settings_ui.selected_dock_item = None;
+                self.settings_ui.reset_dock_input_sync();
+            }
             SettingsAction::SetIsolation(mode) => {
                 if self.modules_cfg.isolation != mode {
                     self.modules_cfg.isolation = mode;

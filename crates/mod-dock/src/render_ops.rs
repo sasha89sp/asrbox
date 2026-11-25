@@ -226,3 +226,54 @@ pub(crate) fn draw_fallback_tile(frame: &mut BgraFrame, rect: Rect, alpha_mul: f
         }
     }
 }
+
+pub(crate) fn draw_folder_badge(
+    frame: &mut BgraFrame,
+    tile: Rect,
+    alpha_mul: f32,
+    pal: &asrbox_platform_api::FluentPalette,
+) {
+    let bw = (tile.width / 3).clamp(11, 18);
+    let bh = (bw * 3 / 4).max(9);
+    let badge = Rect {
+        x: tile.x + tile.width as i32 - bw as i32 - 2,
+        y: tile.y + tile.height as i32 - bh as i32 - 2,
+        width: bw,
+        height: bh,
+    };
+    let tab = Rect {
+        x: badge.x,
+        y: badge.y - 2,
+        width: (bw / 2).max(5),
+        height: 4,
+    };
+    let fill = pal.accent;
+    let rim = if pal.is_dark {
+        [248, 250, 252]
+    } else {
+        [15, 23, 42]
+    };
+    for rect in [tab, badge] {
+        let x0 = rect.x.max(0);
+        let y0 = rect.y.max(0);
+        let x1 = (rect.x + rect.width as i32).min(frame.width as i32);
+        let y1 = (rect.y + rect.height as i32).min(frame.height as i32);
+        for py in y0..y1 {
+            for px in x0..x1 {
+                let dist = rounded_rect_sdf(px as f32 + 0.5, py as f32 + 0.5, rect, 2.5);
+                if dist <= 0.5 {
+                    let cov = (0.5 - dist).clamp(0.0, 1.0) * alpha_mul;
+                    blend_pixel(
+                        frame,
+                        px,
+                        py,
+                        [fill[0], fill[1], fill[2], (235.0 * cov) as u8],
+                    );
+                    if dist > -1.0 {
+                        blend_pixel(frame, px, py, [rim[0], rim[1], rim[2], (110.0 * cov) as u8]);
+                    }
+                }
+            }
+        }
+    }
+}

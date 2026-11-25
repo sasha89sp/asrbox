@@ -104,6 +104,7 @@ fn sample_settings_snapshot(app_version: &str) -> SettingsSnapshot {
             items: vec![DockItemView {
                 id: 1,
                 label: "App".to_owned(),
+                target_path: "C:\\Apps\\app.exe".to_owned(),
             }],
         }],
         calendar: CalendarSettingsView {

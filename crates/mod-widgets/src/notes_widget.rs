@@ -6,8 +6,8 @@ use asrbox_platform_api::{
 };
 
 use crate::notes_model::{
-    FolderNode, NoteDocument, NotesDb, NotesWidgetConfig, TaskItem, MAX_NOTES_HEIGHT,
-    MAX_NOTES_WIDTH, MIN_NOTES_HEIGHT, MIN_NOTES_WIDTH,
+    NoteDocument, NotesDb, NotesWidgetConfig, MAX_NOTES_HEIGHT, MAX_NOTES_WIDTH, MIN_NOTES_HEIGHT,
+    MIN_NOTES_WIDTH,
 };
 use crate::notes_render::{
     hit_test_notes, render_notes_widget, InlineEditMode, NotesHitBox, NotesHitTarget,
@@ -30,6 +30,7 @@ pub struct NotesWidget {
     pub(crate) inline_mode: InlineEditMode,
     pub(crate) palette: FluentPalette,
     pub(crate) menu_vis: WidgetMenuVisibility,
+    db_dirty: bool,
 }
 
 impl NotesWidget {
@@ -55,6 +56,7 @@ impl NotesWidget {
             inline_mode: InlineEditMode::None,
             palette: FluentPalette::default(),
             menu_vis: WidgetMenuVisibility::default(),
+            db_dirty: false,
         }
     }
 
@@ -198,7 +200,9 @@ impl NotesWidget {
                     self.redraw(host);
                 }
             }
+            NotesUiEvent::FlushSaveTick => self.flush_db_if_dirty(),
             NotesUiEvent::Closed => {
+                self.flush_db_if_dirty();
                 self.window_open = false;
                 self.config.visible = false;
                 self.persist_cfg();
@@ -221,6 +225,7 @@ impl NotesWidget {
             }
             NotesHitTarget::SettingsBtn => return "open_settings_notes".to_owned(),
             NotesHitTarget::CloseBtn => {
+                self.flush_db_if_dirty();
                 self.config.visible = false;
                 self.persist_cfg();
                 let _ = self.sync_window(host, false);
@@ -235,6 +240,7 @@ impl NotesWidget {
                 }
             }
             NotesHitTarget::FolderRow(fid) => {
+                self.flush_db_if_dirty();
                 self.config.active_folder_id = fid;
                 self.list_scroll = 0;
                 if let Some(first) = self.db.notes.iter().find(|n| n.folder_id == fid) {
@@ -253,6 +259,7 @@ impl NotesWidget {
                 }
             }
             NotesHitTarget::NoteCard(nid) => {
+                self.flush_db_if_dirty();
                 self.config.active_note_id = nid;
                 self.persist_cfg();
                 self.sync_inputs_to_active_note(host);
@@ -267,6 +274,15 @@ impl NotesWidget {
                 self.persist_db();
                 self.redraw(host);
             }
+            NotesHitTarget::TaskEdit(tid) => {
+                let current = self
+                    .db
+                    .note(self.config.active_note_id)
+                    .and_then(|n| n.tasks.iter().find(|t| t.id == tid))
+                    .map(|t| t.text.clone())
+                    .unwrap_or_default();
+                self.start_inline_with(host, InlineEditMode::EditTask(tid), &current);
+            }
             NotesHitTarget::TaskDelete(tid) => {
                 if let Some(note) = self.db.note_mut(self.config.active_note_id) {
                     note.tasks.retain(|t| t.id != tid);
@@ -280,8 +296,17 @@ impl NotesWidget {
     }
 
     fn start_inline(&mut self, host: &mut dyn WidgetPlatform, mode: InlineEditMode) {
+        self.start_inline_with(host, mode, "");
+    }
+
+    fn start_inline_with(
+        &mut self,
+        host: &mut dyn WidgetPlatform,
+        mode: InlineEditMode,
+        initial: &str,
+    ) {
         self.inline_mode = mode;
-        host.set_notes_input_text(3, "");
+        host.set_notes_input_text(3, initial);
         self.redraw(host);
         host.focus_notes_input(3);
     }
@@ -327,7 +352,7 @@ impl NotesWidget {
                     n.title = text;
                     n.updated_at = stamp;
                 }
-                self.persist_db();
+                self.db_dirty = true;
                 self.redraw(host);
             }
             2 => {
@@ -335,51 +360,10 @@ impl NotesWidget {
                     n.body = text;
                     n.updated_at = stamp;
                 }
-                self.persist_db();
+                self.db_dirty = true;
             }
             _ => {}
         }
-    }
-
-    fn commit_inline_edit(&mut self, host: &mut dyn WidgetPlatform) {
-        let text = host.notes_input_text(3).trim().to_owned();
-        let mode = self.inline_mode;
-        self.inline_mode = InlineEditMode::None;
-        if !text.is_empty() {
-            match mode {
-                InlineEditMode::NewFolder => {
-                    let fid = self.db.alloc_id();
-                    self.db.folders.push(FolderNode {
-                        id: fid,
-                        parent_id: None,
-                        name: text,
-                        expanded: true,
-                    });
-                    self.config.active_folder_id = fid;
-                    self.persist_db();
-                    self.persist_cfg();
-                }
-                InlineEditMode::RenameFolder(fid) => {
-                    if let Some(f) = self.db.folders.iter_mut().find(|f| f.id == fid) {
-                        f.name = text;
-                    }
-                    self.persist_db();
-                }
-                InlineEditMode::NewTask => {
-                    let tid = self.db.alloc_id();
-                    if let Some(n) = self.db.note_mut(self.config.active_note_id) {
-                        n.tasks.push(TaskItem {
-                            id: tid,
-                            text,
-                            done: false,
-                        });
-                    }
-                    self.persist_db();
-                }
-                InlineEditMode::None => {}
-            }
-        }
-        self.redraw(host);
     }
 
     pub(crate) fn sync_inputs_to_active_note(&self, host: &mut dyn WidgetPlatform) {
@@ -429,7 +413,14 @@ impl NotesWidget {
         let _ = save_notes_config(&self.config_path, &self.config);
     }
 
-    pub(crate) fn persist_db(&self) {
+    pub(crate) fn persist_db(&mut self) {
+        self.db_dirty = false;
         let _ = save_notes_db(&self.db_path, &self.db);
+    }
+
+    fn flush_db_if_dirty(&mut self) {
+        if self.db_dirty {
+            self.persist_db();
+        }
     }
 }

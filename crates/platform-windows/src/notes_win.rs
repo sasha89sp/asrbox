@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::ffi::c_void;
 
 use asrbox_platform_api::{
-    BgraFrame, DesignTheme, FluentPalette, NotesInputRects, PixelRect, WidgetFrame, WidgetLayer,
+    BgraFrame, FluentPalette, NotesInputRects, PixelRect, WidgetFrame, WidgetLayer,
 };
 use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, WPARAM};
@@ -12,17 +12,17 @@ use windows::Win32::Graphics::Gdi::{
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::SetFocus;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DestroyWindow, GetWindowTextLengthW, GetWindowTextW, MoveWindow, SendMessageW,
-    SetLayeredWindowAttributes, SetWindowLongPtrW, ShowWindow, ES_AUTOHSCROLL, ES_AUTOVSCROLL,
-    ES_MULTILINE, ES_WANTRETURN, GWLP_WNDPROC, HMENU, LWA_ALPHA, SW_HIDE, SW_SHOW, WINDOW_EX_STYLE,
-    WINDOW_STYLE, WM_SETFONT, WS_BORDER, WS_CHILD, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
-    WS_POPUP, WS_VSCROLL,
+    CreateWindowExW, DestroyWindow, GetWindowTextLengthW, GetWindowTextW, KillTimer, MoveWindow,
+    SendMessageW, SetLayeredWindowAttributes, SetWindowLongPtrW, ShowWindow, ES_AUTOHSCROLL,
+    ES_AUTOVSCROLL, ES_MULTILINE, ES_WANTRETURN, GWLP_WNDPROC, HMENU, LWA_ALPHA, SW_HIDE, SW_SHOW,
+    WINDOW_EX_STYLE, WINDOW_STYLE, WM_SETFONT, WS_BORDER, WS_CHILD, WS_CLIPCHILDREN, WS_EX_LAYERED,
+    WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP, WS_VSCROLL,
 };
 
 use crate::app_icon::apply_window_icon;
 use crate::font_engine::set_active_font_renderer;
-use crate::notes_proc::inline_edit_wnd_proc;
-use crate::settings_helpers::{apply_dwm_backdrop, apply_dwm_dark_mode, rgba_to_colorref};
+use crate::notes_proc::{inline_edit_wnd_proc, NOTES_SAVE_TIMER_ID};
+use crate::settings_helpers::{apply_dwm_dark_mode, rgba_to_colorref};
 use crate::shell::encode_wide_str;
 use crate::tools_win::{focus_window, set_window_text};
 use crate::widget_proc::apply_widget_layer;
@@ -36,6 +36,7 @@ const DWMWCP_ROUND: i32 = 2;
 pub(crate) struct NotesWinHandle {
     pub hwnd: Option<HWND>,
     pub edits: [Option<HWND>; NOTES_EDIT_SLOTS],
+    pub edit_rects: [Option<PixelRect>; NOTES_EDIT_SLOTS],
     pub inline_orig_proc: isize,
     pub edit_brush: Option<HBRUSH>,
     pub edit_bg: COLORREF,
@@ -50,6 +51,7 @@ impl Default for NotesWinHandle {
         Self {
             hwnd: None,
             edits: [None; NOTES_EDIT_SLOTS],
+            edit_rects: [None; NOTES_EDIT_SLOTS],
             inline_orig_proc: 0,
             edit_brush: None,
             edit_bg: COLORREF(0x0024_2424),
@@ -96,7 +98,7 @@ pub(crate) fn open_notes_win(
             ex,
             w!("AsrboxNotesWindow"),
             PCWSTR(tw.as_ptr()),
-            WS_POPUP,
+            WS_POPUP | WS_CLIPCHILDREN,
             rect.x,
             rect.y,
             w,
@@ -110,7 +112,6 @@ pub(crate) fn open_notes_win(
 
         apply_window_icon(hwnd);
         apply_dwm_dark_mode(hwnd, palette.is_dark);
-        apply_dwm_backdrop(hwnd, palette.design_theme == DesignTheme::AsrGlass);
         let corner = DWMWCP_ROUND;
         let _ = DwmSetWindowAttribute(
             hwnd,
@@ -139,6 +140,7 @@ pub(crate) fn open_notes_win(
             }
             st.hwnd = Some(hwnd);
             st.edits = [e0, e1, e2, e3];
+            st.edit_rects = [None; NOTES_EDIT_SLOTS];
             st.inline_orig_proc = orig_proc;
             st.edit_brush = Some(brush);
             st.edit_bg = bg;
@@ -157,13 +159,15 @@ pub(crate) fn close_notes_win() {
             return (None, None);
         };
         st.edits = [None; NOTES_EDIT_SLOTS];
+        st.edit_rects = [None; NOTES_EDIT_SLOTS];
         st.inline_orig_proc = 0;
         st.frame = None;
         (st.hwnd.take(), st.edit_brush.take())
     });
-    // SAFETY: Destroying owned notes window and GDI brush after releasing RefCell borrow.
+    // SAFETY: Destroying owned notes window, debounce timer, and GDI brush after releasing RefCell borrow.
     unsafe {
         if let Some(h) = hwnd {
+            let _ = KillTimer(Some(h), NOTES_SAVE_TIMER_ID);
             let _ = DestroyWindow(h);
         }
         if let Some(br) = brush {
@@ -176,19 +180,28 @@ pub(crate) fn present_notes_win(frame: &WidgetFrame, inputs: NotesInputRects) {
     let Ok(composited) = composite_widget_frame(frame) else {
         return;
     };
-    let (hwnd, edits) = NOTES_UI.with(|ui| {
+    let rects = [inputs.search, inputs.title, inputs.body, inputs.inline_edit];
+    let (hwnd, updates) = NOTES_UI.with(|ui| {
         let mut st = ui.borrow_mut();
         st.frame = Some(composited);
-        (st.hwnd, st.edits)
+        let mut updates: [(Option<HWND>, Option<PixelRect>, bool); NOTES_EDIT_SLOTS] =
+            [(None, None, false); NOTES_EDIT_SLOTS];
+        for i in 0..NOTES_EDIT_SLOTS {
+            let changed = st.edit_rects[i] != rects[i];
+            st.edit_rects[i] = rects[i];
+            updates[i] = (st.edits[i], rects[i], changed);
+        }
+        (st.hwnd, updates)
     });
-    let rects = [inputs.search, inputs.title, inputs.body, inputs.inline_edit];
-    for (edit_opt, rect_opt) in edits.into_iter().zip(rects) {
-        if let Some(eh) = edit_opt {
-            position_notes_edit(eh, rect_opt);
+    for (edit_opt, rect_opt, changed) in updates {
+        if changed {
+            if let Some(eh) = edit_opt {
+                position_notes_edit(eh, rect_opt);
+            }
         }
     }
     if let Some(h) = hwnd {
-        // SAFETY: Invalidating owned notes HWND client area without background erase.
+        // SAFETY: Invalidating owned notes HWND client area (WS_CLIPCHILDREN protects child EDITs).
         unsafe {
             let _ = InvalidateRect(Some(h), None, false);
         }
@@ -259,7 +272,6 @@ pub(crate) fn apply_notes_win_theme(palette: FluentPalette) {
         }
         if let Some(h) = hwnd {
             apply_dwm_dark_mode(h, palette.is_dark);
-            apply_dwm_backdrop(h, palette.design_theme == DesignTheme::AsrGlass);
             for eh in edits.into_iter().flatten() {
                 let _ = InvalidateRect(Some(eh), None, true);
             }

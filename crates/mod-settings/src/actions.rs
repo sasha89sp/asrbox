@@ -12,6 +12,7 @@ pub enum ComboKind {
     FontRenderer,
     Language,
     Isolation,
+    DockSelect,
     DockEdge(String),
     DockLayer(String),
     DockLabelMode(String),
@@ -45,6 +46,7 @@ pub enum SettingsAction {
     SetDockMenuVis(DockMenuVisibility),
     SetWidgetMenuVis(WidgetMenuVisibility),
     // Dock
+    SelectDock(usize),
     AddDock,
     RemoveDock(String),
     AddDockSeparator(String),
@@ -96,6 +98,14 @@ pub enum SettingsAction {
         dock_id: String,
         item_id: u64,
     },
+    OpenDockItemFolder {
+        dock_id: String,
+        item_id: u64,
+    },
+    RemoveDockItem {
+        dock_id: String,
+        item_id: u64,
+    },
     OpenDocksConfig,
     // Calendar
     SetCalendarVisible(bool),
@@ -123,6 +133,10 @@ pub enum SettingsAction {
     OpenSysMonitorConfig,
     // Weather
     SetWeatherVisible(bool),
+    SetWeatherProvider(bool),
+    SetWeatherForecastDays(u8),
+    SaveYandexWeatherKey,
+    ClearYandexWeatherKey,
     ApplyWeatherCityFromInput,
     SetWeatherLayer(WidgetLayer),
     SetWeatherOpacity(u8),
@@ -233,7 +247,7 @@ impl SliderKind {
             Self::SysMonitorWidth => (440, 900),
             Self::SysMonitorHeight => (380, 780),
             Self::WeatherWidth => (280, 620),
-            Self::WeatherHeight => (310, 680),
+            Self::WeatherHeight => (310, 640),
             Self::OverlayWidth => (220, 640),
             Self::OverlayHeight => (132, 380),
         }

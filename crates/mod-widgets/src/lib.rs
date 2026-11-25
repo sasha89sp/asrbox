@@ -21,8 +21,10 @@ mod sys_sections;
 pub mod sys_widget;
 pub mod weather_api;
 pub mod weather_config;
+mod weather_icons;
 pub mod weather_render;
 pub mod weather_widget;
+pub mod weather_yandex;
 
 pub use calendar::{CalendarWidget, CALENDAR_WIDGET_ID};
 pub use calendar_view::uncomment_calendar_sources;
@@ -66,11 +68,14 @@ pub use weather_api::{
     WeatherIconKind,
 };
 pub use weather_config::{
-    load_weather_config, parse_weather_config, save_weather_config, serialize_weather_config,
-    WeatherWidgetConfig, MAX_WEATHER_HEIGHT, MAX_WEATHER_WIDTH, MIN_WEATHER_HEIGHT,
-    MIN_WEATHER_WIDTH,
+    load_weather_config, normalize_forecast_days, parse_weather_config, save_weather_config,
+    serialize_weather_config, WeatherProvider, WeatherWidgetConfig, MAX_WEATHER_HEIGHT,
+    MAX_WEATHER_WIDTH, MIN_WEATHER_HEIGHT, MIN_WEATHER_WIDTH, YANDEX_WEATHER_CRED_TARGET,
 };
 pub use weather_render::{
     hit_test_weather, render_weather_widget, WeatherHitTarget, WeatherRenderInput, WEATHER_HEADER_H,
 };
 pub use weather_widget::{WeatherWidget, WEATHER_WIDGET_ID};
+pub use weather_yandex::{
+    build_yandex_forecast_url, parse_yandex_forecast, yandex_condition_to_wmo,
+};

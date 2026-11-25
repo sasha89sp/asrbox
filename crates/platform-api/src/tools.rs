@@ -139,6 +139,7 @@ pub enum NotesUiEvent {
     InlineSubmit,
     InlineCancel,
     TogglePane(u8),
+    FlushSaveTick,
     Closed,
 }
 

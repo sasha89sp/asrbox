@@ -23,6 +23,7 @@ pub enum NotesHitTarget {
     AddTaskQuickBtn,
     NoteCard(u64),
     TaskCheck(u64),
+    TaskEdit(u64),
     TaskDelete(u64),
     AddTaskBtn,
 }
@@ -39,6 +40,7 @@ pub enum InlineEditMode {
     NewFolder,
     RenameFolder(u64),
     NewTask,
+    EditTask(u64),
 }
 
 pub struct NotesRenderInput<'a> {

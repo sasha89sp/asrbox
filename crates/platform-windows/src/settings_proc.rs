@@ -2,8 +2,8 @@ use std::cell::RefCell;
 use std::ffi::c_void;
 
 use asrbox_platform_api::{
-    BgraFrame, DesignTheme, FluentPalette, PlatformEvent, SettingsInputRects, SettingsUiEvent,
-    WidgetFrame,
+    BgraFrame, DesignTheme, FluentPalette, PixelRect, PlatformEvent, SettingsInputRects,
+    SettingsUiEvent, WidgetFrame,
 };
 use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, RECT, WPARAM};
@@ -15,7 +15,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     AdjustWindowRectEx, CreateWindowExW, DefWindowProcW, DestroyWindow, GetClientRect, KillTimer,
     SetTimer, ShowWindow, MINMAXINFO, SW_SHOW, WINDOW_EX_STYLE, WM_CLOSE, WM_COMMAND,
     WM_CTLCOLOREDIT, WM_ERASEBKGND, WM_GETMINMAXINFO, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
-    WM_MOUSEWHEEL, WM_PAINT, WM_SIZE, WM_TIMER, WS_OVERLAPPEDWINDOW,
+    WM_MOUSEWHEEL, WM_PAINT, WM_SIZE, WM_TIMER, WS_CLIPCHILDREN, WS_OVERLAPPEDWINDOW,
 };
 
 use crate::app_icon::apply_window_icon;
@@ -43,6 +43,7 @@ const SETTINGS_ANIM_TICK_MS: u32 = 16;
 pub(crate) struct SettingsWinHandle {
     pub hwnd: Option<HWND>,
     pub edits: [Option<HWND>; EDIT_SLOTS],
+    pub edit_rects: [Option<PixelRect>; EDIT_SLOTS],
     pub edit_brush: Option<HBRUSH>,
     pub edit_bg: COLORREF,
     pub edit_fg: COLORREF,
@@ -56,6 +57,7 @@ impl Default for SettingsWinHandle {
         Self {
             hwnd: None,
             edits: [None; EDIT_SLOTS],
+            edit_rects: [None; EDIT_SLOTS],
             edit_brush: None,
             edit_bg: COLORREF(0x002B_2B2B),
             edit_fg: COLORREF(0x00FF_FFFF),
@@ -132,7 +134,7 @@ pub(crate) fn open_or_focus_settings_window(
         return Ok(());
     }
     let tw = encode_wide_str(title);
-    let style = WS_OVERLAPPEDWINDOW;
+    let style = WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN;
     let mut wr = RECT {
         left: 0,
         top: 0,
@@ -182,6 +184,7 @@ pub(crate) fn open_or_focus_settings_window(
             }
             st.hwnd = Some(hwnd);
             st.edits = edits;
+            st.edit_rects = [None; EDIT_SLOTS];
             st.edit_brush = Some(brush);
             st.edit_bg = bg;
             st.edit_fg = fg;
@@ -198,11 +201,6 @@ pub(crate) fn present_settings(frame: &WidgetFrame, inputs: SettingsInputRects) 
     let Ok(composited) = composite_widget_frame(frame) else {
         return;
     };
-    let (hwnd, edits) = SETTINGS_UI.with(|ui| {
-        let mut st = ui.borrow_mut();
-        st.frame = Some(composited);
-        (st.hwnd, st.edits)
-    });
     let rects = [
         inputs.primary,
         inputs.secret,
@@ -214,9 +212,23 @@ pub(crate) fn present_settings(frame: &WidgetFrame, inputs: SettingsInputRects) 
         inputs.gh_branch,
         inputs.gh_token,
     ];
-    for (edit_opt, rect_opt) in edits.into_iter().zip(rects) {
-        if let Some(eh) = edit_opt {
-            position_child_edit(eh, rect_opt);
+    let (hwnd, updates) = SETTINGS_UI.with(|ui| {
+        let mut st = ui.borrow_mut();
+        st.frame = Some(composited);
+        let mut updates: [(Option<HWND>, Option<PixelRect>, bool); EDIT_SLOTS] =
+            [(None, None, false); EDIT_SLOTS];
+        for i in 0..EDIT_SLOTS {
+            let changed = st.edit_rects[i] != rects[i];
+            st.edit_rects[i] = rects[i];
+            updates[i] = (st.edits[i], rects[i], changed);
+        }
+        (st.hwnd, updates)
+    });
+    for (edit_opt, rect_opt, changed) in updates {
+        if changed {
+            if let Some(eh) = edit_opt {
+                position_child_edit(eh, rect_opt);
+            }
         }
     }
     if let Some(h) = hwnd {
@@ -237,6 +249,7 @@ pub(crate) fn cleanup_settings_window() {
             return (None, None);
         };
         st.edits = [None; EDIT_SLOTS];
+        st.edit_rects = [None; EDIT_SLOTS];
         st.frame = None;
         (st.hwnd.take(), st.edit_brush.take())
     });

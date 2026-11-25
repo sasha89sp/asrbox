@@ -14,9 +14,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WS_EX_TRANSPARENT, WS_POPUP,
 };
 
+use crate::autostart::cred_load;
 use crate::fluent_menu::show_fluent_menu;
 use crate::font_engine::set_active_font_renderer;
-use crate::http::spawn_http_get;
+use crate::http::{spawn_http_get, spawn_http_get_headers};
 use crate::notes_win::{
     apply_notes_win_theme, close_notes_win, focus_notes_input_win, notes_hwnd_or, open_notes_win,
     present_notes_win, read_notes_input, set_notes_win_layer, set_notes_win_opacity,
@@ -259,6 +260,20 @@ impl WidgetPlatform for WindowsDockHost {
     fn start_http_get(&mut self, request_id: u64, url: &str) -> Result<(), String> {
         spawn_http_get(self.host_hwnd, request_id, url.to_owned());
         Ok(())
+    }
+
+    fn start_http_get_with_headers(
+        &mut self,
+        request_id: u64,
+        url: &str,
+        headers: &[(String, String)],
+    ) -> Result<(), String> {
+        spawn_http_get_headers(self.host_hwnd, request_id, url.to_owned(), headers.to_vec());
+        Ok(())
+    }
+
+    fn read_secret(&self, target: &str) -> Result<Option<String>, String> {
+        Ok(cred_load(target)?.map(|(_, secret)| secret))
     }
 
     fn open_url(&self, url: &str) -> Result<(), String> {

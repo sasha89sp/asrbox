@@ -22,13 +22,15 @@
 - `src/sys_render.rs` — каркас, интерактивный hit-test секций (`SysHitTarget`) и шапка Системного монитора.
 - `src/sys_sections.rs` — кликабельные секции Системного монитора (CPU, GPU, RAM/диски, сеть, топ-5 процессов) с hover-подсветкой.
 - `src/sys_widget.rs` — контроллер `SysMonitorWidget` (`SYS_WIDGET_ID = 2`, запуск системных утилит по клику).
-- `src/weather_config.rs` — загрузка/сохранение `weather.cfg` (город, координаты, интервал, размер, слой, прозрачность).
-- `src/weather_api.rs` — URL-генератор и парсер JSON ответов Open-Meteo (geocoding + forecast) без сторонних крейтов.
-- `src/weather_render.rs` — рендер карточки Погоды (шапка, температура, 3 плашки, 5 почасовых слотов, 4 дня с полосами диапазона).
-- `src/weather_widget.rs` — контроллер `WeatherWidget` (`WEATHER_WIDGET_ID = 3`, фоновая загрузка, меню, ресайз).
+- `src/weather_config.rs` — загрузка/сохранение `weather.cfg` (провайдер `open_meteo`/`yandex`, город, координаты, горизонт `1/3/7` дней, интервал, размер, слой, прозрачность).
+- `src/weather_api.rs` — URL-генератор и парсер JSON ответов Open-Meteo (geocoding + 7-дневный forecast) без сторонних крейтов.
+- `src/weather_yandex.rs` — URL-генератор и парсер JSON ответов Яндекс.Погоды API v2 (`X-Yandex-Weather-Key` из Credential Manager) с маппингом условий в WMO.
+- `src/weather_icons.rs` — векторные иконки погоды, форматирование температур и дней недели.
+- `src/weather_render.rs` — рендер карточки Погоды (шапка, температура, 3 плашки, 5 почасовых слотов, переключатель `1д | 3д | 7д` и прогноз по дням).
+- `src/weather_widget.rs` — контроллер `WeatherWidget` (`WEATHER_WIDGET_ID = 3`, Open-Meteo + Яндекс.Погода, `1д/3д/7д`, фоновая загрузка, меню, ресайз).
 - `src/notes_model.rs` — модель `NotesWidgetConfig`, `NotesDb`, `FolderNode`, `NoteDocument`, `TaskItem` и видимые колонки.
 - `src/notes_storage.rs` — загрузка/сохранение `notes.cfg` и оффлайн-базы `data/notes/notes_db.cfg`.
 - `src/notes_render.rs` — каркас 3-колоночного окна Заметок, верхняя панель `[◧][◫][▭]` и колонка папок.
-- `src/notes_panes.rs` — рендер средней колонки списка заметок и правой колонки редактора с чекбоксами задач.
-- `src/notes_menu.rs` — контекстные меню папок, карточек заметок и окна Заметок (`WidgetMenuVisibility`).
-- `src/notes_widget.rs` — контроллер `NotesWidget` (`NOTES_WIDGET_ID = 4`, обработка `NotesUiEvent` и сохранение).
+- `src/notes_panes.rs` — рендер средней колонки списка заметок и правой колонки редактора с чекбоксами и inline-редактированием задач.
+- `src/notes_menu.rs` — контекстные меню папок/заметок/окна Заметок (`WidgetMenuVisibility`) и коммит inline-редактирования.
+- `src/notes_widget.rs` — контроллер `NotesWidget` (`NOTES_WIDGET_ID = 4`, обработка `NotesUiEvent`, отложенное сохранение `FlushSaveTick`).

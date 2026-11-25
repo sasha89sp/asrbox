@@ -1,6 +1,6 @@
 # ARCHITECTURE.md — Архитектура `asrbox`
 
-Версия: `0.0.8` (рабочие модули `mod-dock`, `mod-widgets` [Календарь, Системный монитор, Погода, Заметки], `mod-overlay`, `mod-settings`, `mod-backup` [AES-256 + GitHub], `mod-webdav`, `mod-debug`, `mod-about` + мультипроцессный супервизор в `crates/app`, расширяемая дизайн-система «Стеклянный блок ASR» / `Win11Classic`, `menus.cfg`, встроенная PE-иконка `16–256 px` и `Segoe UI Variable` / GDI ClearType + DirectWrite).
+Версия: `0.0.9` (рабочие модули `mod-dock`, `mod-widgets` [Календарь, Системный монитор, Погода Open-Meteo/Яндекс.Погода, Заметки], `mod-overlay`, `mod-settings`, `mod-backup` [AES-256 + GitHub], `mod-webdav`, `mod-debug`, `mod-about` + мультипроцессный супервизор в `crates/app`, расширяемая дизайн-система «Стеклянный блок ASR» / `Win11Classic`, `menus.cfg`, встроенная PE-иконка `16–256 px` и `Segoe UI Variable` / GDI ClearType + DirectWrite).
 
 ## 1. Правило зависимостей (строго вниз)
 
@@ -46,7 +46,7 @@
 | Модуль | Режим по умолчанию | Причина изоляции |
 | --- | --- | --- |
 | `mod-dock` | Отдельный процесс (`--worker dock`) | Все док-панели в одном процессе (`AsrGlass` / `Win11Classic`, Light/Dark); слой, независимая блокировка значков `lock_items`, свободное перемещение без автопримагничивания, настраиваемое ПКМ-меню (`menus.cfg`) и Shell API изолированы от супервизора (`NF-006`). |
-| `mod-widgets` | Отдельный процесс (`--worker widgets`) | Размещает 4 виджета рабочего стола (Google Календарь, интерактивный Системный монитор, Погода Open-Meteo, 3-колоночные Заметки и задачи) с ресайзом и `menus.cfg`; WinHTTP, парсер `.ics`/Open-Meteo и телеметрия не влияют на трей и доки (`NF-007`). |
+| `mod-widgets` | Отдельный процесс (`--worker widgets`) | Размещает 4 виджета рабочего стола (Google Календарь, интерактивный Системный монитор, Погода Open-Meteo / Яндекс.Погода `1/3/7д`, 3-колоночные Заметки и задачи) с ресайзом и `menus.cfg`; WinHTTP, парсер `.ics`/Погоды и телеметрия не влияют на трей и доки (`NF-007`). |
 | `mod-overlay` | Отдельный процесс (`--worker overlay`) | Игровой HUD-оверлей (FPS/1% low, GPU/VRAM, CPU, RAM, NET/PL) с автозапуском только в играх, FSO/Topmost и 100% click-through без инъекции DLL (`OV-001..OV-009`). |
 | `mod-settings` | Окно по открытию (`on-open`) | Единое изменяемое окно настроек (`AsrGlass` / `Win11Classic`) с аккордеонами (`settings_ui.cfg`), глобальным поиском, Fluent-комбобоксами, безопасным сбросом, 4 подвкладками виджетов и браузерными вкладками («Диагностика», «История версий», «Обзор WebDAV»); 0% CPU при закрытом окне. |
 | `mod-backup` | По запросу (`on-demand`) | Портативные `.zip`-бэкапы настроек и программы (`data/backups/`, STORE ZIP + опциональное шифрование WinZip AE-2 AES-256 через `BCryptGenRandom`) и бэкап исходников GitHub (`github_backup.cfg`, PAT в Credential Manager) без внешних крейтов; 0% CPU в простое. |
@@ -64,7 +64,7 @@
 - **Аварийное отключение клавиатуры**: жёстко заданная, не переназначаемая комбинация клавиш мгновенно останавливает `mod-keyboard`.
 - **Кнопка `X`**: скрывает окно в системный трей; полный выход доступен только из меню трея.
 - **Настройки и бэкапы**: локальные бэкапы (только настройки или `asrbox.exe` + настройки + опциональный `github-source.zip`, с опциональным шифрованием AES-256) сохраняются в `./data/backups/` с авто/ручной выгрузкой в WebDAV; сброс настроек требует явного подтверждения и не затрагивает `data/backups/`, `data/notes/` и Credential Manager.
-- **Секреты и Whisper**: пароли WebDAV, пароль AES-256 бэкапов (`asrbox:backup:zip_password`) и GitHub PAT (`asrbox:github:token`) хранятся исключительно в Windows Credential Manager (`CredWriteW`/`CredReadW`/`CredDeleteW`); секретные URL `.ics` и токены автоматически маскируются в логах `mod-debug`; модель Whisper скачивается лениво при первом включении с проверкой SHA-256.
+- **Секреты и Whisper**: пароли WebDAV, пароль AES-256 бэкапов (`asrbox:backup:zip_password`), GitHub PAT (`asrbox:github:token`) и опциональный ключ Яндекс.Погоды (`asrbox:weather:yandex_key`) хранятся исключительно в Windows Credential Manager (`CredWriteW`/`CredReadW`/`CredDeleteW`); секретные URL `.ics` и токены автоматически маскируются в логах `mod-debug`; модель Whisper скачивается лениво при первом включении с проверкой SHA-256.
 
 ## 4. Наблюдаемость и диагностика (`NF-010`)
 

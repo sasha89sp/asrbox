@@ -19,9 +19,10 @@
 - `src/webdav_ctl.rs` — управление серверами WebDAV (`WebDavStore`), Credential Manager, тест/обзор/создание папок и обработка `WebDavResult`.
 - `src/sync_ctl.rs` — периодическая и ручная синхронизация произвольных файлов и папок Windows (`sync.cfg`).
 - `src/settings_ctl.rs` — мост между Fluent-окном `mod-settings` и конфигами модулей, синхронизация полей ввода и сбор `SettingsSnapshot`.
-- `src/settings_combo.rs` — обработка выпадающих списков (ComboBox) окна настроек через `show_fluent_popup_menu`.
+- `src/settings_combo.rs` — обработка выпадающих списков (ComboBox, включая выбор дока и 4 режима имён) окна настроек через `show_fluent_popup_menu`.
 - `src/settings_general.rs` — обработка действий раздела «Общие настройки» (дизайн-тема, тема, акцент, язык, контекстные меню, бэкап/AES-256/GitHub/WebDAV, подтверждённый сброс).
-- `src/settings_widgets.rs` — применение настроек док-панелей (`docks.cfg`) и виджетов (`widgets.cfg`, `sysmon.cfg`, `weather.cfg`, `notes.cfg`).
+- `src/settings_weather_notes.rs` — применение настроек виджетов Погоды (Open-Meteo / Яндекс.Погода + API-ключ в Credential Manager, `1/3/7` дней, город) и Заметок (`weather.cfg`, `notes.cfg`).
+- `src/settings_widgets.rs` — применение настроек док-панелей (`docks.cfg`, включая открытие папки и удаление значка) и виджетов Календаря/Монитора (`widgets.cfg`, `sysmon.cfg`).
 - `src/tools.rs` — Fluent ПКМ-меню трея (`TrayMenuVisibility`, Погода, Заметки), crash-hook и вспомогательные окна «Диагностика» и «О программе».
 - `src/worker_bus.rs` — маршрутизация `SupervisorCmd`/`WorkerMsg` между супервизором и воркерами.
 - `src/inproc_widgets.rs` — `inproc`-диспетчер событий для всех 4 виджетов (Календарь, Монитор, Погода, Заметки).
