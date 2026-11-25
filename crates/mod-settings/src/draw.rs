@@ -171,7 +171,7 @@ pub fn draw_slider(
         };
         fill_rounded_rect(frame, filled, 2, pal.accent);
     }
-    let knob = if hovered { 18u32 } else { 16u32 };
+    let knob = if hovered { 16u32 } else { 14u32 };
     let travel = rect.width.saturating_sub(knob) as f32;
     let kx = rect.x + (travel * clamped).round() as i32;
     let ky = rect.y + (rect.height as i32 - knob as i32) / 2;
@@ -181,12 +181,14 @@ pub fn draw_slider(
         width: knob,
         height: knob,
     };
-    fill_rounded_rect(frame, knob_rect, (knob / 2) as i32, pal.card_bg);
-    stroke_rounded_rect(frame, knob_rect, (knob / 2) as i32, pal.control_border);
-    let inner_d = knob.saturating_sub(8).max(6);
+    fill_rounded_rect(frame, knob_rect, (knob / 2) as i32, [255, 255, 255, 255]);
+    if !pal.is_dark {
+        stroke_rounded_rect(frame, knob_rect, (knob / 2) as i32, pal.control_border);
+    }
+    let inner_d = knob.saturating_sub(4).max(8);
     let inner_rect = PixelRect {
-        x: kx + ((knob - inner_d) / 2) as i32,
-        y: ky + ((knob - inner_d) / 2) as i32,
+        x: kx + 2,
+        y: ky + 2,
         width: inner_d,
         height: inner_d,
     };

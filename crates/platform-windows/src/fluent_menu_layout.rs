@@ -3,8 +3,9 @@ use asrbox_platform_api::{FluentMenuItem, FluentMenuSpec, PixelPoint, PixelRect}
 pub(crate) const MENU_SHADOW: i32 = 8;
 pub(crate) const MENU_PAD: i32 = 6;
 pub(crate) const MENU_ROW_H: i32 = 32;
+pub(crate) const MENU_ROW_GAP: i32 = 2;
 pub(crate) const MENU_SEP_H: i32 = 9;
-pub(crate) const MENU_QUICK_H: i32 = 36;
+pub(crate) const MENU_QUICK_H: i32 = 34;
 pub(crate) const MENU_RADIUS: f32 = 10.0;
 pub(crate) const HOVER_RADIUS: f32 = 6.0;
 
@@ -83,16 +84,24 @@ pub(crate) fn measure_menu(spec: &FluentMenuSpec) -> MenuLayout {
 
     let mut rows = Vec::with_capacity(spec.items.len());
     for (idx, item) in spec.items.iter().enumerate() {
-        let h = match item {
-            FluentMenuItem::Separator => MENU_SEP_H,
-            FluentMenuItem::Action { .. } | FluentMenuItem::Submenu { .. } => MENU_ROW_H,
+        let (h, step_gap) = match item {
+            FluentMenuItem::Separator => (MENU_SEP_H, 0),
+            FluentMenuItem::Action { .. } | FluentMenuItem::Submenu { .. } => {
+                (MENU_ROW_H, MENU_ROW_GAP)
+            }
         };
         rows.push(MenuHitRow {
             y,
             h,
             item_index: idx,
         });
-        y += h;
+        y += h + step_gap;
+    }
+    if matches!(
+        spec.items.last(),
+        Some(FluentMenuItem::Action { .. } | FluentMenuItem::Submenu { .. })
+    ) {
+        y -= MENU_ROW_GAP;
     }
     let panel_h = (y + MENU_PAD) - MENU_SHADOW;
     let total_w = (panel_w + MENU_SHADOW * 2) as u32;

@@ -21,7 +21,7 @@ impl<I: IconProvider> DockManager<I> {
         kind: SlotKind,
         item_id: u64,
     ) -> Option<String> {
-        let (target, label, focus_running) = {
+        let (target, label, focus_running, tile_screen_rect) = {
             let dock = self
                 .docks
                 .iter_mut()
@@ -32,10 +32,23 @@ impl<I: IconProvider> DockManager<I> {
                 SlotKind::Shortcut => {
                     let cfg = dock.instance.config();
                     let item = cfg.items.iter().find(|i| i.id == item_id)?;
+                    let layout = dock.instance.layout();
+                    let tile_rect = layout
+                        .slots
+                        .iter()
+                        .find(|s| s.item_id == item_id)
+                        .map(|s| asrbox_platform_api::PixelRect {
+                            x: layout.window_rect.x + s.base_rect.x,
+                            y: layout.window_rect.y + s.base_rect.y,
+                            width: s.base_rect.width,
+                            height: s.base_rect.height,
+                        })
+                        .unwrap_or_else(|| to_pixel_rect(layout.window_rect));
                     let info = (
                         item.target.clone(),
                         item.label.clone(),
                         cfg.focus_running_window,
+                        tile_rect,
                     );
                     let eff = dock.instance.trigger_launch_bounce(item_id);
                     if dock.window_open && eff.needs_redraw {
@@ -49,7 +62,22 @@ impl<I: IconProvider> DockManager<I> {
                 }
             }
         };
-        match host.activate_or_launch_target(&target, focus_running) {
+        let is_folder = target.is_dir()
+            && !target.extension().is_some_and(|e| {
+                e.eq_ignore_ascii_case("exe")
+                    || e.eq_ignore_ascii_case("lnk")
+                    || e.eq_ignore_ascii_case("url")
+            });
+        let launch_target = if is_folder {
+            match host.show_dock_folder_popup(id, &target, tile_screen_rect) {
+                Ok(Some(chosen)) => chosen,
+                Ok(None) => return None,
+                Err(_) => target,
+            }
+        } else {
+            target
+        };
+        match host.activate_or_launch_target(&launch_target, focus_running) {
             Ok(true) => Some(format!("dock[{id}] focus: {label}")),
             Ok(false) => Some(format!("dock[{id}] launch: {label}")),
             Err(err) => Some(format!("error: dock[{id}] launch {label}: {err}")),

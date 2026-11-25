@@ -93,7 +93,7 @@ impl FluentPalette {
             control_hover: [48, 54, 66, 255],  // #303642
             control_border: [62, 70, 84, 255], // subtle edge
             input_bg: [22, 25, 30, 255],       // #16191E
-            menu_bg: [28, 32, 40, 255],        // #1C2028
+            menu_bg: [24, 27, 32, 240],        // rgba(24,27,32,0.94)
             menu_border: [54, 60, 72, 255],
             menu_hover: [48, 54, 66, 255], // #303642
             menu_divider: [44, 49, 58, 255],
@@ -128,7 +128,7 @@ impl FluentPalette {
             control_hover: [226, 232, 240, 255], // #E2E8F0
             control_border: [203, 213, 225, 255],
             input_bg: [255, 255, 255, 255], // #FFFFFF
-            menu_bg: [255, 255, 255, 255],
+            menu_bg: [250, 251, 253, 245],  // rgba(250,251,253,0.96)
             menu_border: [218, 225, 235, 255],
             menu_hover: [226, 232, 240, 255],
             menu_divider: [232, 237, 243, 255],

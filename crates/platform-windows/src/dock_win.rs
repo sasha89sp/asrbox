@@ -15,6 +15,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 use crate::dock_menu::show_dock_context_menu;
 use crate::dock_proc::{remove_dock_layer_meta, set_dock_layer_meta};
+use crate::folder_popup::show_folder_popup;
 use crate::font_engine::set_active_font_renderer;
 use crate::present_layered_bgra;
 use crate::query_primary_work_area;
@@ -192,6 +193,15 @@ impl DockPlatform for WindowsDockHost {
             flags,
             self.theme,
         )
+    }
+
+    fn show_dock_folder_popup(
+        &mut self,
+        _dock_id: u64,
+        folder_path: &Path,
+        anchor_rect: PixelRect,
+    ) -> Result<Option<PathBuf>, String> {
+        show_folder_popup(self.hinstance, folder_path, anchor_rect, self.theme)
     }
 
     fn pick_icon_file(&mut self) -> Result<Option<PathBuf>, String> {

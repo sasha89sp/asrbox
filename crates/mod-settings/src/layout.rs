@@ -257,6 +257,29 @@ impl<'a> LayoutBuilder<'a> {
         });
     }
 
+    pub(crate) fn resize_header_search(&mut self, search_w: u32) {
+        let hy = if self.out.has_tab_strip {
+            TAB_STRIP_H
+        } else {
+            0
+        };
+        let right_edge = self.out.width as i32 - 24;
+        let search_x = right_edge - search_w as i32;
+        let search_r = PixelRect {
+            x: search_x,
+            y: hy + 13,
+            width: search_w,
+            height: 30,
+        };
+        self.out.search_rect = Some(search_r);
+        self.out.input_rects.search = Some(PixelRect {
+            x: search_r.x + 28,
+            y: search_r.y + 3,
+            width: search_r.width.saturating_sub(34),
+            height: 24,
+        });
+    }
+
     pub(crate) fn set_header(&mut self, title: &str, subtitle: &str) {
         if self.is_searching() && !self.out.header_title.is_empty() {
             return;
@@ -268,7 +291,23 @@ impl<'a> LayoutBuilder<'a> {
     pub(crate) fn push_control(&mut self, rect: PixelRect, kind: HitKind) {
         let id = self.next_id;
         self.next_id += 1;
-        self.out.controls.push(ControlItem { id, rect, kind });
+        self.out.controls.push(ControlItem {
+            id,
+            rect,
+            kind,
+            in_header: false,
+        });
+    }
+
+    pub(crate) fn push_header_control(&mut self, rect: PixelRect, kind: HitKind) {
+        let id = self.next_id;
+        self.next_id += 1;
+        self.out.controls.push(ControlItem {
+            id,
+            rect,
+            kind,
+            in_header: true,
+        });
     }
 
     pub(crate) fn sy(&self, logical_y: i32) -> i32 {

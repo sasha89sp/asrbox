@@ -143,7 +143,7 @@ impl SettingsUiState {
                 }
                 (true, None)
             }
-            HitKind::SelectDockItem { item_id, .. } => {
+            HitKind::SelectDockItem { item_id, .. } | HitKind::DockItemCard { item_id, .. } => {
                 self.selected_dock_item = Some(item_id);
                 self.last_dock_input_key = None;
                 (true, None)
@@ -165,7 +165,8 @@ impl SettingsUiState {
             HitKind::Toggle { action, .. }
             | HitKind::Segment { action, .. }
             | HitKind::Chip { action, .. }
-            | HitKind::Button { action, .. } => {
+            | HitKind::Button { action, .. }
+            | HitKind::IconBtn { action, .. } => {
                 if matches!(action, SettingsAction::SaveWebDavServerRemoteDir(_)) {
                     self.editing_server_dir = None;
                 }
@@ -190,13 +191,21 @@ impl SettingsUiState {
             return Some(close);
         }
         let top_y = self.layout.content_top_y;
+        if let Some(icon_btn) = self.layout.controls.iter().find(|c| {
+            matches!(c.kind, HitKind::IconBtn { .. })
+                && (c.in_header || y >= top_y)
+                && rect_contains(c.rect, x, y)
+        }) {
+            return Some(icon_btn);
+        }
         self.layout.controls.iter().find(|c| {
-            let is_chrome = matches!(
-                c.kind,
-                HitKind::Tab(_)
-                    | HitKind::BrowserTabSelect { .. }
-                    | HitKind::BrowserTabClose { .. }
-            );
+            let is_chrome = c.in_header
+                || matches!(
+                    c.kind,
+                    HitKind::Tab(_)
+                        | HitKind::BrowserTabSelect { .. }
+                        | HitKind::BrowserTabClose { .. }
+                );
             if !is_chrome && y < top_y {
                 return false;
             }
@@ -225,6 +234,22 @@ impl SettingsUiState {
                     .map(|d| SettingsAction::SetDockOpacity {
                         dock_id: d.id.clone(),
                         opacity: val as u8,
+                    })
+            }
+            SliderKind::DockEdgeMargin => {
+                snap.docks
+                    .get(self.selected_dock)
+                    .map(|d| SettingsAction::SetDockEdgeMargin {
+                        dock_id: d.id.clone(),
+                        margin_px: val as u16,
+                    })
+            }
+            SliderKind::DockCornerRadius => {
+                snap.docks
+                    .get(self.selected_dock)
+                    .map(|d| SettingsAction::SetDockCornerRadius {
+                        dock_id: d.id.clone(),
+                        radius_px: val as u16,
                     })
             }
             SliderKind::CalendarOpacity => Some(SettingsAction::SetCalendarOpacity(val as u8)),

@@ -1,31 +1,31 @@
-version: 0.0.9
+version: 0.0.10
 updated: 2026-11-25
-spec_ids: [NF-001, NF-002, NF-005, NF-006, NF-007, DK-021, ST-001, WG-022, WG-023]
+spec_ids: [NF-001, NF-002, NF-005, NF-006, NF-007, DK-021, ST-001, WG-022]
 atlas_updated: true
 last_session:
-  goal: "Релиз 0.0.9: исправление смены города в Погоде + Яндекс.Погода + горизонт 1/3/7 дней; исправление редактирования Заметок + inline-правка задач; полировка дока, настроек дока и трей-меню"
+  goal: "Релиз 0.0.10: фикс зависания ПКМ-меню виджетов/доков (BUG-012), гибридный прогноз 3/7д для Яндекс.Погоды с описанием в Настройках (BUG-013), дизайн Concentric Fluent Glass и веерный попап папок дока"
   done:
-    - "Версия workspace поднята до 0.0.9 (Cargo.toml, CHANGELOG.md, BUGS.md, ATLAS.md, MAP.md, specs/mod-widgets.md, HANDOFF.yaml)"
-    - "Погода (BUG-009 + WG-022): исправлен слот города (primary=0), добавлен провайдер Яндекс.Погода (API v2, ключ X-Yandex-Weather-Key строго в Windows Credential Manager), переключатель горизонта 1д|3д|7д на виджете и в Настройках"
-    - "Заметки (BUG-010 + WG-023): WS_CLIPCHILDREN на окнах Заметок/Настроек, кэш edit_rects (без мерцания и сброса каретки), снят DWM backdrop с layered Заметок, 450 мс debounce сохранения notes_db.cfg, inline-редактирование существующих задач"
-    - "Док-панель, Настройки дока (BUG-011) и Трей-меню: pressed 0.95 scale и бейдж папок на доке, ComboBox выбора дока рядом с + Новый док, путь/открыть папку/удалить значок в карточке ярлыков, исправлен ComboBox DockLabelMode (4 режима), quick strip [⚙][◫][◎][✕] и радиусы 10/6 px в трей-меню"
+    - "Версия workspace поднята до 0.0.10 (Cargo.toml, CHANGELOG.md, BUGS.md, ATLAS.md, ARCHITECTURE.md, DECISIONS.md, MAP.md, HANDOFF.yaml)"
+    - "BUG-012 (platform-windows): scoped WH_MOUSE_LL хук (MenuOutsideHookGuard), AttachThreadInput force_foreground, обработка WM_MENU_DISMISS/WM_CANCELMODE/WM_KILLFOCUS/WM_ACTIVATE и защита от реентрантного ПКМ на виджетах/доках"
+    - "BUG-013 (mod-widgets, mod-settings): гибридный добор 3–7 дней из Open-Meteo для Яндекс.Погоды (merge_hybrid_days + unit-тест), авто-высота >= 460 px для 7д, подпись в подвале и описание гибридного режима в Настройках Погоды"
+    - "Concentric Fluent Glass (§1–§4): menu_bg 0.94/0.96, ползунки с белым кольцом и бейджами 48×26, шапка [Док N ⌄]+Новый док, edge_margin_px/corner_radius_px/blur_enabled, список элементов 46 px (↑/↓/✎/✕ + Добавить папку/ярлык), блик дока, капсульный тултип 6px/26px, веерный попап папок дока (AsrboxFolderPopupWindow) и красный hover #E81123 на ✕ в трей-меню"
   not_done:
     - "Прогон GitHub Actions (.github/workflows/ci.yml) на windows-latest"
-    - "Ручная проверка asrbox.exe v0.0.9 на Windows 10/11: смена города Погоды, 1д/3д/7д, Яндекс.Погода с ключом, плавное редактирование Заметок и задач, ComboBox выбора дока и трей-меню"
+    - "Ручная проверка asrbox.exe v0.0.10 на Windows 10/11: сброс ПКМ-меню виджетов, гибридная Яндекс.Погода 3д/7д, веерный попап папок дока, новые Настройки дока и капсульные тултипы"
   verified:
     ci_build: false
     tests: true
     manual_run: false
-open_bugs: [BUG-003, BUG-004, BUG-005, BUG-006, BUG-007, BUG-008, BUG-009, BUG-010, BUG-011]
-next_step: "Запустить GitHub Actions (windows-latest), скачать asrbox.exe v0.0.9 и проверить Погоду (город, 1/3/7д, Яндекс.Погода), Заметки и док-панель на Windows"
+open_bugs: [BUG-003, BUG-004, BUG-005, BUG-006, BUG-007, BUG-008, BUG-009, BUG-010, BUG-011, BUG-012, BUG-013]
+next_step: "Запустить GitHub Actions (windows-latest), скачать asrbox.exe v0.0.10 и проверить сброс контекстных меню, гибридную Яндекс.Погоду 3/7д и новый дизайн дока/настроек на Windows"
 touched_files:
-  - Cargo.toml, CHANGELOG.md, BUGS.md, ATLAS.md, HANDOFF.yaml, specs/mod-widgets.md
-  - crates/platform-api/src/{lib.rs, tools.rs}
-  - crates/platform-windows/src/{http.rs, widget_win.rs, notes_win.rs, notes_proc.rs, settings_proc.rs, fluent_menu_layout.rs, tray_menu.rs}
-  - crates/mod-widgets/ (MAP.md, src/{lib.rs, weather_config.rs, weather_api.rs, weather_yandex.rs, weather_icons.rs, weather_render.rs, weather_widget.rs, notes_render.rs, notes_panes.rs, notes_menu.rs, notes_widget.rs})
-  - crates/mod-dock/src/{render.rs, render_ops.rs}
-  - crates/mod-settings/src/{types.rs, actions.rs, layout_weather_notes.rs, layout_dock.rs, tests.rs}
-  - crates/app/ (MAP.md, src/{main.rs, dock_drag.rs, docks.rs, dock_events.rs, worker.rs, settings_ctl.rs, settings_combo.rs, settings_weather_notes.rs, settings_widgets.rs, selftest.rs, selftest_tools.rs})
+  - Cargo.toml, CHANGELOG.md, BUGS.md, ATLAS.md, ARCHITECTURE.md, DECISIONS.md, HANDOFF.yaml
+  - crates/platform-api/src/{lib.rs, palette.rs}
+  - crates/platform-windows/ (MAP.md, src/{lib.rs, window.rs, dock_win.rs, dock_proc.rs, widget_proc.rs, widget_text.rs, fluent_menu.rs, fluent_menu_hook.rs, fluent_menu_win.rs, fluent_menu_layout.rs, fluent_menu_render.rs, folder_popup.rs, folder_popup_render.rs})
+  - crates/mod-dock/src/{config.rs, storage.rs, render.rs}
+  - crates/mod-widgets/src/{weather_widget.rs, weather_render.rs}
+  - crates/mod-settings/ (MAP.md, src/{lib.rs, types.rs, actions.rs, layout_types.rs, layout.rs, events.rs, draw.rs, render.rs, render_controls.rs, render_dock_item.rs, layout_dock.rs, layout_dock_items.rs, layout_weather_notes.rs, tests.rs})
+  - crates/app/src/{dock_ops.rs, settings_ctl.rs, settings_widgets.rs, selftest.rs, selftest_tools.rs}
 warnings:
   - "Ожидает сборки на GitHub Actions (windows-latest). Локально проверяются cargo fmt --check, atlas-check, cargo test --workspace, --version, --selftest, host clippy и x86_64-pc-windows-msvc clippy -D warnings"
 ideas:

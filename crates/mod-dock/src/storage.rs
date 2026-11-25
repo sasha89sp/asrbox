@@ -39,6 +39,7 @@ pub fn serialize_docks(docks: &[DockConfig], app_version: &str) -> String {
         out.push_str(&format!("item_spacing_px={}\n", dock.item_spacing_px));
         out.push_str(&format!("padding_px={}\n", dock.padding_px));
         out.push_str(&format!("corner_radius_px={}\n", dock.corner_radius_px));
+        out.push_str(&format!("blur_enabled={}\n", dock.blur_enabled));
         out.push_str(&format!(
             "show_settings_button={}\n",
             dock.show_settings_button
@@ -168,6 +169,7 @@ fn apply_field(dock: &mut DockConfig, key: &str, val: &str) -> Result<(), String
         "corner_radius_px" => {
             dock.corner_radius_px = val.parse().map_err(|e| format!("bad radius: {e}"))?;
         }
+        "blur_enabled" => dock.blur_enabled = parse_bool(val),
         "show_settings_button" => dock.show_settings_button = parse_bool(val),
         "show_running_indicator" => dock.show_running_indicator = parse_bool(val),
         "focus_running_window" => dock.focus_running_window = parse_bool(val),
@@ -358,6 +360,7 @@ mod tests {
         first.free_pos = Some((320, 48));
         first.opacity_percent = 65;
         first.icon_size_px = 54;
+        first.blur_enabled = false;
         first.show_settings_button = false;
         first.show_running_indicator = false;
         first.focus_running_window = false;

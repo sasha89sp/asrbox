@@ -8,6 +8,7 @@ pub mod layout_browser_tabs;
 pub mod layout_cal;
 pub mod layout_dev;
 pub mod layout_dock;
+mod layout_dock_items;
 pub mod layout_general;
 pub mod layout_overlay;
 pub mod layout_sync;
@@ -17,6 +18,7 @@ pub mod layout_types;
 pub mod layout_weather_notes;
 pub mod render;
 mod render_controls;
+mod render_dock_item;
 pub mod types;
 pub mod ui_state_store;
 
@@ -201,8 +203,8 @@ impl SettingsUiState {
         let dock = snap.docks.get(self.selected_dock)?;
         let item = self
             .selected_dock_item
-            .and_then(|id| dock.items.iter().find(|i| i.id == id))
-            .or_else(|| dock.items.first());
+            .and_then(|id| dock.items.iter().find(|i| i.id == id && !i.is_separator))
+            .or_else(|| dock.items.iter().find(|i| !i.is_separator));
         let Some(item) = item else {
             self.selected_dock_item = None;
             self.last_dock_input_key = None;

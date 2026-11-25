@@ -44,7 +44,7 @@ pub(crate) fn create_submenu_window(plan: SubmenuPlan) -> Option<MenuWindow> {
     let sub_spec = FluentMenuSpec {
         quick_actions: Vec::new(),
         items: plan.items,
-        min_width: 196,
+        min_width: 220,
     };
     let sub_layout = measure_menu(&sub_spec);
     let sub_origin = clamp_submenu_origin(

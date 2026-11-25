@@ -59,7 +59,14 @@ pub fn render_dock_widget_frame(
     let pal = &overlay.palette;
 
     draw_capsule_shadow(&mut frame, layout.bar_rect, radius, opacity_scale, pal);
-    draw_glass_capsule(&mut frame, layout.bar_rect, radius, opacity_scale, pal);
+    draw_glass_capsule(
+        &mut frame,
+        layout.bar_rect,
+        radius,
+        opacity_scale,
+        config.blur_enabled,
+        pal,
+    );
 
     if layout.slots.is_empty() {
         draw_empty_plus(&mut frame, layout.bar_rect, pal);
@@ -154,6 +161,7 @@ fn draw_glass_capsule(
     bar: Rect,
     radius: f32,
     opacity: f32,
+    blur_enabled: bool,
     pal: &FluentPalette,
 ) {
     let x0 = bar.x.max(0);
@@ -167,31 +175,49 @@ fn draw_glass_capsule(
         .saturating_add(i32::try_from(bar.height).unwrap_or(0))
         .min(i32::try_from(frame.height).unwrap_or(0));
     let h = (bar.height.max(1)) as f32;
-    let max_body = 248.0 * opacity;
+    let max_body = if blur_enabled {
+        244.0 * opacity
+    } else {
+        (255.0 * opacity).max(238.0 * opacity).min(255.0)
+    };
     let max_rim = if pal.is_dark {
         (110.0 * opacity).max(38.0)
     } else {
         (210.0 * opacity).max(80.0)
+    };
+    let top_spec_a = if blur_enabled {
+        let base = if pal.is_dark { 46.0 } else { 220.0 };
+        (base * opacity).round().clamp(0.0, 255.0) as u8
+    } else {
+        0
     };
     let bg = pal.menu_bg;
     let rim_col = pal.card_border;
 
     for py in y0..y1 {
         let t = ((py - bar.y) as f32 / h).clamp(0.0, 1.0);
-        let boost = if pal.is_dark {
-            ((1.0 - t) * 7.0).round() as u8
+        let boost = if blur_enabled {
+            if pal.is_dark {
+                ((1.0 - t) * 7.0).round() as u8
+            } else {
+                ((1.0 - t) * 4.0).round() as u8
+            }
         } else {
-            ((1.0 - t) * 4.0).round() as u8
+            0
         };
         let r = bg[0].saturating_add(boost);
         let g = bg[1].saturating_add(boost);
         let b = bg[2].saturating_add(boost);
+        let is_top_spec = top_spec_a > 0 && py == bar.y + 1;
         for px in x0..x1 {
             let dist = rounded_rect_sdf(px as f32 + 0.5, py as f32 + 0.5, bar, radius);
             if dist <= 0.75 {
                 let cov = (0.75 - dist).clamp(0.0, 1.0);
                 let body_a = (max_body * cov).round() as u8;
                 blend_pixel(frame, px, py, [r, g, b, body_a]);
+                if is_top_spec && dist < -1.0 {
+                    blend_pixel(frame, px, py, [255, 255, 255, top_spec_a]);
+                }
                 if dist > -1.25 {
                     let rim = (1.0 - ((dist + 0.25).abs() / 1.0)).clamp(0.0, 1.0);
                     let rim_a = (max_rim * rim * cov).round() as u8;

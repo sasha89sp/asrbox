@@ -6,10 +6,13 @@
 - `src/lib.rs` — экспорт `WindowsDockHost`, `WindowsIconProvider`, `SingleInstanceGuard`, `JobObject`, `is_process_alive`, `wake_host_window`, `present_layered_bgra`, `query_primary_work_area`.
 - `src/app_icon.rs` — DPI-aware загрузка встроенной многоразмерной иконки PE (`LoadImageW` + `RT_GROUP_ICON #1`) с bottom-up фолбэком `CreateIconIndirect`, кэшем и `WM_SETICON`.
 - `src/autostart.rs` — автозагрузка Windows (`HKCU\...\Run\asrbox`) и Windows Credential Manager (`CredWriteW`/`CredReadW`/`CredDeleteW`).
-- `src/fluent_menu.rs` — точка входа и цикл кастомного слоистого Fluent-меню (`show_fluent_popup_menu`).
-- `src/fluent_menu_win.rs` — Win32-окно `AsrboxFluentMenuWindow`, презентация, вложенные подменю, hit-test и обработка мыши/клавиатуры.
-- `src/fluent_menu_layout.rs` — раскладка геометрии Fluent-меню, быстрый верхний ряд и привязка к границам экрана.
-- `src/fluent_menu_render.rs` — premultiplied BGRA-рендер Fluent-меню (скругления, тень, акценты, иконки, хоткеи, разделители).
+- `src/fluent_menu.rs` — точка входа и цикл кастомного слоистого Fluent-меню (`show_fluent_popup_menu`), защита от повторного входа и сброс по внешнему клику/фокусу.
+- `src/fluent_menu_hook.rs` — scoped `WH_MOUSE_LL` хук (`MenuOutsideHookGuard`), `force_foreground` (`AttachThreadInput`) и флаг `is_fluent_menu_open` для надёжного закрытия меню/попапов (`BUG-012`).
+- `src/fluent_menu_win.rs` — Win32-окно `AsrboxFluentMenuWindow`, презентация, вложенные подменю (`min_width: 220`), hit-test и обработка мыши/клавиатуры.
+- `src/fluent_menu_layout.rs` — раскладка геометрии Fluent-меню, быстрый верхний ряд (`30 px`) с шагом строк `2 px` и привязка к границам экрана.
+- `src/fluent_menu_render.rs` — premultiplied BGRA-рендер Fluent-меню (скругления, тень, красный hover `#E81123` на `✕`, иконки, хоткеи, разделители).
+- `src/folder_popup.rs` — модальное слоистое окно веерной сетки папок дока (`AsrboxFolderPopupWindow`, чтение каталога, shell-иконки, сброс по внешнему клику/`Esc`).
+- `src/folder_popup_render.rs` — раскладка и BGRA-рендер стеклянной веерной сетки папки дока (шапка с `↗ Проводник`, сетка до 4 колонок `76×72 px`).
 - `src/webdav_wire.rs` — низкоуровневый WinHTTP HTTPS транспорт, парсер URL, Base64 и `ensure_remote_dirs`.
 - `src/webdav_http.rs` — фоновые операции WebDAV (`PROPFIND` тест, `PUT` загрузка архива) и очередь `WM_WEBDAV_DONE`.
 - `src/webdav_sync.rs` — фоновые WebDAV-операции: обзор папок (`PROPFIND Depth: 1`), создание папок (`MKCOL`) и синхронизация файлов/папок Windows.
@@ -31,7 +34,7 @@
 - `src/font_engine.rs` — автоопределение системного шрифта Win11 `Segoe UI Variable` (`Display`/`Text`/`Small` -> фолбэк `Segoe UI`), кэш GDI `HFONT` с `CLEARTYPE_NATURAL_QUALITY` и гамма-блендинг маски текста.
 - `src/dwrite_text.rs` — ленивый движок `DirectWrite` (`IDWriteFactory` + `IDWriteGdiInterop`) для плавного сглаживания текста на выбор пользователя.
 - `src/dwrite_vtable.rs` — статический COM vtable `IDWriteTextRenderer` без аллокаций на кадр для `dwrite_text`.
-- `src/widget_text.rs` — диспетчер рендера текста (`GDI ClearType` / `DirectWrite`) на BGRA-кадр, Fluent tooltip с темой и локальное время.
+- `src/widget_text.rs` — диспетчер рендера текста (`GDI ClearType` / `DirectWrite`) на BGRA-кадр, стеклянный капсульный тултип (`radius: 6 px`, `26 px`) и локальное время.
 - `src/overlay_game.rs` — детектор активных игр (D3D fullscreen / borderless покрытие монитора, чёрный список, `extra_games`, rect монитора).
 - `src/overlay_telemetry.rs` — фоновый поток телеметрии игрового оверлея (`WM_OVERLAY_DONE`, DWM FPS + 1% low / Гц, GPU/VRAM, CPU, RAM, ICMP-пинг и % потерь).
 - `src/sys_telemetry.rs` — фоновый поток сбора телеметрии (`WM_TELEMETRY_DONE`, uptime, план питания, `NtQueryTimerResolution`).

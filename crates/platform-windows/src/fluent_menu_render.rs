@@ -57,21 +57,22 @@ fn draw_quick_row(
         .zip(spec.quick_actions.iter())
         .enumerate()
     {
-        if hovered_quick == Some(idx) && btn.enabled {
-            fill_rounded_rect(
-                bgra,
-                btn.x,
-                btn.y,
-                btn.w,
-                btn.h,
-                HOVER_RADIUS,
-                palette.menu_hover,
-            );
+        let is_hot = hovered_quick == Some(idx) && btn.enabled;
+        let is_exit = qb.glyph == "✕" || qb.glyph == "×";
+        if is_hot {
+            let hover_bg = if is_exit {
+                [232, 17, 35, 217]
+            } else {
+                palette.menu_hover
+            };
+            fill_rounded_rect(bgra, btn.x, btn.y, btn.w, btn.h, HOVER_RADIUS, hover_bg);
         }
-        let col = if btn.enabled {
-            palette.text_primary
-        } else {
+        let col = if !btn.enabled {
             palette.text_muted
+        } else if is_hot && is_exit {
+            [255, 255, 255, 255]
+        } else {
+            palette.text_primary
         };
         texts.push(WidgetTextCmd {
             x: btn.x,

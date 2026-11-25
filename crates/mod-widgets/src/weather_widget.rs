@@ -8,7 +8,7 @@ use asrbox_platform_api::{
 use crate::storage::{MAX_OPACITY_PERCENT, MIN_OPACITY_PERCENT};
 use crate::weather_api::{
     build_forecast_url, build_geocode_url, parse_open_meteo_forecast, parse_open_meteo_geocode,
-    WeatherData,
+    DailySlot, WeatherData,
 };
 use crate::weather_config::{
     load_weather_config, normalize_forecast_days, save_weather_config, WeatherProvider,
@@ -26,6 +26,7 @@ const WEATHER_REQ_BASE: u64 = 100_000;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PendingKind {
     Forecast(WeatherProvider),
+    YandexFallbackDays,
     Geocode,
 }
 
@@ -36,6 +37,8 @@ pub struct WeatherWidget {
     hovered: WeatherHitTarget,
     last_tooltip: Option<String>,
     data: WeatherData,
+    yandex_native_days: usize,
+    is_hybrid_fallback: bool,
     error: Option<String>,
     pending_req: Option<(u64, PendingKind)>,
     next_req_id: u64,
@@ -53,6 +56,8 @@ impl WeatherWidget {
             hovered: WeatherHitTarget::None,
             last_tooltip: None,
             data: WeatherData::default(),
+            yandex_native_days: 0,
+            is_hybrid_fallback: false,
             error: None,
             pending_req: None,
             next_req_id: WEATHER_REQ_BASE,
@@ -142,6 +147,10 @@ impl WeatherWidget {
         match load_weather_config(&self.config_path) {
             Ok(cfg) => self.config = cfg,
             Err(e) => return format!("error: reload weather.cfg: {e}"),
+        }
+        if self.config.forecast_days == 7 && self.config.height < 460 {
+            self.config.height = 460;
+            self.persist();
         }
         let _ = self.sync_window(host, safe_mode);
         if self.window_open {
@@ -316,65 +325,135 @@ impl WeatherWidget {
         }
         self.pending_req = None;
         if let Some(err) = result.error {
+            if kind == PendingKind::YandexFallbackDays {
+                self.redraw(host);
+                return Some((false, format!("weather hybrid fallback skipped: {err}")));
+            }
             self.error = Some(format!("Нет сети: {err}"));
             self.redraw(host);
             return Some((true, format!("weather http error: {err}")));
         }
         if result.status_code != 200 {
+            if kind == PendingKind::YandexFallbackDays {
+                self.redraw(host);
+                return Some((
+                    false,
+                    format!("weather hybrid fallback HTTP {}", result.status_code),
+                ));
+            }
             self.error = Some(format!("HTTP {}", result.status_code));
             self.redraw(host);
             return Some((true, format!("weather http status {}", result.status_code)));
         }
         match kind {
-            PendingKind::Geocode => {
-                if let Some(geo) = parse_open_meteo_geocode(&result.body) {
-                    self.config.city = geo.name;
-                    self.config.lat = geo.lat;
-                    self.config.lon = geo.lon;
-                    self.persist();
-                    self.error = None;
-                    self.trigger_forecast(host);
-                    Some((false, format!("weather geocode ok: {}", self.config.city)))
+            PendingKind::Geocode => self.finish_geocode(host, &result.body),
+            PendingKind::Forecast(provider) => self.finish_forecast(host, provider, &result.body),
+            PendingKind::YandexFallbackDays => self.finish_yandex_fallback(host, &result.body),
+        }
+    }
+
+    fn finish_geocode(
+        &mut self,
+        host: &mut dyn WidgetPlatform,
+        body: &[u8],
+    ) -> Option<(bool, String)> {
+        if let Some(geo) = parse_open_meteo_geocode(body) {
+            self.config.city = geo.name;
+            self.config.lat = geo.lat;
+            self.config.lon = geo.lon;
+            self.persist();
+            self.error = None;
+            self.trigger_forecast(host);
+            Some((false, format!("weather geocode ok: {}", self.config.city)))
+        } else {
+            self.error = Some("Город не найден".to_owned());
+            self.redraw(host);
+            Some((true, "weather geocode: city not found".to_owned()))
+        }
+    }
+
+    fn finish_forecast(
+        &mut self,
+        host: &mut dyn WidgetPlatform,
+        provider: WeatherProvider,
+        body: &[u8],
+    ) -> Option<(bool, String)> {
+        let now = host.local_time_now();
+        let updated = format!("{:02}:{:02}", now.hour, now.minute);
+        let parsed = match provider {
+            WeatherProvider::OpenMeteo => parse_open_meteo_forecast(body, now.hour, updated),
+            WeatherProvider::Yandex => parse_yandex_forecast(body, now.hour, updated),
+        };
+        match parsed {
+            Ok(data) => {
+                let native_days = data.daily.len();
+                self.is_hybrid_fallback = false;
+                self.yandex_native_days = if provider == WeatherProvider::Yandex {
+                    native_days
                 } else {
-                    self.error = Some("Город не найден".to_owned());
-                    self.redraw(host);
-                    Some((true, "weather geocode: city not found".to_owned()))
-                }
-            }
-            PendingKind::Forecast(provider) => {
-                let now = host.local_time_now();
-                let updated = format!("{:02}:{:02}", now.hour, now.minute);
-                let parsed = match provider {
-                    WeatherProvider::OpenMeteo => {
-                        parse_open_meteo_forecast(&result.body, now.hour, updated)
-                    }
-                    WeatherProvider::Yandex => {
-                        parse_yandex_forecast(&result.body, now.hour, updated)
-                    }
+                    0
                 };
-                match parsed {
-                    Ok(data) => {
-                        self.data = data;
-                        self.error = None;
-                        self.redraw(host);
-                        Some((
-                            false,
-                            format!(
-                                "weather updated ({}): {} {}°C",
-                                provider.as_str(),
-                                self.config.city,
-                                self.data.temp_c
-                            ),
-                        ))
-                    }
-                    Err(e) => {
-                        self.error = Some(format!("Ошибка ответа {}", provider.display_name()));
-                        self.redraw(host);
-                        Some((true, format!("weather parse error: {e}")))
-                    }
+                self.data = data;
+                self.error = None;
+                if provider == WeatherProvider::Yandex && native_days < 7 {
+                    self.trigger_yandex_fallback_days(host);
+                } else {
+                    self.redraw(host);
                 }
+                Some((
+                    false,
+                    format!(
+                        "weather updated ({}): {} {}°C, days={}, body={}B",
+                        provider.as_str(),
+                        self.config.city,
+                        self.data.temp_c,
+                        native_days,
+                        body.len()
+                    ),
+                ))
+            }
+            Err(e) => {
+                self.error = Some(format!("Ошибка ответа {}", provider.display_name()));
+                self.redraw(host);
+                Some((true, format!("weather parse error: {e}")))
             }
         }
+    }
+
+    fn finish_yandex_fallback(
+        &mut self,
+        host: &mut dyn WidgetPlatform,
+        body: &[u8],
+    ) -> Option<(bool, String)> {
+        let now = host.local_time_now();
+        let updated = self.data.updated_label.clone();
+        if let Ok(extra) = parse_open_meteo_forecast(body, now.hour, updated) {
+            let added = merge_hybrid_days(&mut self.data.daily, &extra.daily);
+            if added > 0 {
+                self.is_hybrid_fallback = true;
+            }
+            self.redraw(host);
+            Some((
+                false,
+                format!(
+                    "weather hybrid days appended: +{added} (total={})",
+                    self.data.daily.len()
+                ),
+            ))
+        } else {
+            self.redraw(host);
+            Some((false, "weather hybrid fallback parse skipped".to_owned()))
+        }
+    }
+
+    fn trigger_yandex_fallback_days(&mut self, host: &mut dyn WidgetPlatform) {
+        let id = self.next_req_id;
+        self.next_req_id = self.next_req_id.saturating_add(1);
+        let url = build_forecast_url(self.config.lat, self.config.lon);
+        if host.start_http_get(id, &url).is_ok() {
+            self.pending_req = Some((id, PendingKind::YandexFallbackDays));
+        }
+        self.redraw(host);
     }
 
     pub fn trigger_forecast(&mut self, host: &mut dyn WidgetPlatform) {
@@ -447,6 +526,8 @@ impl WeatherWidget {
             city: &self.config.city,
             now: host.local_time_now(),
             data: &self.data,
+            yandex_native_days: self.yandex_native_days,
+            is_hybrid_fallback: self.is_hybrid_fallback,
             loading: self.pending_req.is_some(),
             error: self.error.as_deref(),
             hovered: self.hovered,
@@ -466,5 +547,62 @@ impl WeatherWidget {
 
     fn persist(&self) {
         let _ = save_weather_config(&self.config_path, &self.config);
+    }
+}
+
+pub(crate) fn merge_hybrid_days(base: &mut Vec<DailySlot>, extra: &[DailySlot]) -> usize {
+    let mut added = 0usize;
+    let last_date = base.last().map(|d| d.date_iso.clone()).unwrap_or_default();
+    for day in extra {
+        if base.len() >= 7 {
+            break;
+        }
+        let is_newer = if last_date.is_empty() {
+            !base.iter().any(|b| b.date_iso == day.date_iso)
+        } else {
+            day.date_iso.as_str() > last_date.as_str()
+                && !base.iter().any(|b| b.date_iso == day.date_iso)
+        };
+        if is_newer {
+            base.push(day.clone());
+            added += 1;
+        }
+    }
+    added
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn mk(date: &str, min_c: i32, max_c: i32) -> DailySlot {
+        DailySlot {
+            date_iso: date.to_owned(),
+            min_c,
+            max_c,
+            wmo_code: 3,
+        }
+    }
+
+    #[test]
+    fn hybrid_merge_appends_missing_days_up_to_seven() {
+        let mut yandex = vec![mk("2026-11-25", 0, 5), mk("2026-11-26", -1, 4)];
+        let open_meteo = vec![
+            mk("2026-11-25", 1, 6),
+            mk("2026-11-26", 0, 5),
+            mk("2026-11-27", -2, 3),
+            mk("2026-11-28", -3, 2),
+            mk("2026-11-29", -4, 1),
+            mk("2026-11-30", -1, 4),
+            mk("2026-12-01", 0, 5),
+            mk("2026-12-02", 1, 6),
+        ];
+        let added = merge_hybrid_days(&mut yandex, &open_meteo);
+        assert_eq!(added, 5);
+        assert_eq!(yandex.len(), 7);
+        assert_eq!(yandex[0].max_c, 5);
+        assert_eq!(yandex[1].max_c, 4);
+        assert_eq!(yandex[2].date_iso, "2026-11-27");
+        assert_eq!(yandex[6].date_iso, "2026-12-01");
     }
 }

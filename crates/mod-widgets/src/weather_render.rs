@@ -33,6 +33,8 @@ pub struct WeatherRenderInput<'a> {
     pub city: &'a str,
     pub now: LocalDateTime,
     pub data: &'a WeatherData,
+    pub yandex_native_days: usize,
+    pub is_hybrid_fallback: bool,
     pub loading: bool,
     pub error: Option<&'a str>,
     pub hovered: WeatherHitTarget,
@@ -429,10 +431,32 @@ fn draw_daily_list(
 fn draw_footer(texts: &mut Vec<WidgetTextCmd>, inp: &WeatherRenderInput<'_>, w: i32, y: i32) {
     let pal = &inp.palette;
     let prov = inp.provider.display_name();
+    let target_days = usize::from(normalize_forecast_days(inp.forecast_days));
     let (msg, col) = if let Some(err) = inp.error {
         (err.to_owned(), pal.warn_text)
     } else if inp.data.updated_label.is_empty() {
         (prov.to_owned(), pal.text_muted)
+    } else if inp.provider == WeatherProvider::Yandex
+        && inp.yandex_native_days > 0
+        && target_days > inp.yandex_native_days
+    {
+        if inp.is_hybrid_fallback {
+            (
+                format!(
+                    "Обн. {} • Яндекс + Open-Meteo (3–7д)",
+                    inp.data.updated_label
+                ),
+                pal.text_muted,
+            )
+        } else {
+            (
+                format!(
+                    "Обн. {} • Яндекс (тариф: {} дн.)",
+                    inp.data.updated_label, inp.yandex_native_days
+                ),
+                pal.text_muted,
+            )
+        }
     } else {
         (
             format!("Обн. {} • {prov}", inp.data.updated_label),

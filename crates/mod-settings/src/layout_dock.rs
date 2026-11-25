@@ -1,8 +1,8 @@
 use asrbox_core::ModuleId;
-use asrbox_platform_api::{PixelRect, WidgetLayer};
 
-use crate::layout::{ButtonTone, HitKind, LayoutBuilder};
+use crate::layout::{ButtonTone, HitKind, LayoutBuilder, TAB_STRIP_H};
 use crate::layout_dev::add_dock_menu_section;
+use crate::layout_dock_items::add_dock_items_card;
 use crate::layout_tabs::{add_module_process_card, row};
 use crate::layout_weather_notes::layer_label;
 use crate::types::{ComboKind, DockSettingsView, SettingsAction, SettingsSnapshot, SliderKind};
@@ -15,35 +15,82 @@ pub(crate) fn build_dock_tab(
 ) {
     b.set_header(
         "Док-панели",
-        "Индивидуальные панели; при свободном перемещении панель не прилипает к краям автоматически",
+        "Индивидуальные панели; в свободном режиме панель не прилипает к краям автоматически",
     );
     let Some(dock) = snap.docks.get(selected_idx).or_else(|| snap.docks.first()) else {
         return;
     };
     if !b.is_searching() {
+        add_dock_header_controls(b, dock);
         add_module_process_card(b, snap, ModuleId::Dock);
+    }
+    add_dock_appearance_card(b, dock);
+    add_dock_behavior_card(b, dock, snap.docks.len() > 1);
+    add_dock_items_card(b, dock, selected_item);
+    add_dock_menu_section(b, snap.menus.dock);
+}
+
+fn add_dock_header_controls(b: &mut LayoutBuilder, dock: &DockSettingsView) {
+    let sel_label = format!("Док {} ({})", dock.id, edge_short(dock.edge_index));
+    if b.content_w >= 560 {
+        b.resize_header_search(168);
+        let hy = if b.out.has_tab_strip { TAB_STRIP_H } else { 0 };
+        let cy = hy + 13;
+        let combo_x = b.content_x + 148;
+        let combo_w = 182u32;
+        b.push_header_control(
+            asrbox_platform_api::PixelRect {
+                x: combo_x,
+                y: cy,
+                width: combo_w,
+                height: 30,
+            },
+            HitKind::ComboBox {
+                label: sel_label,
+                dot_color: None,
+                kind: ComboKind::DockSelect,
+            },
+        );
+        b.push_header_control(
+            asrbox_platform_api::PixelRect {
+                x: combo_x + combo_w as i32 + 8,
+                y: cy,
+                width: 112,
+                height: 30,
+            },
+            HitKind::Button {
+                label: "+ Новый док".to_owned(),
+                tone: ButtonTone::Secondary,
+                action: SettingsAction::AddDock,
+            },
+        );
+    } else {
         let sel_y = b.cursor_y;
-        let sel_label = format!("Док {} ({})", dock.id, edge_label(dock.edge_index));
         b.push_combo(
             b.content_x,
             sel_y,
-            232,
+            210,
             &sel_label,
             None,
             ComboKind::DockSelect,
         );
         b.push_btn(
-            (b.content_x + 242, sel_y, 118, 30),
+            (b.content_x + 220, sel_y, 118, 30),
             "+ Новый док",
             ButtonTone::Secondary,
             SettingsAction::AddDock,
         );
         b.cursor_y = sel_y + 42;
     }
-    add_dock_appearance_card(b, dock);
-    add_dock_behavior_card(b, dock, snap.docks.len() > 1);
-    add_dock_rename_card(b, dock, selected_item);
-    add_dock_menu_section(b, snap.menus.dock);
+}
+
+fn edge_short(idx: u8) -> &'static str {
+    match idx {
+        1 => "Верх",
+        2 => "Лево",
+        3 => "Право",
+        _ => "Низ",
+    }
 }
 
 fn edge_label(idx: u8) -> &'static str {
@@ -67,15 +114,15 @@ fn label_mode_text(idx: u8) -> &'static str {
 fn add_dock_appearance_card(b: &mut LayoutBuilder, d: &DockSettingsView) {
     let summary = format!(
         "{} · {} px · {}%",
-        edge_label(d.edge_index),
+        edge_short(d.edge_index),
         d.icon_size_px,
         d.opacity_percent
     );
     if !b.accordion(
         "dock_appearance",
-        "Внешний вид док-панели",
+        "Внешний вид и расположение",
         &summary,
-        "док край слой подписи иконки размер прозрачность dock edge layer icons opacity",
+        "док край слой подписи иконки размер прозрачность отступ скругление размытие blur margin radius dock edge",
     ) {
         return;
     }
@@ -108,9 +155,33 @@ fn add_dock_appearance_card(b: &mut LayoutBuilder, d: &DockSettingsView) {
         row(
             202,
             52,
+            "Отступ от края экрана",
+            Some("Дистанция от границы рабочей области (0–64 px)"),
+            Some(format!("{} px", d.edge_margin_px)),
+            true,
+        ),
+        row(
+            254,
+            52,
+            "Скругление углов",
+            Some("Радиус капсулы док-панели (0–28 px)"),
+            Some(format!("{} px", d.corner_radius_px)),
+            true,
+        ),
+        row(
+            306,
+            52,
             "Прозрачность панели",
-            Some("Видимость фона панели"),
+            Some("Непрозрачность стеклянной подложки"),
             Some(format!("{}%", d.opacity_percent)),
+            true,
+        ),
+        row(
+            358,
+            50,
+            "Размытие фона",
+            Some("Стеклянный эффект с верхним бликом на капсуле"),
+            None,
             false,
         ),
     ];
@@ -128,7 +199,7 @@ fn add_dock_appearance_card(b: &mut LayoutBuilder, d: &DockSettingsView) {
     );
     b.push_combo(
         cx,
-        cy + 50 + 10,
+        cy + 60,
         cw,
         layer_label(d.layer),
         None,
@@ -136,7 +207,7 @@ fn add_dock_appearance_card(b: &mut LayoutBuilder, d: &DockSettingsView) {
     );
     b.push_combo(
         cx,
-        cy + 100 + 10,
+        cy + 110,
         cw,
         label_mode_text(d.label_mode_index),
         None,
@@ -147,8 +218,30 @@ fn add_dock_appearance_card(b: &mut LayoutBuilder, d: &DockSettingsView) {
     b.push_slider(
         sx,
         cy + 216,
+        SliderKind::DockEdgeMargin,
+        u32::from(d.edge_margin_px),
+    );
+    b.push_slider(
+        sx,
+        cy + 268,
+        SliderKind::DockCornerRadius,
+        u32::from(d.corner_radius_px),
+    );
+    b.push_slider(
+        sx,
+        cy + 320,
         SliderKind::DockOpacity,
         u32::from(d.opacity_percent),
+    );
+    let tx = b.content_x + b.content_w as i32 - 58;
+    b.push_toggle(
+        tx,
+        cy + 372,
+        d.blur_enabled,
+        SettingsAction::SetDockBlur {
+            dock_id: d.id.clone(),
+            enabled: !d.blur_enabled,
+        },
     );
 }
 
@@ -163,7 +256,7 @@ fn add_dock_behavior_card(b: &mut LayoutBuilder, d: &DockSettingsView, can_delet
         "dock_behavior",
         "Поведение и закрепление",
         summary,
-        "закрепить панель значки перетаскивание индикатор запущенных анимация разделитель lock items animation",
+        "закрепить панель значки перетаскивание индикатор запущенных анимация lock items animation",
     ) {
         return;
     }
@@ -188,7 +281,7 @@ fn add_dock_behavior_card(b: &mut LayoutBuilder, d: &DockSettingsView, can_delet
             104,
             52,
             "Индикатор запущенных программ",
-            Some("Акцентная точка над открытыми приложениями"),
+            Some("Акцентная точка под открытыми приложениями"),
             None,
             true,
         ),
@@ -258,157 +351,14 @@ fn add_dock_behavior_card(b: &mut LayoutBuilder, d: &DockSettingsView, can_delet
         },
     );
 
-    let (x, y) = (b.content_x, b.cursor_y);
-    b.push_btn(
-        (x, y, 156, 30),
-        "+ Разделитель",
-        ButtonTone::Secondary,
-        SettingsAction::AddDockSeparator(id.clone()),
-    );
-    b.push_btn(
-        (x + 166, y, 156, 30),
-        "Открыть docks.cfg",
-        ButtonTone::Secondary,
-        SettingsAction::OpenDocksConfig,
-    );
     if can_delete {
+        let (x, y) = (b.content_x, b.cursor_y);
         b.push_btn(
-            (x + 332, y, 118, 30),
-            "Удалить док",
+            (x, y, 136, 30),
+            "Удалить этот док",
             ButtonTone::Danger,
             SettingsAction::RemoveDock(id),
         );
+        b.cursor_y = y + 40;
     }
-    b.cursor_y = y + 40;
-}
-
-fn add_dock_rename_card(b: &mut LayoutBuilder, d: &DockSettingsView, selected_item: Option<u64>) {
-    let summary = format!("{} шт.", d.items.len());
-    if !b.accordion(
-        "dock_rename",
-        "Ярлыки и переименование",
-        &summary,
-        "ярлыки переименовать имя значок иконка rename shortcut label",
-    ) {
-        return;
-    }
-    if d.items.is_empty() {
-        b.add_card(
-            None,
-            false,
-            vec![row(
-                0,
-                50,
-                "Нет ярлыков на этой панели",
-                Some("Перетащите ярлыки или .exe на док-панель"),
-                None,
-                false,
-            )],
-        );
-        return;
-    }
-    let cols = 3usize;
-    let chip_rows = d.items.len().div_ceil(cols) as u32;
-    let chips_h = 12 + chip_rows * 34 + 6;
-    let active_item = selected_item
-        .and_then(|id| d.items.iter().find(|i| i.id == id))
-        .unwrap_or(&d.items[0]);
-    let active_id = active_item.id;
-    let path_sub = if active_item.target_path.is_empty() {
-        "Имя отображается в подсказке и в режимах с подписями".to_owned()
-    } else {
-        active_item.target_path.clone()
-    };
-
-    let rows = vec![
-        row(
-            0,
-            52,
-            "Выберите значок или папку этой панели",
-            Some(&path_sub),
-            Some(summary),
-            true,
-        ),
-        row(52, chips_h, "", None, None, true),
-        row(52 + chips_h as i32, 92, "", None, None, false),
-    ];
-    let cy = b.add_card(None, false, rows);
-
-    let inner_w = b.content_w.saturating_sub(32);
-    let gap = 8u32;
-    let chip_w = (inner_w.saturating_sub(gap * (cols as u32 - 1))) / cols as u32;
-    for (idx, item) in d.items.iter().enumerate() {
-        let col = (idx % cols) as u32;
-        let r_idx = (idx / cols) as u32;
-        b.push_control(
-            PixelRect {
-                x: b.content_x + 16 + (col * (chip_w + gap)) as i32,
-                y: b.sy(cy + 62 + (r_idx * 34) as i32),
-                width: chip_w,
-                height: 28,
-            },
-            HitKind::SelectDockItem {
-                item_id: item.id,
-                label: item.label.clone(),
-                active: item.id == active_id,
-            },
-        );
-    }
-
-    let edit_y = cy + 52 + chips_h as i32 + 10;
-    let (save_w, reset_w) = (130u32, 96u32);
-    let input_w = b
-        .content_w
-        .saturating_sub(32 + save_w + reset_w + 16)
-        .max(140);
-    let input_x = b.content_x + 16;
-    b.out.input_rects.primary = Some(PixelRect {
-        x: input_x,
-        y: b.sy(edit_y),
-        width: input_w,
-        height: 30,
-    });
-    b.push_btn(
-        (input_x + input_w as i32 + 8, edit_y, save_w, 30),
-        "Сохранить имя",
-        ButtonTone::Primary,
-        SettingsAction::RenameDockItemFromInput {
-            dock_id: d.id.clone(),
-            item_id: active_id,
-        },
-    );
-    b.push_btn(
-        (
-            input_x + input_w as i32 + 16 + save_w as i32,
-            edit_y,
-            reset_w,
-            30,
-        ),
-        "Сбросить",
-        ButtonTone::Secondary,
-        SettingsAction::ResetDockItemLabel {
-            dock_id: d.id.clone(),
-            item_id: active_id,
-        },
-    );
-    let act_y = edit_y + 40;
-    b.push_btn(
-        (input_x, act_y, 168, 28),
-        "Открыть папку объекта",
-        ButtonTone::Secondary,
-        SettingsAction::OpenDockItemFolder {
-            dock_id: d.id.clone(),
-            item_id: active_id,
-        },
-    );
-    b.push_btn(
-        (input_x + 178, act_y, 148, 28),
-        "Удалить значок",
-        ButtonTone::Danger,
-        SettingsAction::RemoveDockItem {
-            dock_id: d.id.clone(),
-            item_id: active_id,
-        },
-    );
-    let _ = WidgetLayer::Normal;
 }

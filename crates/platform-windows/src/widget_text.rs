@@ -168,53 +168,123 @@ pub(crate) fn render_tooltip_frame(
     text: &str,
     palette: &asrbox_platform_api::FluentPalette,
 ) -> Result<BgraFrame, String> {
+    const SHADOW: i32 = 4;
     let lines: Vec<&str> = text.lines().take(5).collect();
-    let max_chars = lines.iter().map(|l| l.chars().count()).max().unwrap_or(8);
-    let width = ((max_chars as u32) * 7 + 24).clamp(140, 320);
-    let height = (lines.len().max(1) as u32) * 18 + 14;
-    let mut bgra = BgraFrame::transparent(width, height);
-    fill_tooltip_bg(&mut bgra, palette);
+    let single = lines.len() <= 1;
+    let max_chars = lines.iter().map(|l| l.chars().count()).max().unwrap_or(4);
+    let inner_w = if single {
+        ((max_chars as u32) * 7 + 22).clamp(64, 300)
+    } else {
+        ((max_chars as u32) * 7 + 24).clamp(140, 320)
+    };
+    let inner_h = if single {
+        26
+    } else {
+        (lines.len() as u32) * 18 + 10
+    };
+    let total_w = inner_w + (SHADOW as u32) * 2;
+    let total_h = inner_h + (SHADOW as u32) * 2;
+    let mut bgra = BgraFrame::transparent(total_w, total_h);
+    fill_tooltip_capsule(&mut bgra, SHADOW, inner_w as i32, inner_h as i32, palette);
     let mut texts = Vec::with_capacity(lines.len());
     for (idx, line) in lines.iter().enumerate() {
+        let y = if single {
+            SHADOW
+        } else {
+            SHADOW + 5 + (idx as i32) * 18
+        };
         texts.push(WidgetTextCmd {
-            x: 10,
-            y: 7 + (idx as i32) * 18,
-            width: (width as i32) - 20,
-            height: 18,
+            x: SHADOW + 10,
+            y,
+            width: (inner_w as i32) - 20,
+            height: if single { inner_h as i32 } else { 18 },
             text: (*line).to_owned(),
             font_size_px: 12,
-            bold: idx == 0,
+            bold: idx == 0 && !single,
             color_rgba: if idx == 0 {
                 palette.text_primary
             } else {
                 palette.text_secondary
             },
-            align: TextAlign::Left,
+            align: if single {
+                TextAlign::Center
+            } else {
+                TextAlign::Left
+            },
         });
     }
     composite_widget_frame(&WidgetFrame { bgra, texts })
 }
 
-fn fill_tooltip_bg(frame: &mut BgraFrame, palette: &asrbox_platform_api::FluentPalette) {
-    let w = frame.width as usize;
-    let h = frame.height as usize;
-    let bg = palette.menu_bg;
-    let bd = palette.menu_border;
+fn fill_tooltip_capsule(
+    frame: &mut BgraFrame,
+    pad: i32,
+    pw: i32,
+    ph: i32,
+    palette: &asrbox_platform_api::FluentPalette,
+) {
+    let w = frame.width as i32;
+    let h = frame.height as i32;
+    let cx = pad as f32 + pw as f32 * 0.5;
+    let cy = pad as f32 + ph as f32 * 0.5;
+    let hx = pw as f32 * 0.5;
+    let hy = ph as f32 * 0.5;
+    let rad = 6.0f32;
+    let shadow_a = if palette.is_dark { 72.0f32 } else { 36.0f32 };
+    let top_spec = if palette.is_dark {
+        [255u8, 255, 255, 36]
+    } else {
+        [255u8, 255, 255, 200]
+    };
     for y in 0..h {
+        let is_top = y == pad + 1;
         for x in 0..w {
-            let corner = (x == 0 || x + 1 == w) && (y == 0 || y + 1 == h);
-            if corner {
-                continue;
+            let fx = x as f32 + 0.5;
+            let fy = y as f32 + 0.5;
+            let d_sh = tip_rounded_sdf(fx - cx, fy - (cy + 1.5), hx, hy, rad);
+            if d_sh > 0.0 && d_sh < pad as f32 {
+                let t = 1.0 - (d_sh / pad as f32);
+                tip_blend_px(frame, x, y, [0, 0, 0, (t * t * shadow_a).round() as u8]);
             }
-            let border = x == 0 || y == 0 || x + 1 == w || y + 1 == h;
-            let idx = (y * w + x) * 4;
-            let c = if border { bd } else { bg };
-            frame.pixels[idx] = c[2];
-            frame.pixels[idx + 1] = c[1];
-            frame.pixels[idx + 2] = c[0];
-            frame.pixels[idx + 3] = 248;
+            let d = tip_rounded_sdf(fx - cx, fy - cy, hx, hy, rad);
+            if d <= 0.5 {
+                let cov = (0.5 - d).clamp(0.0, 1.0);
+                let mut col = if d >= -1.0 {
+                    palette.menu_border
+                } else {
+                    palette.menu_bg
+                };
+                col[3] = (f32::from(col[3]) * cov).round().clamp(0.0, 255.0) as u8;
+                tip_blend_px(frame, x, y, col);
+                if is_top && d < -1.0 {
+                    tip_blend_px(frame, x, y, top_spec);
+                }
+            }
         }
     }
+}
+
+fn tip_rounded_sdf(px: f32, py: f32, hx: f32, hy: f32, r: f32) -> f32 {
+    let qx = px.abs() - (hx - r);
+    let qy = py.abs() - (hy - r);
+    qx.max(0.0).hypot(qy.max(0.0)) + qx.max(qy).min(0.0) - r
+}
+
+fn tip_blend_px(bgra: &mut BgraFrame, x: i32, y: i32, rgba: [u8; 4]) {
+    if x < 0 || y < 0 || x >= bgra.width as i32 || y >= bgra.height as i32 || rgba[3] == 0 {
+        return;
+    }
+    let idx = ((y as usize) * (bgra.width as usize) + (x as usize)) * 4;
+    let sa = f32::from(rgba[3]) / 255.0;
+    let inv = 1.0 - sa;
+    bgra.pixels[idx] =
+        (f32::from(rgba[2]) * sa + f32::from(bgra.pixels[idx]) * inv).clamp(0.0, 255.0) as u8;
+    bgra.pixels[idx + 1] =
+        (f32::from(rgba[1]) * sa + f32::from(bgra.pixels[idx + 1]) * inv).clamp(0.0, 255.0) as u8;
+    bgra.pixels[idx + 2] =
+        (f32::from(rgba[0]) * sa + f32::from(bgra.pixels[idx + 2]) * inv).clamp(0.0, 255.0) as u8;
+    bgra.pixels[idx + 3] =
+        (sa * 255.0 + f32::from(bgra.pixels[idx + 3]) * inv).clamp(0.0, 255.0) as u8;
 }
 
 pub(crate) fn compute_tooltip_rect(
@@ -224,14 +294,15 @@ pub(crate) fn compute_tooltip_rect(
     height: u32,
     area: asrbox_platform_api::PixelRect,
 ) -> asrbox_platform_api::PixelRect {
-    let max_x = area.x + area.width as i32 - width as i32 - 8;
-    let x = (cursor_x + 14).clamp(area.x + 8, max_x.max(area.x + 8));
-    let below = cursor_y + 20;
-    let max_y = area.y + area.height as i32 - height as i32 - 8;
-    let y = if below > max_y {
-        (cursor_y - height as i32 - 14).max(area.y + 8)
+    let min_x = area.x + 8;
+    let max_x = (area.x + area.width as i32 - width as i32 - 8).max(min_x);
+    let x = (cursor_x - (width as i32) / 2).clamp(min_x, max_x);
+    let above = cursor_y - height as i32 - 12;
+    let max_y = (area.y + area.height as i32 - height as i32 - 8).max(area.y + 8);
+    let y = if above >= area.y + 8 {
+        above
     } else {
-        below.max(area.y + 8)
+        (cursor_y + 20).clamp(area.y + 8, max_y)
     };
     asrbox_platform_api::PixelRect {
         x,

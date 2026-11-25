@@ -97,6 +97,19 @@ pub enum HitKind {
         tone: ButtonTone,
         action: SettingsAction,
     },
+    DockItemCard {
+        item_id: u64,
+        label: String,
+        path: String,
+        is_folder: bool,
+        is_separator: bool,
+        active: bool,
+    },
+    IconBtn {
+        glyph: String,
+        danger_hover: bool,
+        action: SettingsAction,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -104,6 +117,7 @@ pub struct ControlItem {
     pub id: usize,
     pub rect: PixelRect,
     pub kind: HitKind,
+    pub in_header: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

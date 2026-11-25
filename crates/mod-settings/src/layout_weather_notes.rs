@@ -66,12 +66,12 @@ pub(crate) fn build_weather_body(b: &mut LayoutBuilder, snap: &SettingsSnapshot)
         true,
     );
     let y_prov = push_r(
-        52,
+        56,
         tr(lang, "Источник погоды", "Weather provider"),
         Some(tr(
             lang,
-            "Координаты города определяются автоматически",
-            "City coordinates are resolved automatically",
+            "Гибридный режим: если тариф Яндекс.Погоды даёт 1–2 дня, дни 3–7 авто-дополняются из Open-Meteo",
+            "Hybrid mode: if Yandex tariff returns 1–2 days, days 3–7 auto-fill from Open-Meteo",
         )),
         None,
         true,
@@ -95,12 +95,12 @@ pub(crate) fn build_weather_body(b: &mut LayoutBuilder, snap: &SettingsSnapshot)
         true,
     );
     let y_days = push_r(
-        52,
+        56,
         tr(lang, "Горизонт прогноза", "Forecast horizon"),
         Some(tr(
             lang,
-            "Также можно переключать прямо в виджете (1д | 3д | 7д)",
-            "Also switchable directly on the widget (1d | 3d | 7d)",
+            "1д | 3д | 7д (переключается и в виджете). Для Яндекса: 1–2д — Яндекс, 3–7д — гибрид Open-Meteo",
+            "1d | 3d | 7d (also on widget). For Yandex: 1–2d Yandex, 3–7d Open-Meteo hybrid",
         )),
         None,
         true,
@@ -148,7 +148,7 @@ pub(crate) fn build_weather_body(b: &mut LayoutBuilder, snap: &SettingsSnapshot)
     );
     b.add_segmented_row(
         cy + y_prov,
-        52,
+        56,
         vec![
             (
                 "Open-Meteo",
@@ -208,7 +208,7 @@ pub(crate) fn build_weather_body(b: &mut LayoutBuilder, snap: &SettingsSnapshot)
     );
     b.add_segmented_row(
         cy + y_days,
-        52,
+        56,
         vec![
             (
                 tr(lang, "1 день", "1 day"),

@@ -109,6 +109,8 @@ pub struct DockItemView {
     pub id: u64,
     pub label: String,
     pub target_path: String,
+    pub is_folder: bool,
+    pub is_separator: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -119,6 +121,9 @@ pub struct DockSettingsView {
     pub label_mode_index: u8,
     pub icon_size_px: u32,
     pub opacity_percent: u8,
+    pub edge_margin_px: u16,
+    pub corner_radius_px: u16,
+    pub blur_enabled: bool,
     pub locked: bool,
     pub lock_items: bool,
     pub show_running_indicator: bool,

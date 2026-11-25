@@ -36,7 +36,7 @@ pub fn render_settings_frame(
     draw_sidebar(&mut bgra, &mut texts, layout.height, pal, lang);
     draw_content_cards(&mut bgra, &mut texts, layout, pal);
     for ctrl in &layout.controls {
-        if is_chrome_control(&ctrl.kind) {
+        if is_chrome_control(ctrl) {
             continue;
         }
         draw_control(
@@ -53,7 +53,7 @@ pub fn render_settings_frame(
     }
     draw_content_header(&mut bgra, &mut texts, layout, pal, lang);
     for ctrl in &layout.controls {
-        if !is_chrome_control(&ctrl.kind) {
+        if !is_chrome_control(ctrl) {
             continue;
         }
         draw_control(
@@ -175,7 +175,15 @@ fn draw_content_header(
     }
     let hy = if l.has_tab_strip { TAB_STRIP_H } else { 0 };
     fill_rect(bgra, pr(x, hy, w, HEADER_H as u32), pal.window_bg);
-    let title_w = if l.search_rect.is_some() {
+    let has_inline = l.controls.iter().any(|c| c.in_header);
+    let title_w = if has_inline {
+        142u32
+    } else if l.search_rect.is_some() {
+        w.saturating_sub(274).max(160)
+    } else {
+        w.saturating_sub(48)
+    };
+    let sub_w = if l.search_rect.is_some() && !has_inline {
         w.saturating_sub(274).max(160)
     } else {
         w.saturating_sub(48)
@@ -184,14 +192,14 @@ fn draw_content_header(
         texts,
         pr(x + 24, hy + 13, title_w, 28),
         &l.header_title,
-        22,
+        20,
         true,
         pal.text_primary,
         TextAlign::Left,
     );
     push_text(
         texts,
-        pr(x + 24, hy + 44, title_w, 20),
+        pr(x + 24, hy + 46, sub_w, 20),
         &l.header_subtitle,
         12,
         false,
@@ -360,16 +368,20 @@ fn draw_card_rows(
             }
         }
         if let Some(val) = &row.value_label {
-            let vy = row.y + (row.height as i32 - 20) / 2;
+            let vy = row.y + (row.height as i32 - 26) / 2;
             if vy >= top_y {
+                let badge = pr(cr.x + cr.width as i32 - 62, vy, 48, 26);
+                let brad = if pal.design_theme.is_glass() { 6 } else { 4 };
+                fill_rounded_rect(bgra, badge, brad, pal.control_bg);
+                stroke_rounded_rect(bgra, badge, brad, pal.control_border);
                 push_text(
                     texts,
-                    pr(cr.x + cr.width as i32 - 64, vy, 48, 20),
+                    badge,
                     val,
                     12,
                     false,
-                    pal.text_secondary,
-                    TextAlign::Right,
+                    pal.text_primary,
+                    TextAlign::Center,
                 );
             }
         }

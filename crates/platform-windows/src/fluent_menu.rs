@@ -7,11 +7,14 @@ use asrbox_platform_api::{
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, VK_ESCAPE};
 use windows::Win32::UI::WindowsAndMessaging::{
-    DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW, KillTimer, SetForegroundWindow,
-    SetTimer, ShowWindow, TranslateMessage, MSG, SW_SHOW, WA_INACTIVE, WM_ACTIVATE, WM_KEYDOWN,
-    WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONUP, WM_TIMER,
+    DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW, KillTimer, SetTimer, ShowWindow,
+    TranslateMessage, MSG, SW_SHOW, WA_INACTIVE, WM_ACTIVATE, WM_CANCELMODE, WM_KEYDOWN,
+    WM_KILLFOCUS, WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONUP, WM_TIMER,
 };
 
+use crate::fluent_menu_hook::{
+    force_foreground, is_fluent_menu_open, MenuOutsideHookGuard, WM_MENU_DISMISS,
+};
 use crate::fluent_menu_render::{clamp_menu_origin, measure_menu, render_fluent_menu, MenuLayout};
 use crate::fluent_menu_win::{
     create_menu_hwnd, create_submenu_window, destroy_hwnd, hit_quick, hit_row,
@@ -48,6 +51,15 @@ thread_local! {
     static MENU_SESSION: RefCell<Option<ActiveMenuSession>> = const { RefCell::new(None) };
 }
 
+fn panel_screen_rect(origin: PixelPoint, layout: &MenuLayout) -> PixelRect {
+    PixelRect {
+        x: origin.x + layout.panel_x,
+        y: origin.y + layout.panel_y,
+        width: u32::try_from(layout.panel_w.max(0)).unwrap_or(0),
+        height: u32::try_from(layout.panel_h.max(0)).unwrap_or(0),
+    }
+}
+
 pub(crate) fn show_fluent_menu(
     hinstance: HINSTANCE,
     _owner_hwnd: HWND,
@@ -55,6 +67,9 @@ pub(crate) fn show_fluent_menu(
     spec: &FluentMenuSpec,
     palette: FluentPalette,
 ) -> Result<Option<u32>, String> {
+    if is_fluent_menu_open() {
+        return Ok(None);
+    }
     // SAFETY: Release any active mouse capture before running a modal Fluent popup menu.
     unsafe {
         let _ = ReleaseCapture();
@@ -66,6 +81,8 @@ pub(crate) fn show_fluent_menu(
     let frame = render_fluent_menu(spec, &layout, &palette, None, None, None)?;
     present_with_alpha(hwnd, origin, &frame, 48)?;
 
+    let root_rect = panel_screen_rect(origin, &layout);
+    let _hook_guard = MenuOutsideHookGuard::install(hwnd, root_rect);
     let root = MenuWindow {
         hwnd,
         spec: spec.clone(),
@@ -92,17 +109,14 @@ pub(crate) fn show_fluent_menu(
         destroy_session_windows(old);
     }
 
-    // SAFETY: Showing our layered popup menu, activating it for outside-click dismissal, and starting fade timer.
+    // SAFETY: Showing our layered popup menu, forcing foreground, and starting fade timer.
     unsafe {
         let _ = ShowWindow(hwnd, SW_SHOW);
-        let _ = SetForegroundWindow(hwnd);
         let _ = SetTimer(Some(hwnd), FADE_TIMER_ID, FADE_TICK_MS, None);
     }
-
+    force_foreground(hwnd);
     run_menu_modal_loop();
 
-    // Take session out BEFORE calling DestroyWindow so synchronous WM_ACTIVATE/WM_DESTROY
-    // callbacks never re-enter a borrowed RefCell (fixes BUG-007).
     let session = MENU_SESSION.with(|cell| cell.borrow_mut().take());
     if let Some(session) = session {
         let chosen = session.result;
@@ -171,7 +185,7 @@ pub(crate) unsafe extern "system" fn fluent_menu_wnd_proc(
             handle_mouse_click(hwnd, lparam_point(lparam));
             LRESULT(0)
         }
-        WM_MOUSEWHEEL => {
+        WM_MOUSEWHEEL | WM_CANCELMODE | WM_MENU_DISMISS => {
             close_session(None);
             LRESULT(0)
         }
@@ -179,30 +193,32 @@ pub(crate) unsafe extern "system" fn fluent_menu_wnd_proc(
             close_session(None);
             LRESULT(0)
         }
+        WM_KILLFOCUS => {
+            dismiss_if_external(HWND(wparam.0 as *mut c_void));
+            LRESULT(0)
+        }
         WM_ACTIVATE => {
-            handle_activate(wparam, lparam);
+            if (wparam.0 & 0xFFFF) as u32 == WA_INACTIVE {
+                dismiss_if_external(HWND(lparam.0 as *mut c_void));
+            }
             LRESULT(0)
         }
         _ => DefWindowProcW(hwnd, msg, wparam, lparam),
     }
 }
 
-fn handle_activate(wparam: WPARAM, lparam: LPARAM) {
-    let state = (wparam.0 & 0xFFFF) as u32;
-    if state != WA_INACTIVE {
-        return;
-    }
-    let other = HWND(lparam.0 as *mut c_void);
-    let is_child = MENU_SESSION.with(|c| {
+fn dismiss_if_external(other: HWND) {
+    let is_ours = MENU_SESSION.with(|c| {
         c.try_borrow()
             .ok()
             .and_then(|g| {
-                g.as_ref()
-                    .map(|s| s.sub.as_ref().is_some_and(|sub| sub.hwnd == other))
+                g.as_ref().map(|s| {
+                    s.root.hwnd == other || s.sub.as_ref().is_some_and(|sub| sub.hwnd == other)
+                })
             })
             .unwrap_or(false)
     });
-    if !is_child {
+    if !is_ours {
         close_session(None);
     }
 }
@@ -214,6 +230,22 @@ fn close_session(chosen: Option<u32>) {
                 s.result = chosen;
                 s.done = true;
             }
+        }
+    });
+}
+
+fn sync_hook_rects() {
+    MENU_SESSION.with(|c| {
+        let Ok(guard) = c.try_borrow() else {
+            return;
+        };
+        if let Some(s) = guard.as_ref() {
+            let root_r = panel_screen_rect(s.root.origin, &s.root.layout);
+            let sub_r = s
+                .sub
+                .as_ref()
+                .map(|sub| panel_screen_rect(sub.origin, &sub.layout));
+            MenuOutsideHookGuard::update_rects(root_r, sub_r);
         }
     });
 }
@@ -254,10 +286,9 @@ fn handle_mouse_move(hwnd: HWND, pt: PixelPoint) {
         if s.root.hwnd == hwnd {
             let new_q = hit_quick(&s.root.layout, pt);
             let new_r = hit_row(&s.root.layout, pt);
-            let changed = s.root.hovered_quick != new_q || s.root.hovered_row != new_r;
-            s.root.hovered_quick = new_q;
-            s.root.hovered_row = new_r;
-            if changed {
+            if s.root.hovered_quick != new_q || s.root.hovered_row != new_r {
+                s.root.hovered_quick = new_q;
+                s.root.hovered_row = new_r;
                 (old_sub_hwnd, plan) = prepare_submenu_transition(s, new_r);
                 repaint_window(&mut s.root, &s.palette, s.open_sub_row);
             }
@@ -273,28 +304,36 @@ fn handle_mouse_move(hwnd: HWND, pt: PixelPoint) {
     });
     if let Some(old_hwnd) = old_sub_hwnd {
         destroy_hwnd(old_hwnd);
+        sync_hook_rects();
     }
     if let Some(sub_plan) = plan {
-        let row_idx = sub_plan.row_idx;
-        if let Some(new_sub) = create_submenu_window(sub_plan) {
-            let sub_hwnd = new_sub.hwnd;
-            let installed = MENU_SESSION.with(|c| {
-                let Ok(mut guard) = c.try_borrow_mut() else {
-                    return false;
-                };
-                if let Some(s) = guard.as_mut() {
-                    s.open_sub_row = Some(row_idx);
-                    s.sub = Some(new_sub);
-                    repaint_window(&mut s.root, &s.palette, s.open_sub_row);
-                    true
-                } else {
-                    false
-                }
-            });
-            if !installed {
-                destroy_hwnd(sub_hwnd);
-            }
+        install_submenu(sub_plan);
+    }
+}
+
+fn install_submenu(sub_plan: SubmenuPlan) {
+    let row_idx = sub_plan.row_idx;
+    let Some(new_sub) = create_submenu_window(sub_plan) else {
+        return;
+    };
+    let sub_hwnd = new_sub.hwnd;
+    let installed = MENU_SESSION.with(|c| {
+        let Ok(mut guard) = c.try_borrow_mut() else {
+            return false;
+        };
+        if let Some(s) = guard.as_mut() {
+            s.open_sub_row = Some(row_idx);
+            s.sub = Some(new_sub);
+            repaint_window(&mut s.root, &s.palette, s.open_sub_row);
+            true
+        } else {
+            false
         }
+    });
+    if installed {
+        sync_hook_rects();
+    } else {
+        destroy_hwnd(sub_hwnd);
     }
 }
 

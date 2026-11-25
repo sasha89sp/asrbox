@@ -373,6 +373,9 @@ unsafe fn on_widget_lbutton_up(hwnd: HWND, widget_id: u64, lparam: LPARAM) -> LR
 }
 
 unsafe fn on_widget_rbutton_up(hwnd: HWND, widget_id: u64, lparam: LPARAM) -> LRESULT {
+    if crate::fluent_menu_hook::is_fluent_menu_open() {
+        return LRESULT(0);
+    }
     let pt = lparam_point(lparam);
     let mut screen = POINT { x: pt.x, y: pt.y };
     let _ = ClientToScreen(hwnd, &mut screen);

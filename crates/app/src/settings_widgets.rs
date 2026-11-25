@@ -13,9 +13,14 @@ use asrbox_mod_widgets::{
     MAX_REFRESH_MS, MAX_SYSMON_HEIGHT, MAX_SYSMON_WIDTH, MIN_REFRESH_MS, MIN_SYSMON_HEIGHT,
     MIN_SYSMON_WIDTH,
 };
-use asrbox_platform_api::{DockPlatform, IconProvider, ToolsPlatform, WidgetPlatform};
+use asrbox_platform_api::{
+    AppLanguage, DockPlatform, FluentMenuItem, FluentMenuSpec, IconProvider, ToolsPlatform,
+    WidgetPlatform,
+};
 
-use crate::dock_shortcuts::{cleanup_unused_shortcuts, shortcuts_dir_for_config};
+use crate::dock_shortcuts::{
+    cleanup_unused_shortcuts, localize_shortcut_path, shortcuts_dir_for_config,
+};
 use crate::{AppController, APP_VERSION};
 
 impl<I: IconProvider> AppController<I> {
@@ -225,6 +230,66 @@ impl<I: IconProvider> AppController<I> {
                 }
                 return true;
             }
+            SettingsAction::AddDockItemMenu {
+                dock_id,
+                anchor_client,
+            } => {
+                let ru = self.appearance.language == AppLanguage::Ru;
+                let spec = FluentMenuSpec {
+                    quick_actions: Vec::new(),
+                    items: vec![
+                        FluentMenuItem::Action {
+                            id: 1,
+                            icon: Some("📄".to_owned()),
+                            label: if ru {
+                                "Добавить файл / программу…".to_owned()
+                            } else {
+                                "Add file / app…".to_owned()
+                            },
+                            shortcut: None,
+                            checked: false,
+                            enabled: true,
+                        },
+                        FluentMenuItem::Action {
+                            id: 2,
+                            icon: Some("📁".to_owned()),
+                            label: if ru {
+                                "Добавить папку…".to_owned()
+                            } else {
+                                "Add folder…".to_owned()
+                            },
+                            shortcut: None,
+                            checked: false,
+                            enabled: true,
+                        },
+                    ],
+                    min_width: 230,
+                };
+                let screen_pt = host.settings_client_to_screen(*anchor_client);
+                let pal = self.appearance.palette();
+                let picked = match host.show_fluent_popup_menu(screen_pt, &spec, pal) {
+                    Ok(Some(1)) => host.pick_sync_files().unwrap_or_default(),
+                    Ok(Some(2)) => host.pick_sync_folder().ok().flatten().into_iter().collect(),
+                    _ => Vec::new(),
+                };
+                if picked.is_empty() {
+                    false
+                } else {
+                    let sc_dir = shortcuts_dir_for_config(&self.paths.docks_cfg);
+                    let mut added = false;
+                    edit_dock(&mut cfgs, dock_id, |c| {
+                        for p in picked {
+                            let target = localize_shortcut_path(&p, &sc_dir);
+                            let nid = c.next_item_id();
+                            if let Ok(item) = DockItem::from_dropped_path(nid, target) {
+                                c.items.push(item);
+                                added = true;
+                            }
+                        }
+                    });
+                    added
+                }
+            }
             SettingsAction::RemoveDockItem { dock_id, item_id } => {
                 self.settings_ui.selected_dock_item = None;
                 self.settings_ui.reset_dock_input_sync();
@@ -300,6 +365,36 @@ fn apply_dock_prop(cfgs: &mut Vec<DockConfig>, action: &SettingsAction) -> Optio
         SettingsAction::SetDockOpacity { dock_id, opacity } => edit_dock(cfgs, dock_id, |c| {
             c.opacity_percent = (*opacity).clamp(20, 100)
         }),
+        SettingsAction::SetDockEdgeMargin { dock_id, margin_px } => edit_dock(cfgs, dock_id, |c| {
+            c.edge_margin_px = (*margin_px).clamp(0, 64)
+        }),
+        SettingsAction::SetDockCornerRadius { dock_id, radius_px } => {
+            edit_dock(cfgs, dock_id, |c| {
+                c.corner_radius_px = (*radius_px).clamp(0, 28)
+            })
+        }
+        SettingsAction::SetDockBlur { dock_id, enabled } => {
+            edit_dock(cfgs, dock_id, |c| c.blur_enabled = *enabled)
+        }
+        SettingsAction::MoveDockItem {
+            dock_id,
+            item_id,
+            delta,
+        } => {
+            let mut moved = false;
+            edit_dock(cfgs, dock_id, |c| {
+                if let Some(pos) = c.items.iter().position(|i| i.id == *item_id) {
+                    let target = (pos as isize + i32::from(*delta) as isize)
+                        .clamp(0, c.items.len().saturating_sub(1) as isize)
+                        as usize;
+                    if target != pos {
+                        c.items.swap(pos, target);
+                        moved = true;
+                    }
+                }
+            });
+            moved
+        }
         SettingsAction::SetDockLocked { dock_id, locked } => {
             edit_dock(cfgs, dock_id, |c| c.locked = *locked)
         }

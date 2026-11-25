@@ -7,6 +7,7 @@ use crate::draw::{
 };
 use crate::i18n::tr;
 use crate::layout::{ButtonTone, ControlItem, HitKind};
+use crate::render_dock_item::{draw_dock_item_card, draw_icon_btn};
 use crate::types::SettingsTab;
 
 fn pr(x: i32, y: i32, width: u32, height: u32) -> PixelRect {
@@ -18,11 +19,12 @@ fn pr(x: i32, y: i32, width: u32, height: u32) -> PixelRect {
     }
 }
 
-pub(crate) fn is_chrome_control(kind: &HitKind) -> bool {
-    matches!(
-        kind,
-        HitKind::Tab(_) | HitKind::BrowserTabSelect { .. } | HitKind::BrowserTabClose { .. }
-    )
+pub(crate) fn is_chrome_control(ctrl: &ControlItem) -> bool {
+    ctrl.in_header
+        || matches!(
+            ctrl.kind,
+            HitKind::Tab(_) | HitKind::BrowserTabSelect { .. } | HitKind::BrowserTabClose { .. }
+        )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -38,7 +40,7 @@ pub(crate) fn draw_control(
     lang: AppLanguage,
 ) {
     let r = ctrl.rect;
-    if !is_chrome_control(&ctrl.kind) && (r.y < top_y || r.y >= bgra.height as i32) {
+    if !is_chrome_control(ctrl) && (r.y < top_y || r.y >= bgra.height as i32) {
         return;
     }
     match &ctrl.kind {
@@ -95,8 +97,10 @@ pub(crate) fn draw_control(
             let lbl = format!("{} #{}", tr(lang, "Док", "Dock"), idx + 1);
             draw_segment_or_chip(bgra, texts, r, &lbl, *idx == selected_dock, hovered, pal);
         }
-        HitKind::SelectDockItem { label, active, .. }
-        | HitKind::SelectWidgetSubTab { label, active, .. }
+        HitKind::SelectDockItem { label, active, .. } => {
+            draw_icon_btn(bgra, texts, r, label, false, *active, hovered, pal);
+        }
+        HitKind::SelectWidgetSubTab { label, active, .. }
         | HitKind::Chip { label, active, .. }
         | HitKind::Segment { label, active, .. } => {
             draw_segment_or_chip(bgra, texts, r, label, *active, hovered, pal);
@@ -115,6 +119,34 @@ pub(crate) fn draw_control(
         }
         HitKind::Button { label, tone, .. } => {
             draw_fluent_btn(bgra, texts, r, label, *tone, hovered, pal);
+        }
+        HitKind::DockItemCard {
+            label,
+            path,
+            is_folder,
+            is_separator,
+            active,
+            ..
+        } => {
+            draw_dock_item_card(
+                bgra,
+                texts,
+                r,
+                label,
+                path,
+                *is_folder,
+                *is_separator,
+                *active,
+                hovered,
+                pal,
+            );
+        }
+        HitKind::IconBtn {
+            glyph,
+            danger_hover,
+            ..
+        } => {
+            draw_icon_btn(bgra, texts, r, glyph, *danger_hover, false, hovered, pal);
         }
     }
 }

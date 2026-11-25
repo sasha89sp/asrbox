@@ -235,6 +235,8 @@ fn selftest_widgets() -> Result<(), String> {
         forecast_days: 7,
         now,
         data: &wdata,
+        yandex_native_days: 0,
+        is_hybrid_fallback: false,
         loading: false,
         error: None,
         hovered: WeatherHitTarget::None,

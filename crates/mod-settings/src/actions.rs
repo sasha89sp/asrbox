@@ -70,6 +70,18 @@ pub enum SettingsAction {
         dock_id: String,
         opacity: u8,
     },
+    SetDockEdgeMargin {
+        dock_id: String,
+        margin_px: u16,
+    },
+    SetDockCornerRadius {
+        dock_id: String,
+        radius_px: u16,
+    },
+    SetDockBlur {
+        dock_id: String,
+        enabled: bool,
+    },
     SetDockLocked {
         dock_id: String,
         locked: bool,
@@ -101,6 +113,15 @@ pub enum SettingsAction {
     OpenDockItemFolder {
         dock_id: String,
         item_id: u64,
+    },
+    MoveDockItem {
+        dock_id: String,
+        item_id: u64,
+        delta: i8,
+    },
+    AddDockItemMenu {
+        dock_id: String,
+        anchor_client: PixelPoint,
     },
     RemoveDockItem {
         dock_id: String,
@@ -217,6 +238,8 @@ pub enum SettingsAction {
 pub enum SliderKind {
     DockIconSize,
     DockOpacity,
+    DockEdgeMargin,
+    DockCornerRadius,
     CalendarOpacity,
     CalendarWidth,
     CalendarRows,
@@ -236,6 +259,8 @@ impl SliderKind {
     pub fn range(self) -> (u32, u32) {
         match self {
             Self::DockIconSize => (24, 128),
+            Self::DockEdgeMargin => (0, 64),
+            Self::DockCornerRadius => (0, 28),
             Self::DockOpacity
             | Self::CalendarOpacity
             | Self::SysMonitorOpacity

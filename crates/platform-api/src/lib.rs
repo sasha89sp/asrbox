@@ -292,6 +292,14 @@ pub trait DockPlatform {
         docks: &[TrayMenuEntry],
         flags: TrayModuleFlags,
     ) -> Result<Option<TrayAction>, String>;
+    fn show_dock_folder_popup(
+        &mut self,
+        _dock_id: u64,
+        _folder_path: &Path,
+        _anchor_rect: PixelRect,
+    ) -> Result<Option<PathBuf>, String> {
+        Ok(None)
+    }
     fn pick_icon_file(&mut self) -> Result<Option<PathBuf>, String>;
     fn activate_or_launch_target(&self, path: &Path, focus_running: bool) -> Result<bool, String>;
     fn open_item_location(&self, path: &Path) -> Result<(), String>;

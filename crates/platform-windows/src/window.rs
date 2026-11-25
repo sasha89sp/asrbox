@@ -19,6 +19,7 @@ use crate::app_icon::{cleanup_app_icons, large_app_icon, small_app_icon};
 use crate::dock_proc::dock_wnd_proc;
 use crate::dwrite_text::cleanup_dwrite_cache;
 use crate::fluent_menu::fluent_menu_wnd_proc;
+use crate::folder_popup::folder_popup_wnd_proc;
 use crate::font_engine::cleanup_font_cache;
 use crate::github_http::{drain_github_results, WM_GITHUB_DONE};
 use crate::http::{drain_http_results, WM_HTTP_DONE};
@@ -101,6 +102,12 @@ impl WindowsDockHost {
                 hinstance,
                 w!("AsrboxFluentMenuWindow"),
                 Some(fluent_menu_wnd_proc),
+                HBRUSH::default(),
+            )?;
+            register_class(
+                hinstance,
+                w!("AsrboxFolderPopupWindow"),
+                Some(folder_popup_wnd_proc),
                 HBRUSH::default(),
             )?;
             register_class(hinstance, w!("AsrboxDebugWindow"), Some(debug_wnd_proc), bg)?;

@@ -15,11 +15,17 @@ mod dwrite_vtable;
 #[cfg(windows)]
 mod fluent_menu;
 #[cfg(windows)]
+mod fluent_menu_hook;
+#[cfg(windows)]
 mod fluent_menu_layout;
 #[cfg(windows)]
 mod fluent_menu_render;
 #[cfg(windows)]
 mod fluent_menu_win;
+#[cfg(windows)]
+mod folder_popup;
+#[cfg(windows)]
+mod folder_popup_render;
 #[cfg(windows)]
 mod font_engine;
 #[cfg(windows)]

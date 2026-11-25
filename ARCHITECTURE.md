@@ -1,6 +1,6 @@
 # ARCHITECTURE.md — Архитектура `asrbox`
 
-Версия: `0.0.9` (рабочие модули `mod-dock`, `mod-widgets` [Календарь, Системный монитор, Погода Open-Meteo/Яндекс.Погода, Заметки], `mod-overlay`, `mod-settings`, `mod-backup` [AES-256 + GitHub], `mod-webdav`, `mod-debug`, `mod-about` + мультипроцессный супервизор в `crates/app`, расширяемая дизайн-система «Стеклянный блок ASR» / `Win11Classic`, `menus.cfg`, встроенная PE-иконка `16–256 px` и `Segoe UI Variable` / GDI ClearType + DirectWrite).
+Версия: `0.0.10` (рабочие модули `mod-dock` [Concentric Fluent Glass + веерный попап папок], `mod-widgets` [Календарь, Системный монитор, Погода Open-Meteo / гибридная Яндекс.Погода 1/3/7д, Заметки], `mod-overlay`, `mod-settings`, `mod-backup` [AES-256 + GitHub], `mod-webdav`, `mod-debug`, `mod-about` + мультипроцессный супервизор в `crates/app`, дизайн-система «Стеклянный блок ASR» / `Win11Classic`, `WH_MOUSE_LL`-сброс Fluent-меню, `menus.cfg`, встроенная PE-иконка `16–256 px` и `Segoe UI Variable` / GDI ClearType + DirectWrite).
 
 ## 1. Правило зависимостей (строго вниз)
 

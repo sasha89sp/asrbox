@@ -142,6 +142,9 @@ unsafe fn current_screen_cursor() -> PixelPoint {
 }
 
 unsafe fn on_dock_rbutton_up(hwnd: HWND, dock_id: u64, lparam: LPARAM) -> LRESULT {
+    if crate::fluent_menu_hook::is_fluent_menu_open() {
+        return LRESULT(0);
+    }
     let point = lparam_point(lparam);
     let mut screen = POINT {
         x: point.x,

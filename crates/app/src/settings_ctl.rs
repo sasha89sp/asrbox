@@ -135,6 +135,9 @@ impl<I: IconProvider> AppController<I> {
                 layer: d.layer,
                 icon_size_px: u32::from(d.icon_size_px),
                 opacity_percent: d.opacity_percent,
+                edge_margin_px: d.edge_margin_px,
+                corner_radius_px: d.corner_radius_px,
+                blur_enabled: d.blur_enabled,
                 locked: d.locked,
                 lock_items: d.lock_items,
                 show_running_indicator: d.show_running_indicator,
@@ -145,11 +148,12 @@ impl<I: IconProvider> AppController<I> {
                 items: d
                     .items
                     .iter()
-                    .filter(|i| !i.is_separator())
                     .map(|i| DockItemView {
                         id: i.id,
                         label: i.label.clone(),
                         target_path: i.target.display().to_string(),
+                        is_folder: !i.is_separator() && i.target.is_dir(),
+                        is_separator: i.is_separator(),
                     })
                     .collect(),
             })
