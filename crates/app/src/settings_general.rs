@@ -6,15 +6,14 @@ use asrbox_mod_backup::BackupMode;
 use asrbox_mod_debug::LogLevel;
 use asrbox_mod_dock::{save_docks_to_file, DockConfig};
 use asrbox_mod_overlay::{save_overlay_config, OverlayConfig};
-use asrbox_mod_settings::{
-    BrowserTab, DiagnosticsLiveView, SettingsAction, SettingsTab, WidgetSubTab,
-};
+use asrbox_mod_settings::{BrowserTab, DiagnosticsLiveView, SettingsAction};
 use asrbox_mod_widgets::{
-    save_sysmon_config, save_widget_config, CalendarWidgetConfig, SysMonitorConfig,
+    save_notes_config, save_sysmon_config, save_weather_config, save_widget_config,
+    CalendarWidgetConfig, NotesWidgetConfig, SysMonitorConfig, WeatherWidgetConfig,
 };
 use asrbox_platform_api::{
-    save_appearance_config, AppearanceConfig, DockPlatform, IconProvider, ToolsPlatform,
-    WidgetPlatform,
+    save_appearance_config, save_menu_config, AppearanceConfig, ContextMenuConfig, DockPlatform,
+    IconProvider, ToolsPlatform, WidgetPlatform,
 };
 
 use crate::dock_shortcuts::{cleanup_unused_shortcuts, shortcuts_dir_for_config};
@@ -69,6 +68,12 @@ impl<I: IconProvider> AppController<I> {
         if let Some(sys) = self.sysmon.as_mut() {
             sys.set_palette(host, pal);
         }
+        if let Some(weather) = self.weather.as_mut() {
+            weather.set_palette(host, pal);
+        }
+        if let Some(notes) = self.notes.as_mut() {
+            notes.set_palette(host, pal);
+        }
         if let Some(ov) = self.overlay.as_mut() {
             ov.set_palette(host, pal);
         }
@@ -84,6 +89,12 @@ impl<I: IconProvider> AppController<I> {
     ) -> bool {
         let now = host.local_time_now();
         match action {
+            SettingsAction::SetDesignTheme(dt) => {
+                if self.appearance.design_theme != *dt {
+                    self.appearance.design_theme = *dt;
+                    self.apply_appearance_change(host, true);
+                }
+            }
             SettingsAction::SetThemeMode(mode) => {
                 if self.appearance.theme != *mode {
                     self.appearance.theme = *mode;
@@ -108,7 +119,24 @@ impl<I: IconProvider> AppController<I> {
                     self.apply_appearance_change(host, false);
                 }
             }
-            SettingsAction::ResetSection(tab) => self.reset_settings_section(host, *tab),
+            SettingsAction::SetTrayMenuVis(vis) => {
+                self.menus_cfg.tray = *vis;
+                let _ = save_menu_config(&self.paths.menus_cfg, &self.menus_cfg);
+            }
+            SettingsAction::SetDockMenuVis(vis) => {
+                self.menus_cfg.dock = *vis;
+                let _ = save_menu_config(&self.paths.menus_cfg, &self.menus_cfg);
+                if let Some(docks) = self.docks.as_mut() {
+                    docks.menu_vis = *vis;
+                }
+                self.reload_module_config(host, ModuleId::Dock);
+            }
+            SettingsAction::SetWidgetMenuVis(vis) => {
+                self.menus_cfg.widget = *vis;
+                let _ = save_menu_config(&self.paths.menus_cfg, &self.menus_cfg);
+                self.reload_module_config(host, ModuleId::Widgets);
+            }
+            SettingsAction::ConfirmResetAll => self.reset_all_settings(host),
             SettingsAction::OpenDiagnosticsTab => {
                 self.open_browser_tab(host, BrowserTab::Diagnostics);
             }
@@ -168,6 +196,25 @@ impl<I: IconProvider> AppController<I> {
     ) -> bool {
         let now = host.local_time_now();
         let outcome = match action {
+            SettingsAction::SetBackupEncryptZip(on) => {
+                self.backup.set_encrypt_zip(*on);
+                return true;
+            }
+            SettingsAction::SaveBackupZipPassword => {
+                Some(self.backup.save_zip_password_from_input(host))
+            }
+            SettingsAction::ClearBackupZipPassword => Some(self.backup.clear_zip_password(host)),
+            SettingsAction::SetGitHubIncludeInBackup(on) => {
+                self.backup.set_github_include_in_backup(*on);
+                return true;
+            }
+            SettingsAction::SaveGitHubSettings => {
+                Some(self.backup.save_github_settings_from_inputs(host))
+            }
+            SettingsAction::ClearGitHubToken => Some(self.backup.clear_github_token(host)),
+            SettingsAction::DownloadGitHubSourceNow => {
+                Some(self.backup.download_github_source_now(host, now))
+            }
             SettingsAction::BackupSettingsNow => {
                 Some(self.backup.run_backup(host, BackupMode::SettingsOnly, now))
             }
@@ -257,53 +304,38 @@ impl<I: IconProvider> AppController<I> {
         true
     }
 
-    fn reset_settings_section<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
+    fn reset_all_settings<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
         &mut self,
         host: &mut H,
-        tab: SettingsTab,
     ) {
         let now = host.local_time_now();
-        match tab {
-            SettingsTab::General => {
-                self.appearance = AppearanceConfig::default();
-                self.apply_appearance_change(host, true);
-                if self.modules_cfg.isolation != IsolationMode::Process {
-                    self.modules_cfg.isolation = IsolationMode::Process;
-                    self.persist_modules_cfg();
-                    self.sync_runtime_modules(host);
-                }
-            }
-            SettingsTab::Dock => {
-                let def = vec![DockConfig::new(1, "Док 1")];
-                let _ = save_docks_to_file(&self.paths.docks_cfg, &def, APP_VERSION);
-                let dir = shortcuts_dir_for_config(&self.paths.docks_cfg);
-                cleanup_unused_shortcuts(&def, &dir);
-                self.reload_module_config(host, ModuleId::Dock);
-            }
-            SettingsTab::Widgets => match self.settings_ui.selected_widget {
-                WidgetSubTab::Calendar => {
-                    let _ = save_widget_config(
-                        &self.paths.widgets_cfg,
-                        &CalendarWidgetConfig::default(),
-                    );
-                    self.reload_module_config(host, ModuleId::Widgets);
-                }
-                WidgetSubTab::SysMonitor => {
-                    let _ =
-                        save_sysmon_config(&self.paths.sysmon_cfg, &SysMonitorConfig::default());
-                    self.reload_module_config(host, ModuleId::Widgets);
-                }
-            },
-            SettingsTab::Overlay => {
-                let _ = save_overlay_config(&self.paths.overlay_cfg, &OverlayConfig::default());
-                self.reload_module_config(host, ModuleId::Overlay);
-            }
+        self.settings_ui.confirming_reset = false;
+        self.appearance = AppearanceConfig::default();
+        self.menus_cfg = ContextMenuConfig::default();
+        let _ = save_menu_config(&self.paths.menus_cfg, &self.menus_cfg);
+        if let Some(docks) = self.docks.as_mut() {
+            docks.menu_vis = self.menus_cfg.dock;
         }
+        let def_docks = vec![DockConfig::new(1, "Док 1")];
+        let _ = save_docks_to_file(&self.paths.docks_cfg, &def_docks, APP_VERSION);
+        let sc_dir = shortcuts_dir_for_config(&self.paths.docks_cfg);
+        cleanup_unused_shortcuts(&def_docks, &sc_dir);
+        let _ = save_widget_config(&self.paths.widgets_cfg, &CalendarWidgetConfig::default());
+        let _ = save_sysmon_config(&self.paths.sysmon_cfg, &SysMonitorConfig::default());
+        let _ = save_weather_config(&self.paths.weather_cfg, &WeatherWidgetConfig::default());
+        let _ = save_notes_config(&self.paths.notes_cfg, &NotesWidgetConfig::default());
+        let _ = save_overlay_config(&self.paths.overlay_cfg, &OverlayConfig::default());
+        if self.modules_cfg.isolation != IsolationMode::Process {
+            self.modules_cfg.isolation = IsolationMode::Process;
+            self.persist_modules_cfg();
+            self.sync_runtime_modules(host);
+        }
+        self.apply_appearance_change(host, true);
         self.debug.log(
             now,
             LogLevel::Info,
             "settings",
-            format!("Сброшен раздел настроек: {tab:?}"),
+            "Выполнен полный сброс настроек (бэкапы, заметки и пароли сохранены)",
         );
     }
 

@@ -82,6 +82,74 @@ pub struct SettingsInputRects {
     pub extra: Option<PixelRect>,
     pub search: Option<PixelRect>,
     pub aux: Option<PixelRect>,
+    pub zip_secret: Option<PixelRect>,
+    pub gh_repo: Option<PixelRect>,
+    pub gh_branch: Option<PixelRect>,
+    pub gh_token: Option<PixelRect>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct NotesInputRects {
+    pub search: Option<PixelRect>,
+    pub title: Option<PixelRect>,
+    pub body: Option<PixelRect>,
+    pub inline_edit: Option<PixelRect>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NotesUiEvent {
+    PointerMove {
+        x: i32,
+        y: i32,
+    },
+    MouseDown {
+        x: i32,
+        y: i32,
+    },
+    MouseUp {
+        x: i32,
+        y: i32,
+    },
+    RightClick {
+        x: i32,
+        y: i32,
+        screen_x: i32,
+        screen_y: i32,
+    },
+    Wheel {
+        x: i32,
+        y: i32,
+        delta: i16,
+    },
+    Moved {
+        x: i32,
+        y: i32,
+    },
+    Resized {
+        x: i32,
+        y: i32,
+        width: u32,
+        height: u32,
+        finished: bool,
+    },
+    InputChanged {
+        slot: u8,
+        text: String,
+    },
+    InlineSubmit,
+    InlineCancel,
+    TogglePane(u8),
+    Closed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GitHubFetchResult {
+    pub op_id: u64,
+    pub ok: bool,
+    pub status_code: u16,
+    pub message: String,
+    pub archive_path: Option<PathBuf>,
+    pub include_in_pending_backup: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -143,6 +211,8 @@ pub trait ToolsPlatform {
 
     fn is_settings_window_open(&self) -> bool;
 
+    fn settings_client_to_screen(&self, pt: PixelPoint) -> PixelPoint;
+
     fn show_fluent_popup_menu(
         &mut self,
         screen_pt: PixelPoint,
@@ -173,6 +243,19 @@ pub trait ToolsPlatform {
     fn cred_load(&self, target: &str) -> Result<Option<(String, String)>, String>;
 
     fn cred_delete(&self, target: &str) -> Result<(), String>;
+
+    fn random_bytes(&self, len: usize) -> Result<Vec<u8>, String>;
+
+    #[allow(clippy::too_many_arguments)]
+    fn github_fetch_zipball(
+        &self,
+        op_id: u64,
+        repo: &str,
+        branch: &str,
+        token: &str,
+        dest_path: &Path,
+        include_in_pending_backup: bool,
+    ) -> Result<(), String>;
 
     fn webdav_test(
         &self,

@@ -86,7 +86,76 @@ pub(crate) fn blend_pixel(frame: &mut BgraFrame, x: i32, y: i32, src: [u8; 4]) {
         .clamp(0.0, 255.0) as u8;
 }
 
-pub(crate) fn draw_settings_button(frame: &mut BgraFrame, rect: Rect) {
+pub(crate) fn draw_icon_tile(
+    frame: &mut BgraFrame,
+    rect: Rect,
+    hovered: bool,
+    dimmed: bool,
+    pal: &asrbox_platform_api::FluentPalette,
+) {
+    let radius = ((rect.width.min(rect.height) as f32) * 0.22).clamp(6.0, 12.0);
+    let alpha_mul = if dimmed { 0.35 } else { 1.0 };
+    let (fill_rgb, fill_a, rim_rgb, rim_a) = if pal.is_dark {
+        if hovered {
+            ([255u8, 255, 255], 34.0, [255u8, 255, 255], 54.0)
+        } else {
+            ([255u8, 255, 255], 16.0, [255u8, 255, 255], 28.0)
+        }
+    } else if hovered {
+        ([15u8, 23, 42], 24.0, [15u8, 23, 42], 38.0)
+    } else {
+        ([255u8, 255, 255], 150.0, [15u8, 23, 42], 24.0)
+    };
+    let x0 = rect.x.max(0);
+    let y0 = rect.y.max(0);
+    let x1 = (rect.x + i32::try_from(rect.width).unwrap_or(0))
+        .min(i32::try_from(frame.width).unwrap_or(0));
+    let y1 = (rect.y + i32::try_from(rect.height).unwrap_or(0))
+        .min(i32::try_from(frame.height).unwrap_or(0));
+    for py in y0..y1 {
+        for px in x0..x1 {
+            let dist = rounded_rect_sdf(px as f32 + 0.5, py as f32 + 0.5, rect, radius);
+            if dist <= 0.6 {
+                let cov = (0.6 - dist).clamp(0.0, 1.0) * alpha_mul;
+                blend_pixel(
+                    frame,
+                    px,
+                    py,
+                    [fill_rgb[0], fill_rgb[1], fill_rgb[2], (fill_a * cov) as u8],
+                );
+                if dist > -1.2 {
+                    blend_pixel(
+                        frame,
+                        px,
+                        py,
+                        [rim_rgb[0], rim_rgb[1], rim_rgb[2], (rim_a * cov) as u8],
+                    );
+                }
+            }
+        }
+    }
+}
+
+pub(crate) fn draw_settings_button(
+    frame: &mut BgraFrame,
+    rect: Rect,
+    hovered: bool,
+    pal: &asrbox_platform_api::FluentPalette,
+) {
+    if pal.design_theme.is_glass() {
+        draw_icon_tile(frame, rect, hovered, false, pal);
+        let pad = (rect.width.min(rect.height) as i32 / 10).max(2);
+        let size = (rect.width.min(rect.height) as i32 - pad * 2).max(16);
+        asrbox_platform_api::draw_asr_glass_logo(
+            frame,
+            rect.x + pad,
+            rect.y + pad,
+            size,
+            pal.is_dark,
+            true,
+        );
+        return;
+    }
     let radius = (rect.width.min(rect.height) as f32) * 0.24;
     let x0 = rect.x.max(0);
     let y0 = rect.y.max(0);

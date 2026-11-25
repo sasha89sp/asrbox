@@ -9,7 +9,8 @@ use crate::labels::{
 use crate::layout::{DockLayout, DockSlotLayout, Rect, SlotKind};
 use crate::render_marks::{draw_drag_handle, draw_insert_marker, draw_running_dot, draw_separator};
 use crate::render_ops::{
-    blend_pixel, blit_scaled_icon, draw_fallback_tile, draw_settings_button, rounded_rect_sdf,
+    blend_pixel, blit_scaled_icon, draw_fallback_tile, draw_icon_tile, draw_settings_button,
+    rounded_rect_sdf,
 };
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -211,7 +212,7 @@ fn draw_slot(
         SlotKind::Separator => draw_separator(frame, slot.base_rect, config.edge, dimmed, pal),
         SlotKind::SettingsButton => {
             let r = square_centered_rect(slot.visual_rect);
-            draw_settings_button(frame, r);
+            draw_settings_button(frame, r, hovered, pal);
         }
         SlotKind::Shortcut => match config.label_mode {
             DockLabelMode::LabelsOnly => {
@@ -229,14 +230,14 @@ fn draw_slot(
             DockLabelMode::IconAndLabel => {
                 let (icon_r, text_r) =
                     icon_and_label_rects(slot, config.edge, u32::from(config.icon_size_px));
-                draw_icon_or_fallback(frame, icon_r, icon, dimmed);
+                draw_icon_or_fallback(frame, icon_r, icon, hovered, dimmed, pal);
                 push_icon_label_text(texts, text_r, label, config.edge, dimmed, pal);
                 if running {
                     draw_running_dot(frame, slot.base_rect, config.edge, pal);
                 }
             }
             DockLabelMode::IconsOnly | DockLabelMode::HoverTooltip => {
-                draw_icon_or_fallback(frame, slot.visual_rect, icon, dimmed);
+                draw_icon_or_fallback(frame, slot.visual_rect, icon, hovered, dimmed, pal);
                 if running {
                     draw_running_dot(frame, slot.base_rect, config.edge, pal);
                 }
@@ -249,14 +250,28 @@ fn draw_icon_or_fallback(
     frame: &mut BgraFrame,
     rect: Rect,
     icon: Option<&RgbaImage>,
+    hovered: bool,
     dimmed: bool,
+    pal: &FluentPalette,
 ) {
     let alpha = if dimmed { 0.35 } else { 1.0 };
+    let dst = if pal.design_theme.is_glass() {
+        draw_icon_tile(frame, rect, hovered, dimmed, pal);
+        let pad = (rect.width.min(rect.height) as i32 / 7).clamp(4, 9);
+        Rect {
+            x: rect.x + pad,
+            y: rect.y + pad,
+            width: rect.width.saturating_sub((pad * 2) as u32).max(8),
+            height: rect.height.saturating_sub((pad * 2) as u32).max(8),
+        }
+    } else {
+        rect
+    };
     match icon {
         Some(image) if image.width > 0 && image.height > 0 => {
-            blit_scaled_icon(frame, rect, image, alpha);
+            blit_scaled_icon(frame, dst, image, alpha);
         }
-        _ => draw_fallback_tile(frame, rect, alpha),
+        _ => draw_fallback_tile(frame, dst, alpha),
     }
 }
 

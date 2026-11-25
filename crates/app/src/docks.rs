@@ -8,7 +8,8 @@ use asrbox_mod_dock::{
     to_dock_rect, to_pixel_rect, DockConfig, DockEdge, DockEvent, DockInstance, Point, Rect,
 };
 use asrbox_platform_api::{
-    DockPlatform, FluentPalette, IconProvider, PixelPoint, PixelRect, RgbaImage, WidgetLayer,
+    DockMenuVisibility, DockPlatform, FluentPalette, IconProvider, PixelPoint, PixelRect,
+    RgbaImage, WidgetLayer,
 };
 
 use crate::dock_drag::{DockDragState, DragReleaseOutcome};
@@ -37,6 +38,7 @@ pub struct DockManager<I: IconProvider> {
     pub(crate) drag: DockDragState,
     pub(crate) running_timer_on: bool,
     pub(crate) palette: FluentPalette,
+    pub(crate) menu_vis: DockMenuVisibility,
 }
 
 impl<I: IconProvider> DockManager<I> {
@@ -67,6 +69,7 @@ impl<I: IconProvider> DockManager<I> {
             drag: DockDragState::default(),
             running_timer_on: false,
             palette: FluentPalette::default(),
+            menu_vis: DockMenuVisibility::default(),
         })
     }
 
@@ -323,11 +326,12 @@ impl<I: IconProvider> DockManager<I> {
         safe_mode: &mut bool,
     ) -> Option<String> {
         let can_del = self.docks.len() > 1;
+        let menu_vis = self.menu_vis;
         let state = self
             .docks
             .iter()
             .find(|d| d.instance.config().id == id)
-            .map(|d| build_menu_state(&d.instance, pt, can_del))?;
+            .map(|d| build_menu_state(&d.instance, pt, can_del, menu_vis))?;
         let _ = host.set_dock_tooltip(id, None);
         let action = host.show_dock_menu(id, screen, &state).ok().flatten()?;
         Some(self.apply_dock_action(host, id, action, safe_mode))

@@ -23,6 +23,8 @@ mod fluent_menu_win;
 #[cfg(windows)]
 mod font_engine;
 #[cfg(windows)]
+mod github_http;
+#[cfg(windows)]
 mod http;
 #[cfg(windows)]
 mod icons;
@@ -32,6 +34,10 @@ mod icons_lnk;
 mod job;
 #[cfg(windows)]
 mod metrics;
+#[cfg(windows)]
+mod notes_proc;
+#[cfg(windows)]
+mod notes_win;
 #[cfg(windows)]
 mod overlay_game;
 #[cfg(windows)]
@@ -74,6 +80,8 @@ mod webdav_xml;
 mod widget_menu;
 #[cfg(windows)]
 mod widget_proc;
+#[cfg(windows)]
+mod widget_resize;
 #[cfg(windows)]
 mod widget_text;
 #[cfg(windows)]

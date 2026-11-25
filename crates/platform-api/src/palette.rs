@@ -1,9 +1,10 @@
-use crate::theme::{AccentPreset, FontRenderer, ThemeMode};
+use crate::theme::{AccentPreset, DesignTheme, FontRenderer, ThemeMode};
 
-/// Complete Windows 11 Fluent Design color palette supporting Light, Deep Dark,
-/// custom Accent presets, and smooth per-channel interpolation (`lerp`).
+/// Complete color palette supporting `AsrGlass` (Glass Stack) and `Win11Classic`,
+/// Light & Dark modes, custom Accent presets, and smooth per-channel interpolation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FluentPalette {
+    pub design_theme: DesignTheme,
     pub is_dark: bool,
     pub font_renderer: FontRenderer,
     pub window_bg: [u8; 4],
@@ -37,13 +38,13 @@ pub struct FluentPalette {
 
 impl Default for FluentPalette {
     fn default() -> Self {
-        Self::from_theme(ThemeMode::Dark, AccentPreset::Blue)
+        Self::from_appearance(DesignTheme::AsrGlass, ThemeMode::Dark, AccentPreset::Blue)
     }
 }
 
 impl FluentPalette {
     pub fn dark(accent_preset: AccentPreset) -> Self {
-        Self::from_theme(ThemeMode::Dark, accent_preset)
+        Self::from_appearance(DesignTheme::AsrGlass, ThemeMode::Dark, accent_preset)
     }
 
     pub fn with_font_renderer(mut self, renderer: FontRenderer) -> Self {
@@ -52,78 +53,178 @@ impl FluentPalette {
     }
 
     pub fn from_theme(mode: ThemeMode, accent_preset: AccentPreset) -> Self {
+        Self::from_appearance(DesignTheme::AsrGlass, mode, accent_preset)
+    }
+
+    pub fn from_appearance(
+        design_theme: DesignTheme,
+        mode: ThemeMode,
+        accent_preset: AccentPreset,
+    ) -> Self {
         let dark = mode.is_dark();
-        let (accent, accent_hover, accent_on) = accent_preset.colors(dark);
-        if dark {
-            Self {
-                is_dark: true,
-                font_renderer: FontRenderer::GdiClearType,
-                window_bg: [32, 32, 32, 255], // #202020 (Win11 Mica canvas)
-                sidebar_bg: [32, 32, 32, 255], // #202020 (unified sidebar)
-                card_bg: [43, 43, 43, 255],   // #2B2B2B (CardBackgroundFill)
-                card_border: [50, 50, 50, 255], // #323232 (subtle hairline)
-                divider: [45, 45, 45, 255],   // #2D2D2D (soft row separator)
-                nav_active_bg: [45, 45, 45, 255], // #2D2D2D
-                nav_hover_bg: [40, 40, 40, 255], // #282828
-                control_bg: [54, 54, 54, 255], // #363636 (ControlFillDefault)
-                control_hover: [62, 62, 62, 255], // #3E3E3E (ControlFillSecondary)
-                control_border: [66, 66, 66, 255], // #424242
-                input_bg: [37, 37, 37, 255],  // #252525
-                menu_bg: [40, 40, 40, 255],   // #282828
-                menu_border: [56, 56, 56, 255], // #383838
-                menu_hover: [54, 54, 54, 255], // #363636
-                menu_divider: [52, 52, 52, 255], // #343434
-                text_primary: [255, 255, 255, 255],
-                text_secondary: [206, 206, 206, 255], // #CECECE (Win11 TextSecondary)
-                text_muted: [166, 166, 166, 255],     // #A6A6A6
-                accent,
-                accent_hover,
-                accent_on,
-                danger_bg: [180, 52, 52, 255],
-                danger_hover: [206, 64, 64, 255],
-                warn_bg: [54, 45, 28, 255],
-                warn_border: [188, 134, 48, 255],
-                warn_text: [248, 212, 138, 255],
-                success: [84, 206, 138, 255],
+        let (accent, accent_hover, accent_on) = accent_preset.colors_for_style(design_theme, dark);
+        match (design_theme, dark) {
+            (DesignTheme::AsrGlass, true) => Self::asr_glass_dark(accent, accent_hover, accent_on),
+            (DesignTheme::AsrGlass, false) => {
+                Self::asr_glass_light(accent, accent_hover, accent_on)
             }
-        } else {
-            Self {
-                is_dark: false,
-                font_renderer: FontRenderer::GdiClearType,
-                window_bg: [243, 243, 243, 255],      // #F3F3F3
-                sidebar_bg: [243, 243, 243, 255],     // #F3F3F3
-                card_bg: [251, 251, 251, 255],        // #FBFBFB
-                card_border: [229, 229, 229, 255],    // #E5E5E5
-                divider: [232, 232, 232, 255],        // #E8E8E8
-                nav_active_bg: [234, 234, 234, 255],  // #EAEAEA
-                nav_hover_bg: [238, 238, 238, 255],   // #EEEEEE
-                control_bg: [249, 249, 249, 255],     // #F9F9F9
-                control_hover: [240, 240, 240, 255],  // #F0F0F0
-                control_border: [218, 218, 218, 255], // #DADADA
-                input_bg: [255, 255, 255, 255],       // #FFFFFF
-                menu_bg: [249, 249, 249, 255],        // #F9F9F9
-                menu_border: [229, 229, 229, 255],    // #E5E5E5
-                menu_hover: [240, 240, 240, 255],     // #F0F0F0
-                menu_divider: [229, 229, 229, 255],   // #E5E5E5
-                text_primary: [26, 26, 26, 255],      // #1A1A1A
-                text_secondary: [96, 96, 96, 255],    // #606060
-                text_muted: [120, 120, 120, 255],     // #787878
-                accent,
-                accent_hover,
-                accent_on,
-                danger_bg: [196, 43, 28, 255],
-                danger_hover: [176, 36, 22, 255],
-                warn_bg: [255, 248, 231, 255],
-                warn_border: [216, 148, 34, 255],
-                warn_text: [138, 86, 12, 255],
-                success: [16, 124, 65, 255],
+            (DesignTheme::Win11Classic, true) => {
+                Self::win11_classic_dark(accent, accent_hover, accent_on)
             }
+            (DesignTheme::Win11Classic, false) => {
+                Self::win11_classic_light(accent, accent_hover, accent_on)
+            }
+        }
+    }
+
+    fn asr_glass_dark(accent: [u8; 4], accent_hover: [u8; 4], accent_on: [u8; 4]) -> Self {
+        Self {
+            design_theme: DesignTheme::AsrGlass,
+            is_dark: true,
+            font_renderer: FontRenderer::GdiClearType,
+            window_bg: [24, 27, 32, 255],      // #181B20
+            sidebar_bg: [18, 20, 24, 255],     // #121418
+            card_bg: [34, 38, 46, 255],        // #22262E
+            card_border: [52, 58, 68, 255],    // ~rgba(255,255,255,0.08)
+            divider: [44, 49, 58, 255],        // ~rgba(255,255,255,0.06)
+            nav_active_bg: [32, 42, 56, 255],  // subtle tinted pill
+            nav_hover_bg: [28, 32, 40, 255],   // hover row
+            control_bg: [42, 47, 57, 255],     // #2A2F39
+            control_hover: [48, 54, 66, 255],  // #303642
+            control_border: [62, 70, 84, 255], // subtle edge
+            input_bg: [22, 25, 30, 255],       // #16191E
+            menu_bg: [28, 32, 40, 255],        // #1C2028
+            menu_border: [54, 60, 72, 255],
+            menu_hover: [48, 54, 66, 255], // #303642
+            menu_divider: [44, 49, 58, 255],
+            text_primary: [241, 245, 249, 255],   // #F1F5F9
+            text_secondary: [148, 163, 184, 255], // #94A3B8
+            text_muted: [100, 116, 139, 255],     // #64748B
+            accent,
+            accent_hover,
+            accent_on,
+            danger_bg: [190, 52, 56, 255],
+            danger_hover: [216, 66, 70, 255],
+            warn_bg: [52, 42, 26, 255],
+            warn_border: [212, 148, 42, 255],
+            warn_text: [252, 214, 134, 255],
+            success: [16, 185, 129, 255],
+        }
+    }
+
+    fn asr_glass_light(accent: [u8; 4], accent_hover: [u8; 4], accent_on: [u8; 4]) -> Self {
+        Self {
+            design_theme: DesignTheme::AsrGlass,
+            is_dark: false,
+            font_renderer: FontRenderer::GdiClearType,
+            window_bg: [243, 245, 248, 255],   // #F3F5F8
+            sidebar_bg: [232, 236, 242, 255],  // #E8ECF2
+            card_bg: [255, 255, 255, 255],     // #FFFFFF
+            card_border: [224, 230, 238, 255], // ~rgba(15,23,42,0.08)
+            divider: [234, 239, 245, 255],     // ~rgba(15,23,42,0.06)
+            nav_active_bg: [218, 229, 244, 255],
+            nav_hover_bg: [222, 228, 238, 255],
+            control_bg: [241, 245, 249, 255],
+            control_hover: [226, 232, 240, 255], // #E2E8F0
+            control_border: [203, 213, 225, 255],
+            input_bg: [255, 255, 255, 255], // #FFFFFF
+            menu_bg: [255, 255, 255, 255],
+            menu_border: [218, 225, 235, 255],
+            menu_hover: [226, 232, 240, 255],
+            menu_divider: [232, 237, 243, 255],
+            text_primary: [15, 23, 42, 255],    // #0F172A
+            text_secondary: [71, 85, 105, 255], // #475569
+            text_muted: [148, 163, 184, 255],   // #94A3B8
+            accent,
+            accent_hover,
+            accent_on,
+            danger_bg: [208, 48, 38, 255],
+            danger_hover: [184, 38, 30, 255],
+            warn_bg: [255, 248, 231, 255],
+            warn_border: [216, 148, 34, 255],
+            warn_text: [138, 86, 12, 255],
+            success: [5, 150, 105, 255],
+        }
+    }
+
+    fn win11_classic_dark(accent: [u8; 4], accent_hover: [u8; 4], accent_on: [u8; 4]) -> Self {
+        Self {
+            design_theme: DesignTheme::Win11Classic,
+            is_dark: true,
+            font_renderer: FontRenderer::GdiClearType,
+            window_bg: [32, 32, 32, 255],
+            sidebar_bg: [32, 32, 32, 255],
+            card_bg: [43, 43, 43, 255],
+            card_border: [50, 50, 50, 255],
+            divider: [45, 45, 45, 255],
+            nav_active_bg: [45, 45, 45, 255],
+            nav_hover_bg: [40, 40, 40, 255],
+            control_bg: [54, 54, 54, 255],
+            control_hover: [62, 62, 62, 255],
+            control_border: [66, 66, 66, 255],
+            input_bg: [37, 37, 37, 255],
+            menu_bg: [40, 40, 40, 255],
+            menu_border: [56, 56, 56, 255],
+            menu_hover: [54, 54, 54, 255],
+            menu_divider: [52, 52, 52, 255],
+            text_primary: [255, 255, 255, 255],
+            text_secondary: [206, 206, 206, 255],
+            text_muted: [166, 166, 166, 255],
+            accent,
+            accent_hover,
+            accent_on,
+            danger_bg: [180, 52, 52, 255],
+            danger_hover: [206, 64, 64, 255],
+            warn_bg: [54, 45, 28, 255],
+            warn_border: [188, 134, 48, 255],
+            warn_text: [248, 212, 138, 255],
+            success: [84, 206, 138, 255],
+        }
+    }
+
+    fn win11_classic_light(accent: [u8; 4], accent_hover: [u8; 4], accent_on: [u8; 4]) -> Self {
+        Self {
+            design_theme: DesignTheme::Win11Classic,
+            is_dark: false,
+            font_renderer: FontRenderer::GdiClearType,
+            window_bg: [243, 243, 243, 255],
+            sidebar_bg: [243, 243, 243, 255],
+            card_bg: [251, 251, 251, 255],
+            card_border: [229, 229, 229, 255],
+            divider: [232, 232, 232, 255],
+            nav_active_bg: [234, 234, 234, 255],
+            nav_hover_bg: [238, 238, 238, 255],
+            control_bg: [249, 249, 249, 255],
+            control_hover: [240, 240, 240, 255],
+            control_border: [218, 218, 218, 255],
+            input_bg: [255, 255, 255, 255],
+            menu_bg: [249, 249, 249, 255],
+            menu_border: [229, 229, 229, 255],
+            menu_hover: [240, 240, 240, 255],
+            menu_divider: [229, 229, 229, 255],
+            text_primary: [26, 26, 26, 255],
+            text_secondary: [96, 96, 96, 255],
+            text_muted: [120, 120, 120, 255],
+            accent,
+            accent_hover,
+            accent_on,
+            danger_bg: [196, 43, 28, 255],
+            danger_hover: [176, 36, 22, 255],
+            warn_bg: [255, 248, 231, 255],
+            warn_border: [216, 148, 34, 255],
+            warn_text: [138, 86, 12, 255],
+            success: [16, 124, 65, 255],
         }
     }
 
     pub fn lerp(a: Self, b: Self, t: f32) -> Self {
         let k = t.clamp(0.0, 1.0);
         Self {
+            design_theme: if k < 0.5 {
+                a.design_theme
+            } else {
+                b.design_theme
+            },
             is_dark: if k < 0.5 { a.is_dark } else { b.is_dark },
             font_renderer: b.font_renderer,
             window_bg: lerp_rgba(a.window_bg, b.window_bg, k),
@@ -182,8 +283,9 @@ mod tests {
     #[test]
     fn appearance_config_and_palette_lerp_work() {
         let cfg = AppearanceConfig {
+            design_theme: DesignTheme::Win11Classic,
             theme: ThemeMode::Light,
-            accent: AccentPreset::Emerald,
+            accent: AccentPreset::Cyan,
             language: AppLanguage::En,
             font_renderer: FontRenderer::DirectWrite,
         };
@@ -191,12 +293,21 @@ mod tests {
             parse_appearance_config(&serialize_appearance_config(&cfg)),
             cfg
         );
-        assert_eq!(cfg.palette().font_renderer, FontRenderer::DirectWrite);
-        let dark = FluentPalette::from_theme(ThemeMode::Dark, AccentPreset::Blue);
-        let light = FluentPalette::from_theme(ThemeMode::Light, AccentPreset::Blue);
-        assert_eq!(dark.accent, [76, 194, 255, 255]);
-        assert_eq!(light.accent, [0, 103, 192, 255]);
-        let mid = FluentPalette::lerp(dark, light, 0.5);
-        assert!(mid.window_bg[0] > dark.window_bg[0] && mid.window_bg[0] < light.window_bg[0]);
+        assert_eq!(cfg.palette().design_theme, DesignTheme::Win11Classic);
+        let glass_dark = FluentPalette::from_appearance(
+            DesignTheme::AsrGlass,
+            ThemeMode::Dark,
+            AccentPreset::Blue,
+        );
+        assert_eq!(glass_dark.window_bg, [24, 27, 32, 255]);
+        assert_eq!(glass_dark.accent, [43, 144, 255, 255]);
+        let glass_light = FluentPalette::from_appearance(
+            DesignTheme::AsrGlass,
+            ThemeMode::Light,
+            AccentPreset::Blue,
+        );
+        assert_eq!(glass_light.window_bg, [243, 245, 248, 255]);
+        let mid = FluentPalette::lerp(glass_dark, glass_light, 0.5);
+        assert!(mid.window_bg[0] > glass_dark.window_bg[0]);
     }
 }

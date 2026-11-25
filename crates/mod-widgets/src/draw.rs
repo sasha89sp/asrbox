@@ -18,6 +18,11 @@ pub fn fill_macos_glass_card(frame: &mut BgraFrame, opacity_percent: u8, pal: &F
     let bg = pal.window_bg;
     let border = pal.card_border;
 
+    let card_rad = if pal.design_theme.is_glass() {
+        12.0
+    } else {
+        CARD_RADIUS
+    };
     let wf = w as f32;
     let hf = h as f32;
     for y in 0..h {
@@ -31,7 +36,7 @@ pub fn fill_macos_glass_card(frame: &mut BgraFrame, opacity_percent: u8, pal: &F
         let g = bg[1].saturating_add(shift);
         let b = bg[2].saturating_add(shift);
         for x in 0..w {
-            let d = rounded_rect_sdf(x as f32 + 0.5, y as f32 + 0.5, wf, hf, CARD_RADIUS);
+            let d = rounded_rect_sdf(x as f32 + 0.5, y as f32 + 0.5, wf, hf, card_rad);
             let cov = (0.5 - d).clamp(0.0, 1.0);
             if cov <= 0.0 {
                 continue;

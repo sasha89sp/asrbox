@@ -1,3 +1,5 @@
+use crate::menu_cfg::{DockMenuVisibility, TrayMenuVisibility, WidgetMenuVisibility};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum WidgetLayer {
     #[default]
@@ -12,6 +14,7 @@ pub struct WidgetMenuState {
     pub opacity_percent: u8,
     pub refresh_ms: Option<u32>,
     pub sync_interval_sec: Option<u32>,
+    pub menu_vis: WidgetMenuVisibility,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,6 +40,7 @@ pub struct DockMenuState {
     pub icon_size_px: u16,
     pub opacity_percent: u8,
     pub locked: bool,
+    pub lock_items: bool,
     pub hover_zoom_enabled: bool,
     pub show_running_indicator: bool,
     pub focus_running_window: bool,
@@ -45,6 +49,7 @@ pub struct DockMenuState {
     pub hovered_is_separator: bool,
     pub show_settings_button: bool,
     pub can_remove_dock: bool,
+    pub menu_vis: DockMenuVisibility,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,6 +64,7 @@ pub enum DockMenuAction {
     SetLabelMode(u8),
     AlignCenter,
     ToggleLock,
+    ToggleLockItems,
     SetOpacity(u8),
     IconSizeSmall,
     IconSizeMedium,
@@ -95,7 +101,10 @@ pub struct TrayModuleFlags {
     pub overlay_setup_mode: bool,
     pub calendar_visible: bool,
     pub sys_monitor_visible: bool,
+    pub weather_visible: bool,
+    pub notes_visible: bool,
     pub autostart_enabled: bool,
+    pub menu_vis: TrayMenuVisibility,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -114,6 +123,9 @@ pub enum TrayAction {
     ToggleSysMonitorWidget,
     RefreshSysMonitorWidget,
     OpenSysMonitorConfig,
+    ToggleWeatherWidget,
+    RefreshWeatherWidget,
+    ToggleNotesWidget,
     ToggleOverlayModule,
     ToggleOverlaySetupMode,
     OpenOverlayTab,

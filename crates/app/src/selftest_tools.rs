@@ -2,13 +2,18 @@ use std::path::PathBuf;
 
 use asrbox_core::{IsolationMode, ModuleId};
 use asrbox_mod_about::{build_about_text, changelog_text, AppPaths};
-use asrbox_mod_backup::{parse_backup_config, serialize_backup_config, BackupConfig};
+use asrbox_mod_backup::crypto::winzip_aes256_encrypt;
+use asrbox_mod_backup::{
+    parse_backup_config, parse_github_config, serialize_backup_config, serialize_github_config,
+    validate_github_branch, validate_github_repo, BackupConfig, GitHubBackupConfig,
+};
 use asrbox_mod_debug::{DebugHub, LogLevel};
 use asrbox_mod_settings::{
     AboutSettingsView, AppearanceSettingsView, BackupSettingsView, BrowserTab,
-    CalendarSettingsView, DiagnosticsLiveView, DockItemView, DockSettingsView, ModuleStatusView,
-    OverlaySettingsView, SettingsSnapshot, SettingsTab, SettingsUiState, SysMonitorSettingsView,
-    WebDavBrowserView, WebDavServerView, WidgetSubTab,
+    CalendarSettingsView, DiagnosticsLiveView, DockItemView, DockSettingsView, GitHubBackupView,
+    ModuleStatusView, NotesSettingsView, OverlaySettingsView, SettingsSnapshot, SettingsTab,
+    SettingsUiState, SysMonitorSettingsView, WeatherSettingsView, WebDavBrowserView,
+    WebDavServerView, WidgetSubTab,
 };
 use asrbox_mod_webdav::{
     base64_encode, parse_propfind_xml, parse_sync_config, parse_webdav_store,
@@ -16,29 +21,40 @@ use asrbox_mod_webdav::{
     SyncInterval, SyncItem, WebDavProvider,
 };
 use asrbox_platform_api::{
-    AccentPreset, FluentPalette, LocalDateTime, ProcessMetrics, ThemeMode, WebDavDirEntry,
-    WidgetLayer,
+    AccentPreset, ContextMenuConfig, DesignTheme, FluentPalette, LocalDateTime, ProcessMetrics,
+    ThemeMode, WebDavDirEntry, WidgetLayer,
 };
 
 pub fn selftest_settings(app_version: &str) -> Result<(), String> {
     let snap = sample_settings_snapshot(app_version);
     let mut ui = SettingsUiState::default();
-    for theme in [ThemeMode::Dark, ThemeMode::Light] {
-        ui.set_palette_immediate(FluentPalette::from_theme(theme, AccentPreset::Blue));
-        for tab in SettingsTab::ALL {
-            ui.active_tab = tab;
-            ui.active_browser_tab = BrowserTab::Main;
-            let (frame, _) = ui.render(&snap);
-            if frame.bgra.pixels.is_empty() || frame.texts.is_empty() {
-                return Err(format!("settings render failed on {tab:?}"));
+    for design in [DesignTheme::AsrGlass, DesignTheme::Win11Classic] {
+        for theme in [ThemeMode::Dark, ThemeMode::Light] {
+            ui.set_palette_immediate(FluentPalette::from_appearance(
+                design,
+                theme,
+                AccentPreset::Blue,
+            ));
+            for tab in SettingsTab::ALL {
+                ui.active_tab = tab;
+                ui.active_browser_tab = BrowserTab::Main;
+                let (frame, _) = ui.render(&snap);
+                if frame.bgra.pixels.is_empty() || frame.texts.is_empty() {
+                    return Err(format!("settings render failed on {design:?}/{tab:?}"));
+                }
             }
-        }
-        ui.active_tab = SettingsTab::Widgets;
-        for sub in [WidgetSubTab::Calendar, WidgetSubTab::SysMonitor] {
-            ui.selected_widget = sub;
-            let (frame, _) = ui.render(&snap);
-            if frame.bgra.pixels.is_empty() || frame.texts.is_empty() {
-                return Err(format!("settings widgets subtab render failed on {sub:?}"));
+            ui.active_tab = SettingsTab::Widgets;
+            for sub in [
+                WidgetSubTab::Calendar,
+                WidgetSubTab::SysMonitor,
+                WidgetSubTab::Weather,
+                WidgetSubTab::Notes,
+            ] {
+                ui.selected_widget = sub;
+                let (frame, _) = ui.render(&snap);
+                if frame.bgra.pixels.is_empty() || frame.texts.is_empty() {
+                    return Err(format!("settings widgets subtab render failed on {sub:?}"));
+                }
             }
         }
     }
@@ -79,6 +95,7 @@ fn sample_settings_snapshot(app_version: &str) -> SettingsSnapshot {
             icon_size_px: 48,
             opacity_percent: 85,
             locked: true,
+            lock_items: true,
             show_running_indicator: true,
             focus_running_window: true,
             launch_animation_enabled: true,
@@ -108,6 +125,8 @@ fn sample_settings_snapshot(app_version: &str) -> SettingsSnapshot {
             width: 560,
             height: 492,
         },
+        weather: WeatherSettingsView::default(),
+        notes: NotesSettingsView::default(),
         overlay: OverlaySettingsView {
             module_enabled: true,
             auto_games_only: true,
@@ -122,6 +141,8 @@ fn sample_settings_snapshot(app_version: &str) -> SettingsSnapshot {
             refresh_interval_ms: 1000,
         },
         backup: BackupSettingsView {
+            encrypt_zip: true,
+            has_zip_password: true,
             servers: vec![WebDavServerView {
                 id: "srv-1".to_owned(),
                 name: "Mail.ru".to_owned(),
@@ -146,6 +167,8 @@ fn sample_settings_snapshot(app_version: &str) -> SettingsSnapshot {
             }),
             ..BackupSettingsView::default()
         },
+        github: GitHubBackupView::default(),
+        menus: ContextMenuConfig::default(),
         diagnostics: DiagnosticsLiveView {
             monitor_enabled: true,
             filter_label: "Все".to_owned(),
@@ -174,6 +197,7 @@ fn sample_settings_snapshot(app_version: &str) -> SettingsSnapshot {
 pub fn selftest_backup_and_webdav() -> Result<(), String> {
     let bcfg = BackupConfig {
         auto_upload_cloud: true,
+        encrypt_zip: true,
         target_server_ids: vec!["srv-1".to_owned()],
         last_backup_file: "asrbox-settings-20261123-120000.zip".to_owned(),
         last_backup_time: "23.11.2026 12:00".to_owned(),
@@ -181,6 +205,21 @@ pub fn selftest_backup_and_webdav() -> Result<(), String> {
     };
     if parse_backup_config(&serialize_backup_config(&bcfg)) != bcfg {
         return Err("backup config roundtrip mismatch".to_owned());
+    }
+    let gh = GitHubBackupConfig {
+        repo: "sasha89sp/asrbox".to_owned(),
+        branch: "main".to_owned(),
+        include_in_backup: true,
+        last_status: "OK".to_owned(),
+    };
+    if parse_github_config(&serialize_github_config(&gh)) != gh {
+        return Err("github_backup.cfg roundtrip mismatch".to_owned());
+    }
+    validate_github_repo(&gh.repo)?;
+    validate_github_branch(&gh.branch)?;
+    let enc = winzip_aes256_encrypt(b"selftest-pwd", [7u8; 16], b"asrbox-aes256-payload");
+    if enc.ciphertext == b"asrbox-aes256-payload" || enc.auth_code == [0u8; 10] {
+        return Err("winzip aes256 selftest failed".to_owned());
     }
     let v1 =
         "settings_version=1\nprovider=mailru\nusername=test@mail.ru\nremote_dir=/asrbox-backups\n";

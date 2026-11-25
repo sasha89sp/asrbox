@@ -1,4 +1,4 @@
-use asrbox_platform_api::{PixelRect, SettingsUiEvent};
+use asrbox_platform_api::{PixelPoint, PixelRect, SettingsUiEvent};
 
 use crate::layout::{rect_contains, ControlItem, HitKind, MIN_SETTINGS_HEIGHT, MIN_SETTINGS_WIDTH};
 use crate::types::{BrowserTab, SettingsAction, SettingsSnapshot, SliderKind};
@@ -51,6 +51,7 @@ impl SettingsUiState {
         self.last_slider_val = None;
         self.hovered_id = None;
         self.anim_start = None;
+        self.confirming_reset = false;
     }
 
     fn on_pointer_move(
@@ -87,6 +88,7 @@ impl SettingsUiState {
                 self.active_tab = tab;
                 self.active_browser_tab = BrowserTab::Main;
                 self.scroll_y = 0;
+                self.confirming_reset = false;
                 (true, None)
             }
             HitKind::BrowserTabSelect { index, .. } => {
@@ -100,7 +102,33 @@ impl SettingsUiState {
                 self.close_browser_tab(index);
                 (true, None)
             }
-            HitKind::HeaderButton { action, .. } => (true, Some(action)),
+            HitKind::AccordionHeader { id, .. } => {
+                if self.search_query.trim().is_empty() {
+                    self.toggle_accordion(&id);
+                }
+                (true, None)
+            }
+            HitKind::ComboBox { kind, .. } => {
+                let anchor_client = PixelPoint {
+                    x: ctrl.rect.x,
+                    y: ctrl.rect.y + ctrl.rect.height as i32 + 2,
+                };
+                (
+                    true,
+                    Some(SettingsAction::OpenCombo {
+                        kind,
+                        anchor_client,
+                    }),
+                )
+            }
+            HitKind::StartResetConfirm { .. } => {
+                self.confirming_reset = true;
+                (true, None)
+            }
+            HitKind::CancelResetConfirm { .. } => {
+                self.confirming_reset = false;
+                (true, None)
+            }
             HitKind::SelectDock(idx) => {
                 self.selected_dock = idx;
                 self.selected_dock_item = None;
@@ -110,6 +138,9 @@ impl SettingsUiState {
             HitKind::SelectWidgetSubTab { sub, .. } => {
                 self.selected_widget = sub;
                 self.scroll_y = 0;
+                if sub == crate::types::WidgetSubTab::Weather {
+                    self.pending_aux_prefill = Some(snap.weather.city.clone());
+                }
                 (true, None)
             }
             HitKind::SelectDockItem { item_id, .. } => {
@@ -138,6 +169,9 @@ impl SettingsUiState {
                 if matches!(action, SettingsAction::SaveWebDavServerRemoteDir(_)) {
                     self.editing_server_dir = None;
                 }
+                if matches!(action, SettingsAction::ConfirmResetAll) {
+                    self.confirming_reset = false;
+                }
                 (true, Some(action))
             }
             HitKind::Slider { kind, .. } => {
@@ -162,7 +196,6 @@ impl SettingsUiState {
                 HitKind::Tab(_)
                     | HitKind::BrowserTabSelect { .. }
                     | HitKind::BrowserTabClose { .. }
-                    | HitKind::HeaderButton { .. }
             );
             if !is_chrome && y < top_y {
                 return false;
@@ -200,6 +233,10 @@ impl SettingsUiState {
             SliderKind::SysMonitorOpacity => Some(SettingsAction::SetSysMonitorOpacity(val as u8)),
             SliderKind::SysMonitorWidth => Some(SettingsAction::SetSysMonitorWidth(val)),
             SliderKind::SysMonitorHeight => Some(SettingsAction::SetSysMonitorHeight(val)),
+            SliderKind::WeatherOpacity => Some(SettingsAction::SetWeatherOpacity(val as u8)),
+            SliderKind::WeatherWidth => Some(SettingsAction::SetWeatherWidth(val)),
+            SliderKind::WeatherHeight => Some(SettingsAction::SetWeatherHeight(val)),
+            SliderKind::NotesOpacity => Some(SettingsAction::SetNotesOpacity(val as u8)),
             SliderKind::OverlayOpacity => Some(SettingsAction::SetOverlayOpacity(val as u8)),
             SliderKind::OverlayWidth => Some(SettingsAction::SetOverlayWidth(val)),
             SliderKind::OverlayHeight => Some(SettingsAction::SetOverlayHeight(val)),

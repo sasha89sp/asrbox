@@ -1,11 +1,13 @@
 use std::ffi::c_void;
 
-use asrbox_platform_api::PixelRect;
+use asrbox_platform_api::{PixelPoint, PixelRect};
 use windows::core::w;
-use windows::Win32::Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
-use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_USE_IMMERSIVE_DARK_MODE};
+use windows::Win32::Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
+use windows::Win32::Graphics::Dwm::{
+    DwmSetWindowAttribute, DWMWA_USE_IMMERSIVE_DARK_MODE, DWMWINDOWATTRIBUTE,
+};
 use windows::Win32::Graphics::Gdi::{
-    BeginPaint, EndPaint, SetDIBitsToDevice, DIB_RGB_COLORS, HFONT, PAINTSTRUCT,
+    BeginPaint, ClientToScreen, EndPaint, SetDIBitsToDevice, DIB_RGB_COLORS, HFONT, PAINTSTRUCT,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, GetWindowTextLengthW, GetWindowTextW, MoveWindow, SendMessageW, ShowWindow,
@@ -16,6 +18,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use crate::icons::make_top_down_bmi;
 use crate::settings_proc::SETTINGS_UI;
 use crate::tools_win::set_window_text;
+
+const DWMWA_SYSTEMBACKDROP_TYPE_ATTR: DWMWINDOWATTRIBUTE = DWMWINDOWATTRIBUTE(38);
+const DWMSBT_NONE: i32 = 1;
+const DWMSBT_MAINWINDOW: i32 = 2;
 
 pub(crate) fn rgba_to_colorref(c: [u8; 4]) -> COLORREF {
     COLORREF(u32::from(c[0]) | (u32::from(c[1]) << 8) | (u32::from(c[2]) << 16))
@@ -29,6 +35,33 @@ pub(crate) unsafe fn apply_dwm_dark_mode(hwnd: HWND, dark: bool) {
         (&flag as *const i32).cast::<c_void>(),
         std::mem::size_of::<i32>() as u32,
     );
+}
+
+pub(crate) unsafe fn apply_dwm_backdrop(hwnd: HWND, glass: bool) {
+    let backdrop: i32 = if glass {
+        DWMSBT_MAINWINDOW
+    } else {
+        DWMSBT_NONE
+    };
+    let _ = DwmSetWindowAttribute(
+        hwnd,
+        DWMWA_SYSTEMBACKDROP_TYPE_ATTR,
+        (&backdrop as *const i32).cast::<c_void>(),
+        std::mem::size_of::<i32>() as u32,
+    );
+}
+
+pub(crate) fn settings_client_to_screen(pt: PixelPoint) -> PixelPoint {
+    let hwnd = SETTINGS_UI.with(|ui| ui.borrow().hwnd);
+    let Some(h) = hwnd else {
+        return pt;
+    };
+    let mut p = POINT { x: pt.x, y: pt.y };
+    // SAFETY: Converting client coordinates to screen coordinates on an owned HWND.
+    unsafe {
+        let _ = ClientToScreen(h, &mut p);
+    }
+    PixelPoint { x: p.x, y: p.y }
 }
 
 pub(crate) unsafe fn make_child_edit(

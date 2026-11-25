@@ -14,11 +14,17 @@ pub struct AppPaths {
     pub docks_cfg: PathBuf,
     pub widgets_cfg: PathBuf,
     pub sysmon_cfg: PathBuf,
+    pub weather_cfg: PathBuf,
+    pub notes_cfg: PathBuf,
+    pub menus_cfg: PathBuf,
+    pub github_backup_cfg: PathBuf,
+    pub settings_ui_cfg: PathBuf,
     pub overlay_cfg: PathBuf,
     pub backup_cfg: PathBuf,
     pub webdav_cfg: PathBuf,
     pub appearance_cfg: PathBuf,
     pub sync_cfg: PathBuf,
+    pub notes_dir: PathBuf,
     pub backups_dir: PathBuf,
     pub cache_dir: PathBuf,
     pub logs_dir: PathBuf,
@@ -37,11 +43,17 @@ impl AppPaths {
             docks_cfg: config_dir.join("docks.cfg"),
             widgets_cfg: config_dir.join("widgets.cfg"),
             sysmon_cfg: config_dir.join("sysmon.cfg"),
+            weather_cfg: config_dir.join("weather.cfg"),
+            notes_cfg: config_dir.join("notes.cfg"),
+            menus_cfg: config_dir.join("menus.cfg"),
+            github_backup_cfg: config_dir.join("github_backup.cfg"),
+            settings_ui_cfg: config_dir.join("settings_ui.cfg"),
             overlay_cfg: config_dir.join("overlay.cfg"),
             backup_cfg: config_dir.join("backup.cfg"),
             webdav_cfg: config_dir.join("webdav.cfg"),
             appearance_cfg: config_dir.join("appearance.cfg"),
             sync_cfg: config_dir.join("sync.cfg"),
+            notes_dir: data_dir.join("notes"),
             backups_dir: data_dir.join("backups"),
             cache_dir: data_dir.join("cache"),
             logs_dir: data_dir.join("logs"),
@@ -59,7 +71,7 @@ pub fn build_about_text(version: &str, paths: &AppPaths) -> String {
         "Все настройки, кэш, резервные копии и логи хранятся в папке data рядом с asrbox.exe.\r\n",
     );
     out.push_str(
-        "Автозагрузка (по желанию) пишет 1 ключ HKCU\\...\\Run; пароли WebDAV — в Диспетчере учётных данных Windows.\r\n",
+        "Автозагрузка (по желанию) пишет 1 ключ HKCU\\...\\Run; пароли и токены — в Диспетчере учётных данных Windows.\r\n",
     );
     out.push_str("При обновлении программы достаточно закрыть asrbox.exe и заменить файл\r\n");
     out.push_str("новой версией в той же папке — все настройки сохраняются автоматически.\r\n\r\n");
@@ -85,8 +97,13 @@ pub fn build_paths_clipboard(paths: &AppPaths) -> String {
          Настройки доков  : {}\r\n\
          Настройки календ.: {}\r\n\
          Системн. монитор : {}\r\n\
+         Виджет Погоды    : {}\r\n\
+         Виджет Заметок   : {}\r\n\
+         База заметок     : {}\r\n\
+         Контекстные меню : {}\r\n\
          Игровой оверлей  : {}\r\n\
          Настройки бэкапа : {}\r\n\
+         GitHub бэкап     : {}\r\n\
          Настройки WebDAV : {}\r\n\
          Синхронизация    : {}\r\n\
          Папка бэкапов    : {}\r\n\
@@ -99,8 +116,13 @@ pub fn build_paths_clipboard(paths: &AppPaths) -> String {
         paths.docks_cfg.display(),
         paths.widgets_cfg.display(),
         paths.sysmon_cfg.display(),
+        paths.weather_cfg.display(),
+        paths.notes_cfg.display(),
+        paths.notes_dir.display(),
+        paths.menus_cfg.display(),
         paths.overlay_cfg.display(),
         paths.backup_cfg.display(),
+        paths.github_backup_cfg.display(),
         paths.webdav_cfg.display(),
         paths.sync_cfg.display(),
         paths.backups_dir.display(),
@@ -119,10 +141,14 @@ mod tests {
             PathBuf::from("D:\\Tools\\asrbox\\asrbox.exe"),
             PathBuf::from("D:\\Tools\\asrbox\\data"),
         );
-        let text = build_about_text("0.0.5", &paths);
-        assert!(text.contains("asrbox v0.0.5"));
+        let text = build_about_text("0.0.8", &paths);
+        assert!(text.contains("asrbox v0.0.8"));
         assert!(text.contains("ПОРТАТИВНАЯ СБОРКА"));
         assert!(text.contains("appearance.cfg"));
+        assert!(text.contains("weather.cfg"));
+        assert!(text.contains("notes.cfg"));
+        assert!(text.contains("menus.cfg"));
+        assert!(text.contains("github_backup.cfg"));
         assert!(text.contains("sync.cfg"));
         assert!(text.contains("widgets.cfg"));
         assert!(text.contains("docks.cfg"));

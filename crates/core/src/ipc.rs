@@ -8,6 +8,9 @@ pub enum SupervisorCmd {
     RefreshCalendar,
     ToggleSysMonitor,
     RefreshSysMonitor,
+    ToggleWeather,
+    RefreshWeather,
+    ToggleNotes,
     SetOverlaySetupMode(bool),
     Shutdown,
 }
@@ -51,6 +54,9 @@ pub fn encode_supervisor_cmd(cmd: &SupervisorCmd) -> String {
         SupervisorCmd::RefreshCalendar => "REFRESH_CALENDAR".to_owned(),
         SupervisorCmd::ToggleSysMonitor => "TOGGLE_SYSMON".to_owned(),
         SupervisorCmd::RefreshSysMonitor => "REFRESH_SYSMON".to_owned(),
+        SupervisorCmd::ToggleWeather => "TOGGLE_WEATHER".to_owned(),
+        SupervisorCmd::RefreshWeather => "REFRESH_WEATHER".to_owned(),
+        SupervisorCmd::ToggleNotes => "TOGGLE_NOTES".to_owned(),
         SupervisorCmd::SetOverlaySetupMode(on) => {
             format!("OVERLAY_SETUP|{}", if *on { 1 } else { 0 })
         }
@@ -77,6 +83,15 @@ pub fn decode_supervisor_cmd(line: &str) -> Option<SupervisorCmd> {
     }
     if t == "REFRESH_SYSMON" {
         return Some(SupervisorCmd::RefreshSysMonitor);
+    }
+    if t == "TOGGLE_WEATHER" {
+        return Some(SupervisorCmd::ToggleWeather);
+    }
+    if t == "REFRESH_WEATHER" {
+        return Some(SupervisorCmd::RefreshWeather);
+    }
+    if t == "TOGGLE_NOTES" {
+        return Some(SupervisorCmd::ToggleNotes);
     }
     if t == "SHUTDOWN" {
         return Some(SupervisorCmd::Shutdown);
@@ -186,6 +201,9 @@ mod tests {
             SupervisorCmd::RefreshCalendar,
             SupervisorCmd::ToggleSysMonitor,
             SupervisorCmd::RefreshSysMonitor,
+            SupervisorCmd::ToggleWeather,
+            SupervisorCmd::RefreshWeather,
+            SupervisorCmd::ToggleNotes,
             SupervisorCmd::SetOverlaySetupMode(true),
             SupervisorCmd::SetOverlaySetupMode(false),
             SupervisorCmd::Shutdown,

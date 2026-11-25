@@ -17,8 +17,14 @@ pub enum SysHitTarget {
     #[default]
     None,
     HeaderDrag,
+    SysInfoBtn,
     SettingsBtn,
     RefreshBtn,
+    CpuSection,
+    GpuSection,
+    RamDiskSection,
+    NetSection,
+    TopProcsSection,
 }
 
 pub struct SysRenderInput<'a> {
@@ -32,8 +38,17 @@ pub struct SysRenderInput<'a> {
     pub palette: FluentPalette,
 }
 
+fn section_heights(hi: i32) -> (i32, i32, i32, i32) {
+    let body_h = hi - SYSMON_HEADER_H - 8;
+    let cpu_h = (body_h * 19 / 100).clamp(64, 102);
+    let gpu_h = (body_h * 17 / 100).clamp(58, 92);
+    let ram_h = (body_h * 21 / 100).clamp(72, 118);
+    let net_h = (body_h * 16 / 100).clamp(54, 86);
+    (cpu_h, gpu_h, ram_h, net_h)
+}
+
 pub fn hit_test_sysmon(pt: PixelPoint, width: u32, height: u32) -> SysHitTarget {
-    let (w, h) = (width as i32, height as i32);
+    let (w, h) = (width.max(340) as i32, height.max(300) as i32);
     if pt.x < 0 || pt.y < 0 || pt.x >= w || pt.y >= h {
         return SysHitTarget::None;
     }
@@ -44,9 +59,27 @@ pub fn hit_test_sysmon(pt: PixelPoint, width: u32, height: u32) -> SysHitTarget 
         if pt.x >= w - 60 && pt.x < w - 36 {
             return SysHitTarget::SettingsBtn;
         }
+        if pt.x >= w - 86 && pt.x < w - 62 {
+            return SysHitTarget::SysInfoBtn;
+        }
         return SysHitTarget::HeaderDrag;
     }
-    SysHitTarget::None
+    let (cpu_h, gpu_h, ram_h, net_h) = section_heights(h);
+    let y_gpu = SYSMON_HEADER_H + cpu_h;
+    let y_ram = y_gpu + gpu_h;
+    let y_net = y_ram + ram_h;
+    let y_live = y_net + net_h;
+    if pt.y < y_gpu {
+        SysHitTarget::CpuSection
+    } else if pt.y < y_ram {
+        SysHitTarget::GpuSection
+    } else if pt.y < y_net {
+        SysHitTarget::RamDiskSection
+    } else if pt.y < y_live {
+        SysHitTarget::NetSection
+    } else {
+        SysHitTarget::TopProcsSection
+    }
 }
 
 pub fn render_sysmon_widget(inp: &SysRenderInput<'_>) -> WidgetFrame {
@@ -71,26 +104,42 @@ pub fn render_sysmon_widget(inp: &SysRenderInput<'_>) -> WidgetFrame {
         draw_top_bar(&mut c, inp, wi);
         draw_hline(c.frame, SYSMON_HEADER_H, div);
 
-        let body_h = hi - SYSMON_HEADER_H - 8;
-        let cpu_h = (body_h * 19 / 100).clamp(64, 102);
-        let gpu_h = (body_h * 17 / 100).clamp(58, 92);
-        let ram_h = (body_h * 21 / 100).clamp(72, 118);
-        let net_h = (body_h * 16 / 100).clamp(54, 86);
-
+        let (cpu_h, gpu_h, ram_h, net_h) = section_heights(hi);
         let y_cpu = SYSMON_HEADER_H;
-        draw_cpu_section(&mut c, inp, wi, y_cpu, cpu_h);
         let y_gpu = y_cpu + cpu_h;
+        let y_ram = y_gpu + gpu_h;
+        let y_net = y_ram + ram_h;
+        let y_live = y_net + net_h;
+        let live_h = hi - y_live - 6;
+
+        let hover_sec = [
+            (SysHitTarget::CpuSection, y_cpu, cpu_h),
+            (SysHitTarget::GpuSection, y_gpu, gpu_h),
+            (SysHitTarget::RamDiskSection, y_ram, ram_h),
+            (SysHitTarget::NetSection, y_net, net_h),
+            (SysHitTarget::TopProcsSection, y_live, live_h),
+        ];
+        let sec_hov = [
+            pal.menu_hover[0],
+            pal.menu_hover[1],
+            pal.menu_hover[2],
+            if pal.is_dark { 72 } else { 95 },
+        ];
+        for (target, sy, sh) in hover_sec {
+            if inp.hovered == target && sh > 8 {
+                fill_rounded_rect(c.frame, 6, sy + 2, wi - 12, sh - 4, 8.0, sec_hov);
+            }
+        }
+
+        draw_cpu_section(&mut c, inp, wi, y_cpu, cpu_h);
         draw_hline(c.frame, y_gpu, div);
         draw_gpu_section(&mut c, inp, wi, y_gpu, gpu_h);
-        let y_ram = y_gpu + gpu_h;
         draw_hline(c.frame, y_ram, div);
         draw_ram_disk_section(&mut c, inp, wi, y_ram, ram_h);
-        let y_net = y_ram + ram_h;
         draw_hline(c.frame, y_net, div);
         draw_net_section(&mut c, inp, wi, y_net, net_h);
-        let y_live = y_net + net_h;
         draw_hline(c.frame, y_live, div);
-        draw_live_procs(&mut c, inp, wi, y_live, hi - y_live - 6, div);
+        draw_live_procs(&mut c, inp, wi, y_live, live_h, div);
     }
 
     draw_resize_grip(&mut bgra, pal);
@@ -126,7 +175,7 @@ fn draw_top_bar(c: &mut Canvas<'_>, inp: &SysRenderInput<'_>, w: i32) {
         200,
     ];
     c.text(
-        [14, 7, w - 76, 20],
+        [14, 7, w - 102, 20],
         line,
         12,
         false,
@@ -135,6 +184,7 @@ fn draw_top_bar(c: &mut Canvas<'_>, inp: &SysRenderInput<'_>, w: i32) {
     );
 
     let btns = [
+        (SysHitTarget::SysInfoBtn, w - 86, "ⓘ"),
         (SysHitTarget::SettingsBtn, w - 60, "⚙"),
         (SysHitTarget::RefreshBtn, w - 34, "↻"),
     ];

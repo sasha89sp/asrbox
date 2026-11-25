@@ -6,8 +6,8 @@ use std::time::Instant;
 
 use asrbox_mod_about::AppPaths;
 use asrbox_mod_backup::{
-    create_backup, find_latest_backup, load_backup_config, save_backup_config, BackupConfig,
-    BackupMode,
+    find_latest_backup, load_backup_config, load_github_config, save_backup_config, BackupConfig,
+    BackupMode, GitHubBackupConfig, BACKUP_ZIP_CRED_TARGET, GITHUB_TOKEN_CRED_TARGET,
 };
 use asrbox_mod_settings::{
     BackupSettingsView, WebDavBrowserView, WebDavDraftView, WebDavServerView,
@@ -35,16 +35,21 @@ pub(crate) struct WebDavBrowserState {
 }
 
 pub(crate) struct BackupController {
-    exe_path: PathBuf,
-    config_dir: PathBuf,
-    backups_dir: PathBuf,
+    pub(crate) exe_path: PathBuf,
+    pub(crate) config_dir: PathBuf,
+    pub(crate) notes_dir: PathBuf,
+    pub(crate) backups_dir: PathBuf,
     pub(crate) backup_cfg_path: PathBuf,
+    pub(crate) github_cfg_path: PathBuf,
     pub(crate) webdav_cfg_path: PathBuf,
     pub(crate) sync_cfg_path: PathBuf,
     pub(crate) backup_cfg: BackupConfig,
+    pub(crate) github_cfg: GitHubBackupConfig,
     pub(crate) webdav_store: WebDavStore,
     pub(crate) sync_cfg: FileSyncConfig,
     saved_passwords: HashMap<String, bool>,
+    pub(crate) has_zip_password: bool,
+    pub(crate) has_github_token: bool,
     server_statuses: HashMap<String, String>,
     pub(crate) draft: Option<WebDavDraftState>,
     pub(crate) browser: Option<WebDavBrowserState>,
@@ -52,6 +57,9 @@ pub(crate) struct BackupController {
     pub(crate) pending_test_op: Option<u64>,
     pending_upload_op: Option<u64>,
     pub(crate) pending_sync_op: Option<u64>,
+    pub(crate) pending_github_op: Option<u64>,
+    pub(crate) pending_backup_after_gh: Option<(BackupMode, LocalDateTime)>,
+    pub(crate) pending_gh_temp_path: Option<PathBuf>,
     upload_queue: VecDeque<(String, PathBuf, String)>,
     pub(crate) sync_queue: VecDeque<(String, PathBuf)>,
     pub(crate) last_auto_sync: Instant,
@@ -60,19 +68,25 @@ pub(crate) struct BackupController {
 impl BackupController {
     pub(crate) fn load(paths: &AppPaths, host: &dyn ToolsPlatform) -> Self {
         let backup_cfg = load_backup_config(&paths.backup_cfg);
+        let github_cfg = load_github_config(&paths.github_backup_cfg);
         let webdav_store = load_webdav_store(&paths.webdav_cfg);
         let sync_cfg = load_sync_config(&paths.sync_cfg);
         let mut ctrl = Self {
             exe_path: paths.exe_path.clone(),
             config_dir: paths.data_dir.join("config"),
+            notes_dir: paths.notes_dir.clone(),
             backups_dir: paths.backups_dir.clone(),
             backup_cfg_path: paths.backup_cfg.clone(),
+            github_cfg_path: paths.github_backup_cfg.clone(),
             webdav_cfg_path: paths.webdav_cfg.clone(),
             sync_cfg_path: paths.sync_cfg.clone(),
             backup_cfg,
+            github_cfg,
             webdav_store,
             sync_cfg,
             saved_passwords: HashMap::new(),
+            has_zip_password: false,
+            has_github_token: false,
             server_statuses: HashMap::new(),
             draft: None,
             browser: None,
@@ -80,6 +94,9 @@ impl BackupController {
             pending_test_op: None,
             pending_upload_op: None,
             pending_sync_op: None,
+            pending_github_op: None,
+            pending_backup_after_gh: None,
+            pending_gh_temp_path: None,
             upload_queue: VecDeque::new(),
             sync_queue: VecDeque::new(),
             last_auto_sync: Instant::now(),
@@ -139,11 +156,15 @@ impl BackupController {
         });
         BackupSettingsView {
             auto_upload_cloud: self.backup_cfg.auto_upload_cloud,
+            encrypt_zip: self.backup_cfg.encrypt_zip,
+            has_zip_password: self.has_zip_password,
             target_server_ids: self.backup_cfg.target_server_ids.clone(),
             last_backup_file: self.backup_cfg.last_backup_file.clone(),
             last_backup_time: self.backup_cfg.last_backup_time.clone(),
             cloud_status: self.backup_cfg.last_cloud_status.clone(),
-            busy: self.pending_upload_op.is_some() || !self.upload_queue.is_empty(),
+            busy: self.pending_upload_op.is_some()
+                || !self.upload_queue.is_empty()
+                || self.pending_github_op.is_some(),
             servers,
             draft,
             browser,
@@ -176,39 +197,10 @@ impl BackupController {
         mode: BackupMode,
         now: LocalDateTime,
     ) -> Result<String, String> {
-        let art = create_backup(
-            mode,
-            &self.exe_path,
-            &self.config_dir,
-            &self.backups_dir,
-            now,
-        )?;
-        self.backup_cfg.last_backup_file = art.file_name.clone();
-        self.backup_cfg.last_backup_time = format!(
-            "{:02}.{:02}.{:04} {:02}:{:02}",
-            now.day, now.month, now.year, now.hour, now.minute
-        );
-        let kb = art.bytes.div_ceil(1024);
-        let mut summary = format!(
-            "Бэкап ({}) создан: {} ({} КБ, файлов: {})",
-            mode.label_ru(),
-            art.file_name,
-            kb,
-            art.entry_count
-        );
-        if self.backup_cfg.auto_upload_cloud {
-            match self.enqueue_upload_to_targets(host, &art.path, &art.file_name) {
-                Ok(msg) => {
-                    summary.push_str(" · ");
-                    summary.push_str(&msg);
-                }
-                Err(err) => {
-                    self.backup_cfg.last_cloud_status = format!("Автозагрузка пропущена: {err}");
-                }
-            }
+        if self.github_cfg.include_in_backup && !self.github_cfg.repo.trim().is_empty() {
+            return self.start_github_download_for_backup(host, mode, now);
         }
-        let _ = save_backup_config(&self.backup_cfg_path, &self.backup_cfg);
-        Ok(summary)
+        self.finish_create_backup(host, mode, now, &[])
     }
 
     pub(crate) fn upload_latest(&mut self, host: &dyn ToolsPlatform) -> Result<String, String> {
@@ -271,7 +263,7 @@ impl BackupController {
         }
     }
 
-    fn enqueue_upload_to_targets(
+    pub(crate) fn enqueue_upload_to_targets(
         &mut self,
         host: &dyn ToolsPlatform,
         local_path: &Path,
@@ -392,5 +384,15 @@ impl BackupController {
             let has = host.cred_load(&srv.cred_target()).ok().flatten().is_some();
             self.saved_passwords.insert(srv.id.clone(), has);
         }
+        self.has_zip_password = host
+            .cred_load(BACKUP_ZIP_CRED_TARGET)
+            .ok()
+            .flatten()
+            .is_some();
+        self.has_github_token = host
+            .cred_load(GITHUB_TOKEN_CRED_TARGET)
+            .ok()
+            .flatten()
+            .is_some();
     }
 }

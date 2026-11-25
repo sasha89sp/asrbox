@@ -11,7 +11,8 @@ pub mod storage;
 use std::path::PathBuf;
 
 use asrbox_platform_api::{
-    DockMenuAction, DockMenuState, IconRequest, PixelPoint, PixelRect, WidgetLayer,
+    DockMenuAction, DockMenuState, DockMenuVisibility, IconRequest, PixelPoint, PixelRect,
+    WidgetLayer,
 };
 
 pub use config::{
@@ -39,7 +40,12 @@ pub fn icon_request_for_item(item: &DockItem) -> IconRequest {
     }
 }
 
-pub fn build_menu_state(dock: &DockInstance, pt: Point, can_remove: bool) -> DockMenuState {
+pub fn build_menu_state(
+    dock: &DockInstance,
+    pt: Point,
+    can_remove: bool,
+    menu_vis: DockMenuVisibility,
+) -> DockMenuState {
     let cfg = dock.config();
     let edge_code = match cfg.edge {
         DockEdge::Left => 0,
@@ -60,6 +66,7 @@ pub fn build_menu_state(dock: &DockInstance, pt: Point, can_remove: bool) -> Doc
         icon_size_px: cfg.icon_size_px,
         opacity_percent: cfg.opacity_percent,
         locked: cfg.locked,
+        lock_items: cfg.lock_items,
         hover_zoom_enabled: cfg.hover_zoom.enabled,
         show_running_indicator: cfg.show_running_indicator,
         focus_running_window: cfg.focus_running_window,
@@ -68,6 +75,7 @@ pub fn build_menu_state(dock: &DockInstance, pt: Point, can_remove: bool) -> Doc
         hovered_is_separator,
         show_settings_button: cfg.show_settings_button,
         can_remove_dock: can_remove,
+        menu_vis,
     }
 }
 
@@ -102,6 +110,7 @@ pub fn apply_menu_action(
             cfg.free_pos = None;
         }
         DockMenuAction::ToggleLock => cfg.locked = !cfg.locked,
+        DockMenuAction::ToggleLockItems => cfg.lock_items = !cfg.lock_items,
         DockMenuAction::SetOpacity(pct) => {
             cfg.opacity_percent = pct.clamp(MIN_DOCK_OPACITY, MAX_DOCK_OPACITY);
         }

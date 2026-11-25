@@ -4,7 +4,9 @@ use asrbox_platform_api::PixelRect;
 use crate::i18n::tr;
 use crate::layout::{ButtonTone, CardRow, HitKind, LayoutBuilder};
 use crate::layout_cal::build_calendar_body;
+use crate::layout_dev::add_widget_menu_section;
 use crate::layout_sys::build_sysmon_body;
+use crate::layout_weather_notes::{build_notes_body, build_weather_body};
 use crate::types::{SettingsAction, SettingsSnapshot, WidgetSubTab};
 
 pub(crate) fn row(
@@ -50,12 +52,12 @@ pub(crate) fn add_module_process_card(
     let card_y = b.add_card(
         Some(tr(lang, "МОДУЛЬ И ПРОЦЕСС", "MODULE & PROCESS")),
         false,
-        vec![row(0, 58, id.display_name(), Some(&status), None, false)],
+        vec![row(0, 56, id.display_name(), Some(&status), None, false)],
     );
     let tx = b.content_x + b.content_w as i32 - 58;
     b.push_toggle(
         tx,
-        card_y + 18,
+        card_y + 17,
         enabled,
         SettingsAction::SetModuleEnabled {
             id,
@@ -64,7 +66,7 @@ pub(crate) fn add_module_process_card(
     );
     if enabled {
         b.push_btn(
-            (tx - 110, card_y + 15, 98, 28),
+            (tx - 110, card_y + 14, 98, 28),
             tr(lang, "Перезапуск", "Restart"),
             ButtonTone::Secondary,
             SettingsAction::RestartModule(id),
@@ -82,46 +84,56 @@ pub(crate) fn build_widgets_tab(
         tr(lang, "Виджеты", "Widgets"),
         tr(
             lang,
-            "Google Календарь и Системный монитор работают в одном изолированном процессе",
-            "Google Calendar and System Monitor run inside one isolated worker process",
+            "Календарь, Системный монитор, Погода и Заметки работают в одном изолированном процессе",
+            "Calendar, System Monitor, Weather and Notes run inside one isolated worker process",
         ),
     );
     add_module_process_card(b, snap, ModuleId::Widgets);
 
     let sel_y = b.cursor_y;
-    let x = b.content_x;
-    let cal_w = 178u32;
-    let sys_w = 186u32;
-    b.push_control(
-        PixelRect {
-            x,
-            y: b.sy(sel_y),
-            width: cal_w,
-            height: 32,
-        },
-        HitKind::SelectWidgetSubTab {
-            sub: WidgetSubTab::Calendar,
-            label: tr(lang, "Google Календарь", "Google Calendar").to_owned(),
-            active: selected == WidgetSubTab::Calendar,
-        },
-    );
-    b.push_control(
-        PixelRect {
-            x: x + cal_w as i32 + 8,
-            y: b.sy(sel_y),
-            width: sys_w,
-            height: 32,
-        },
-        HitKind::SelectWidgetSubTab {
-            sub: WidgetSubTab::SysMonitor,
-            label: tr(lang, "Системный монитор", "System Monitor").to_owned(),
-            active: selected == WidgetSubTab::SysMonitor,
-        },
-    );
-    b.cursor_y = sel_y + 46;
+    let tabs = [
+        (WidgetSubTab::Calendar, tr(lang, "Календарь", "Calendar")),
+        (WidgetSubTab::SysMonitor, tr(lang, "Монитор", "Monitor")),
+        (WidgetSubTab::Weather, tr(lang, "Погода", "Weather")),
+        (WidgetSubTab::Notes, tr(lang, "Заметки", "Notes")),
+    ];
+    let gap = 8i32;
+    let tab_w = ((b.content_w as i32 - gap * 3) / 4).max(96) as u32;
+    for (idx, (sub, label)) in tabs.into_iter().enumerate() {
+        b.push_control(
+            PixelRect {
+                x: b.content_x + (idx as i32) * (tab_w as i32 + gap),
+                y: b.sy(sel_y),
+                width: tab_w,
+                height: 32,
+            },
+            HitKind::SelectWidgetSubTab {
+                sub,
+                label: label.to_owned(),
+                active: selected == sub,
+            },
+        );
+    }
+    b.cursor_y = sel_y + 44;
 
     match selected {
         WidgetSubTab::Calendar => build_calendar_body(b, snap),
         WidgetSubTab::SysMonitor => build_sysmon_body(b, snap),
+        WidgetSubTab::Weather => build_weather_body(b, snap),
+        WidgetSubTab::Notes => build_notes_body(b, snap),
     }
+    add_widget_menu_section(b, snap.menus.widget);
+}
+
+pub(crate) fn build_all_widgets_for_search(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
+    if b.matches_search("календарь ics события период google calendar") {
+        build_calendar_body(b, snap);
+    }
+    if b.matches_search("системный монитор cpu gpu ram диск процессы monitor")
+    {
+        build_sysmon_body(b, snap);
+    }
+    build_weather_body(b, snap);
+    build_notes_body(b, snap);
+    add_widget_menu_section(b, snap.menus.widget);
 }

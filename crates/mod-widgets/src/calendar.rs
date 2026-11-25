@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
 use asrbox_platform_api::{
-    FluentPalette, HttpFetchResult, PixelPoint, WidgetLayer, WidgetMenuAction, WidgetPlatform,
+    FluentPalette, HttpFetchResult, PixelPoint, WidgetLayer, WidgetMenuAction,
+    WidgetMenuVisibility, WidgetPlatform,
 };
 
 use crate::calendar_view::{
@@ -27,6 +28,7 @@ pub struct CalendarWidget {
     window_open: bool,
     st: CalendarState,
     palette: FluentPalette,
+    menu_vis: WidgetMenuVisibility,
 }
 
 impl CalendarWidget {
@@ -41,7 +43,12 @@ impl CalendarWidget {
             window_open: false,
             st,
             palette: FluentPalette::default(),
+            menu_vis: WidgetMenuVisibility::default(),
         }
+    }
+
+    pub fn set_menu_visibility(&mut self, vis: WidgetMenuVisibility) {
+        self.menu_vis = vis;
     }
 
     pub fn set_palette(&mut self, host: &mut dyn WidgetPlatform, palette: FluentPalette) {
@@ -197,7 +204,7 @@ impl CalendarWidget {
     }
 
     pub fn on_right_click(&mut self, host: &mut dyn WidgetPlatform, screen: PixelPoint) -> String {
-        let state = calendar_menu_state(&self.config);
+        let state = calendar_menu_state(&self.config, self.menu_vis);
         let Ok(Some(action)) = host.show_widget_menu(CALENDAR_WIDGET_ID, screen, &state) else {
             return String::new();
         };

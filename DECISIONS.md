@@ -198,3 +198,18 @@
   3. Добавить `DockMenuAction::OpenItemFolder(u64)` и `DockPlatform::open_item_location(&Path)` с разыменованием `.lnk` (`IShellLinkW`) и открытием Проводника `explorer.exe /select,"..."`.
   4. Закрыть найденные аудитом узкие места: кэшировать `SettingsSnapshot` в `AppController` (0 дисковых чтений на `MouseMove`/`Closed`), отправлять `PointerLeave` при внешней потере захвата `WM_CAPTURECHANGED`, вызывать `ReleaseCapture()` перед Fluent-меню/диалогами, использовать `"Segoe UI Variable"` без двойной гаммы в `DirectWrite` и чистить `data/shortcuts/` при удалении дока/значков.
 - **Причина**: Корректное отображение фирменной иконки на всех системных поверхностях Windows (Проводник, Диспетчер задач, панель задач, трей), узнаваемый спокойный стиль Windows 11, удобный доступ к папке ярлыка и снижение лишнего I/O в UI без добавления зависимостей.
+
+---
+
+## ADR-019: Расширяемая дизайн-система «Стеклянный блок ASR», чистый Rust WinZip AES-256, GitHub-бэкап, настраиваемые меню и виджеты «Погода» и «Заметки» (`v0.0.8`)
+
+- **Статус**: Принято (v0.0.8, согласовано владельцем)
+- **Решение**:
+  1. Ввести расширяемое перечисление стилей `DesignTheme` (`AsrGlass` по умолчанию + `Win11Classic`, `appearance.cfg`) с общим генератором фирменного логотипа «Стеклянный блок ASR» (`crates/platform-api/src/logo.rs` + PE-иконка `16..256 px` в `crates/app/build.rs`), аккордеон-секциями в Настройках (`settings_ui.cfg`), глобальным поиском по всем 4 разделам, Fluent-комбобоксами (`ComboBox`) и безопасным подтверждением сброса настроек внутри «Общие настройки».
+  2. Добавить независимую блокировку значков док-панели (`lock_items` в `docks.cfg`) и отключить автопримагничивание к краям при свободном перемещении откреплённой панели (смена края — только через Настройки/ПКМ-меню).
+  3. Реализовать опциональное шифрование `.zip`-бэкапов по стандарту WinZip AE-2 AES-256 на чистом Rust `std` (`crates/mod-backup/src/crypto.rs`, zero new crates, `docs/LICENSES.md` без изменений) с криптостойкой солью через `BCryptGenRandom` (активирована фича `Win32_Security_Cryptography` существующего `windows = "0.61"`) и хранением пароля исключительно в Windows Credential Manager (`asrbox:backup:zip_password`).
+  4. Добавить раздел «Для разработчика · Бэкап исходного кода GitHub» (`github_backup.cfg`, PAT только в Windows Credential Manager `asrbox:github:token`, строгая валидация `owner/repo` и `branch`, фоновая загрузка `zipball` через WinHTTP с возможностью вложения в ZIP-бэкап).
+  5. Вынести состав ПКМ-меню трея, док-панелей и виджетов в портативный `./data/config/menus.cfg` (`ContextMenuConfig`) и добавить кликабельные системные действия в виджете «Системный монитор» (`taskmgr.exe`, `explorer.exe shell:MyComputerFolder`, `resmon.exe`, `ms-settings:display`, `ncpa.cpl`, `msinfo32.exe`).
+  6. Разместить два новых виджета — **Погода** (`WEATHER_WIDGET_ID = 3`, Open-Meteo без API-ключа, `weather.cfg`) и **Заметки и задачи** (`NOTES_WIDGET_ID = 4`, 3-колоночный офлайн-редактор `data/notes/notes_db.cfg` + `notes.cfg`) — внутри существующего воркера `--worker widgets` (`crates/mod-widgets`) без лишних процессов и без новых внешних крейтов.
+- **Причина**: Полное сохранение бюджетов `NF-001..NF-005` (ни одного нового внешнего крейта, минимальный `.exe` и RAM), безопасность паролей/токенов через Credential Manager, расширяемость тем оформления и богатый набор автономных десктоп-виджетов в едином стиле.
+

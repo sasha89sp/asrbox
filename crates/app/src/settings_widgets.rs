@@ -24,7 +24,10 @@ impl<I: IconProvider> AppController<I> {
         host: &mut H,
         action: &SettingsAction,
     ) {
-        if self.apply_sysmon_setting(host, action) {
+        if self.apply_sysmon_setting(host, action)
+            || self.apply_weather_setting(host, action)
+            || self.apply_notes_setting(host, action)
+        {
             return;
         }
         self.apply_calendar_setting(host, action);
@@ -272,6 +275,9 @@ fn apply_dock_prop(cfgs: &mut Vec<DockConfig>, action: &SettingsAction) -> Optio
         }),
         SettingsAction::SetDockLocked { dock_id, locked } => {
             edit_dock(cfgs, dock_id, |c| c.locked = *locked)
+        }
+        SettingsAction::SetDockLockItems { dock_id, locked } => {
+            edit_dock(cfgs, dock_id, |c| c.lock_items = *locked)
         }
         SettingsAction::SetDockShowRunning { dock_id, enabled } => {
             edit_dock(cfgs, dock_id, |c| c.show_running_indicator = *enabled)

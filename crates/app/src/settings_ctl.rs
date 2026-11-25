@@ -6,10 +6,13 @@ use asrbox_mod_debug::LogLevel;
 use asrbox_mod_dock::{load_docks_from_file, DockEdge};
 use asrbox_mod_settings::{
     AboutSettingsView, AppearanceSettingsView, BrowserTab, CalendarSettingsView,
-    CalendarSourceView, DiagnosticsLiveView, DockItemView, DockSettingsView, SettingsAction,
-    SettingsSnapshot, SettingsTab, SysMonitorSettingsView, WidgetSubTab,
+    CalendarSourceView, DiagnosticsLiveView, DockItemView, DockSettingsView, NotesSettingsView,
+    SettingsAction, SettingsSnapshot, SettingsTab, SysMonitorSettingsView, WeatherSettingsView,
+    WidgetSubTab,
 };
-use asrbox_mod_widgets::{load_sysmon_config, load_widget_config, PeriodFilter};
+use asrbox_mod_widgets::{
+    load_notes_config, load_sysmon_config, load_weather_config, load_widget_config, PeriodFilter,
+};
 use asrbox_platform_api::{
     DockPlatform, IconProvider, SettingsUiEvent, ToolsPlatform, WidgetPlatform,
 };
@@ -26,6 +29,7 @@ impl<I: IconProvider> AppController<I> {
         self.settings_ui.active_browser_tab = BrowserTab::Main;
         self.settings_ui.scroll_y = 0;
         self.last_settings_tab = None;
+        self.last_widget_subtab = None;
         let title = format!("Настройки — asrbox v{APP_VERSION}");
         let w = self.settings_ui.width;
         let h = self.settings_ui.height;
@@ -78,23 +82,6 @@ impl<I: IconProvider> AppController<I> {
         }
     }
 
-    fn sync_settings_tab_inputs<H: ToolsPlatform>(&mut self, host: &H) {
-        let cur = self.settings_ui.active_tab;
-        if self.last_settings_tab == Some(cur) {
-            return;
-        }
-        let prev = self.last_settings_tab;
-        self.last_settings_tab = Some(cur);
-        match cur {
-            SettingsTab::Dock => self.settings_ui.reset_dock_input_sync(),
-            SettingsTab::Widgets => host.set_settings_input_text(0, ""),
-            SettingsTab::General if prev == Some(SettingsTab::Dock) => {
-                host.set_settings_input_text(0, "");
-            }
-            _ => {}
-        }
-    }
-
     pub(crate) fn on_settings_event<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
         &mut self,
         host: &mut H,
@@ -102,6 +89,7 @@ impl<I: IconProvider> AppController<I> {
     ) {
         if matches!(ev, SettingsUiEvent::Closed) {
             self.last_settings_tab = None;
+            self.last_widget_subtab = None;
             self.cached_settings_snap = None;
             host.set_settings_anim_timer(false);
             if self.overlay_setup_mode {
@@ -147,6 +135,7 @@ impl<I: IconProvider> AppController<I> {
                 icon_size_px: u32::from(d.icon_size_px),
                 opacity_percent: d.opacity_percent,
                 locked: d.locked,
+                lock_items: d.lock_items,
                 show_running_indicator: d.show_running_indicator,
                 focus_running_window: d.focus_running_window,
                 launch_animation_enabled: d.launch_animation_enabled,
@@ -199,6 +188,26 @@ impl<I: IconProvider> AppController<I> {
             height: sys_cfg.height,
         };
 
+        let w_cfg = load_weather_config(&self.paths.weather_cfg).unwrap_or_default();
+        let weather = WeatherSettingsView {
+            visible: w_cfg.visible,
+            city: w_cfg.city,
+            opacity_percent: w_cfg.opacity_percent,
+            layer: w_cfg.layer,
+            refresh_interval_min: w_cfg.refresh_interval_min,
+            width: w_cfg.width,
+            height: w_cfg.height,
+        };
+        let n_cfg = load_notes_config(&self.paths.notes_cfg).unwrap_or_default();
+        let notes = NotesSettingsView {
+            visible: n_cfg.visible,
+            opacity_percent: n_cfg.opacity_percent,
+            layer: n_cfg.layer,
+            show_folders_pane: n_cfg.show_folders_pane,
+            show_list_pane: n_cfg.show_list_pane,
+            show_editor_pane: n_cfg.show_editor_pane,
+        };
+
         let diagnostics = if self.settings_ui.active_browser_tab == BrowserTab::Diagnostics {
             self.build_diagnostics_view(host)
         } else {
@@ -218,6 +227,7 @@ impl<I: IconProvider> AppController<I> {
 
         SettingsSnapshot {
             appearance: AppearanceSettingsView {
+                design_theme: self.appearance.design_theme,
                 theme: self.appearance.theme,
                 accent: self.appearance.accent,
                 language: self.appearance.language,
@@ -229,8 +239,12 @@ impl<I: IconProvider> AppController<I> {
             docks,
             calendar,
             sysmon,
+            weather,
+            notes,
             overlay: self.build_overlay_settings_view(),
             backup: self.backup.backup_view(self.appearance.language),
+            github: self.backup.github_view(),
+            menus: self.menus_cfg,
             diagnostics,
             about: AboutSettingsView {
                 version: APP_VERSION.to_owned(),
@@ -244,13 +258,17 @@ impl<I: IconProvider> AppController<I> {
         }
     }
 
-    fn apply_settings_action<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
+    pub(crate) fn apply_settings_action<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
         &mut self,
         host: &mut H,
         action: SettingsAction,
     ) {
         let now = host.local_time_now();
         match action {
+            SettingsAction::OpenCombo {
+                kind,
+                anchor_client,
+            } => self.handle_open_combo(host, &kind, anchor_client),
             SettingsAction::SetIsolation(mode) => {
                 if self.modules_cfg.isolation != mode {
                     self.modules_cfg.isolation = mode;

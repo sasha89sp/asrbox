@@ -8,7 +8,9 @@ use asrbox_mod_about::{build_paths_clipboard, AppPaths};
 use asrbox_mod_debug::LogLevel;
 use asrbox_mod_dock::load_docks_from_file;
 use asrbox_mod_settings::{BrowserTab, SettingsTab};
-use asrbox_mod_widgets::{load_sysmon_config, load_widget_config};
+use asrbox_mod_widgets::{
+    load_notes_config, load_sysmon_config, load_weather_config, load_widget_config,
+};
 use asrbox_platform_api::{
     AboutUiCommand, DebugUiCommand, DockPlatform, IconProvider, PixelPoint, ToolsPlatform,
     TrayAction, TrayMenuEntry, TrayModuleFlags, WidgetPlatform,
@@ -51,6 +53,24 @@ impl<I: IconProvider> AppController<I> {
                     .map(|c| c.visible)
                     .unwrap_or(true)
             });
+        let weather_vis = self
+            .weather
+            .as_ref()
+            .map(|w| w.is_visible())
+            .unwrap_or_else(|| {
+                load_weather_config(&self.paths.weather_cfg)
+                    .map(|c| c.visible)
+                    .unwrap_or(true)
+            });
+        let notes_vis = self
+            .notes
+            .as_ref()
+            .map(|n| n.is_visible())
+            .unwrap_or_else(|| {
+                load_notes_config(&self.paths.notes_cfg)
+                    .map(|c| c.visible)
+                    .unwrap_or(false)
+            });
         let flags = TrayModuleFlags {
             dock_module_enabled: self.modules_cfg.dock_enabled,
             widgets_module_enabled: self.modules_cfg.widgets_enabled,
@@ -58,7 +78,10 @@ impl<I: IconProvider> AppController<I> {
             overlay_setup_mode: self.overlay_setup_mode,
             calendar_visible: cal_vis,
             sys_monitor_visible: sys_vis,
+            weather_visible: weather_vis,
+            notes_visible: notes_vis,
             autostart_enabled: host.is_autostart_enabled(),
+            menu_vis: self.menus_cfg.tray,
         };
         let Ok(Some(action)) = host.show_tray_menu(screen, &entries, flags) else {
             return;
@@ -157,6 +180,17 @@ impl<I: IconProvider> AppController<I> {
             TrayAction::OpenSysMonitorConfig => {
                 let res = ToolsPlatform::open_text_file(host, &self.paths.sysmon_cfg);
                 self.log_io_result(now, "widgets", "Трей: открыт sysmon.cfg", res);
+            }
+            TrayAction::ToggleWeatherWidget => {
+                self.safe_mode = false;
+                self.send_or_run_widgets_cmd(host, SupervisorCmd::ToggleWeather);
+            }
+            TrayAction::RefreshWeatherWidget => {
+                self.send_or_run_widgets_cmd(host, SupervisorCmd::RefreshWeather);
+            }
+            TrayAction::ToggleNotesWidget => {
+                self.safe_mode = false;
+                self.send_or_run_widgets_cmd(host, SupervisorCmd::ToggleNotes);
             }
             TrayAction::ToggleOverlayModule => {
                 self.modules_cfg.overlay_enabled = !self.modules_cfg.overlay_enabled;
@@ -303,4 +337,36 @@ impl<I: IconProvider> AppController<I> {
             Err(e) => self.debug.log(now, LogLevel::Error, module, e),
         }
     }
+}
+
+pub(crate) fn install_crash_log_hook(logs_dir: &std::path::Path) {
+    use std::fs::{self, OpenOptions};
+    use std::io::Write;
+    let dir = logs_dir.to_path_buf();
+    let prev = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = fs::create_dir_all(&dir);
+        if let Ok(mut file) = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(dir.join("crash.log"))
+        {
+            let loc = info.location().map_or_else(
+                || "unknown".to_owned(),
+                |l| format!("{}:{}:{}", l.file(), l.line(), l.column()),
+            );
+            let msg = info
+                .payload()
+                .downcast_ref::<&str>()
+                .copied()
+                .or_else(|| info.payload().downcast_ref::<String>().map(String::as_str))
+                .unwrap_or("<non-string panic>");
+            let _ = writeln!(
+                file,
+                "[v{APP_VERSION}] pid={} panic at {loc}: {msg}",
+                std::process::id()
+            );
+        }
+        prev(info);
+    }));
 }

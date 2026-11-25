@@ -1,4 +1,4 @@
-use crate::config::{DockAlignment, DockConfig, DockEdge};
+use crate::config::{DockConfig, DockEdge};
 use crate::layout::{DockLayout, Point, Rect, SlotKind};
 
 pub fn drop_insert_index(layout: &DockLayout, edge: DockEdge, local_point: Point) -> usize {
@@ -25,6 +25,9 @@ pub fn drop_insert_index(layout: &DockLayout, edge: DockEdge, local_point: Point
     item_count
 }
 
+/// Applies free dragged dock coordinates clamped strictly inside `work_area`.
+/// Does NOT auto-snap to screen edges or mutate `cfg.edge` — edge attachment
+/// is controlled exclusively through Settings or the dock context menu.
 pub fn apply_dragged_window_pos(
     cfg: &mut DockConfig,
     work_area: Rect,
@@ -41,32 +44,7 @@ pub fn apply_dragged_window_pos(
     let max_y = work_area.y.saturating_add(ah.saturating_sub(wh).max(0));
     let cx = desired_x.clamp(work_area.x, max_x);
     let cy = desired_y.clamp(work_area.y, max_y);
-
-    let snap = 44;
-    let dist_top = (cy - work_area.y).abs();
-    let dist_bot = (max_y - cy).abs();
-    let dist_left = (cx - work_area.x).abs();
-    let dist_right = (max_x - cx).abs();
-    let min_dist = dist_top.min(dist_bot).min(dist_left).min(dist_right);
-
-    if min_dist <= snap {
-        cfg.free_pos = None;
-        if min_dist == dist_top {
-            cfg.edge = DockEdge::Top;
-            cfg.alignment = DockAlignment::Offset((cx - work_area.x).max(0));
-        } else if min_dist == dist_bot {
-            cfg.edge = DockEdge::Bottom;
-            cfg.alignment = DockAlignment::Offset((cx - work_area.x).max(0));
-        } else if min_dist == dist_left {
-            cfg.edge = DockEdge::Left;
-            cfg.alignment = DockAlignment::Offset((cy - work_area.y).max(0));
-        } else {
-            cfg.edge = DockEdge::Right;
-            cfg.alignment = DockAlignment::Offset((cy - work_area.y).max(0));
-        }
-    } else {
-        cfg.free_pos = Some((cx, cy));
-    }
+    cfg.free_pos = Some((cx, cy));
 }
 
 #[cfg(test)]
@@ -89,23 +67,23 @@ mod tests {
     }
 
     #[test]
-    fn unlocked_dock_has_drag_handle_and_snaps_to_top_offset() -> Result<(), Box<dyn Error>> {
-        let mut dock = DockConfig::new(1, "Top");
+    fn unlocked_dock_free_drag_does_not_auto_snap_to_edges() -> Result<(), Box<dyn Error>> {
+        let mut dock = DockConfig::new(1, "Free");
         dock.locked = false;
+        dock.edge = DockEdge::Bottom;
         dock.items
             .push(DockItem::from_dropped_path(1, PathBuf::from("a.exe"))?);
         dock.items.push(DockItem::separator(2));
         apply_dragged_window_pos(&mut dock, area(), 200, 72, 650, 12);
-        assert_eq!(dock.edge, DockEdge::Top);
-        assert_eq!(dock.alignment, DockAlignment::Offset(650));
-        assert_eq!(dock.free_pos, None);
+        assert_eq!(dock.edge, DockEdge::Bottom);
+        assert_eq!(dock.free_pos, Some((650, 12)));
         let layout = compute_layout(&dock, area(), HoverVisualState::default());
         assert_eq!(layout.slots[0].kind, SlotKind::DragHandle);
         let far_right = Point {
             x: 9999,
             y: layout.bar_rect.y + 10,
         };
-        assert_eq!(drop_insert_index(&layout, DockEdge::Top, far_right), 2);
+        assert_eq!(drop_insert_index(&layout, DockEdge::Bottom, far_right), 2);
         Ok(())
     }
 }

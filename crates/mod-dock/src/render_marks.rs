@@ -34,30 +34,42 @@ pub(crate) fn draw_running_dot(
     edge: DockEdge,
     pal: &FluentPalette,
 ) {
-    let (cx, cy) = match edge {
-        DockEdge::Bottom => (
+    let (cx, cy) = if pal.design_theme.is_glass() {
+        (
             base.x + i32::try_from(base.width / 2).unwrap_or(0),
-            base.y + i32::try_from(base.height).unwrap_or(0) + 5,
-        ),
-        DockEdge::Top => (
-            base.x + i32::try_from(base.width / 2).unwrap_or(0),
-            base.y - 5,
-        ),
-        DockEdge::Left => (
-            base.x - 5,
-            base.y + i32::try_from(base.height / 2).unwrap_or(0),
-        ),
-        DockEdge::Right => (
-            base.x + i32::try_from(base.width).unwrap_or(0) + 5,
-            base.y + i32::try_from(base.height / 2).unwrap_or(0),
-        ),
+            base.y.saturating_sub(4),
+        )
+    } else {
+        match edge {
+            DockEdge::Bottom => (
+                base.x + i32::try_from(base.width / 2).unwrap_or(0),
+                base.y + i32::try_from(base.height).unwrap_or(0) + 5,
+            ),
+            DockEdge::Top => (
+                base.x + i32::try_from(base.width / 2).unwrap_or(0),
+                base.y - 5,
+            ),
+            DockEdge::Left => (
+                base.x - 5,
+                base.y + i32::try_from(base.height / 2).unwrap_or(0),
+            ),
+            DockEdge::Right => (
+                base.x + i32::try_from(base.width).unwrap_or(0) + 5,
+                base.y + i32::try_from(base.height / 2).unwrap_or(0),
+            ),
+        }
     };
     let acc = pal.accent;
+    let rad = if pal.design_theme.is_glass() {
+        2.2
+    } else {
+        2.4
+    };
     for dy in -3..=3 {
         for dx in -3..=3 {
             let d = ((dx * dx + dy * dy) as f32).sqrt();
-            if d <= 2.4 {
-                let cov = (2.4 - d).clamp(0.0, 1.0);
+            if d <= rad {
+                let cov = (rad - d).clamp(0.0, 1.0);
                 let a = (245.0 * cov).round() as u8;
                 blend_pixel(frame, cx + dx, cy + dy, [acc[0], acc[1], acc[2], a]);
             }

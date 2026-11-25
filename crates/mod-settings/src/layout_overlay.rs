@@ -10,22 +10,41 @@ pub(crate) fn build_overlay_tab(b: &mut LayoutBuilder, snap: &SettingsSnapshot) 
         "Игровой оверлей",
         "Отдельный процесс · в игре клики проходят насквозь, без перехвата фокуса и фризов",
     );
-    add_module_process_card(b, snap, ModuleId::Overlay);
+    if !b.is_searching() {
+        add_module_process_card(b, snap, ModuleId::Overlay);
+    }
     add_overlay_mode_card(b, o);
     add_overlay_pos_card(b, o);
     add_overlay_size_card(b, o);
 
-    let (x, y) = (b.content_x, b.cursor_y);
-    b.push_btn(
-        (x, y, 174, 32),
-        "Открыть overlay.cfg",
-        ButtonTone::Secondary,
-        SettingsAction::OpenOverlayConfig,
-    );
-    b.cursor_y += 44;
+    if !b.is_searching() {
+        let (x, y) = (b.content_x, b.cursor_y);
+        b.push_btn(
+            (x, y, 174, 30),
+            "Открыть overlay.cfg",
+            ButtonTone::Secondary,
+            SettingsAction::OpenOverlayConfig,
+        );
+        b.cursor_y = y + 40;
+    }
 }
 
 fn add_overlay_mode_card(b: &mut LayoutBuilder, o: &OverlaySettingsView) {
+    let summary = if o.setup_mode {
+        "Режим настройки активен"
+    } else if o.auto_games_only {
+        "Только в играх"
+    } else {
+        "Всегда активен"
+    };
+    if !b.accordion(
+        "overlay_mode",
+        "Режим и настройка оверлея",
+        summary,
+        "оверлей игра автозапуск fullscreen topmost настройка overlay game setup",
+    ) {
+        return;
+    }
     let setup_sub = if o.setup_mode {
         "Оверлей открыт на экране: перетаскивайте его и тяните углы/края для изменения размера"
     } else {
@@ -44,42 +63,41 @@ fn add_overlay_mode_card(b: &mut LayoutBuilder, o: &OverlaySettingsView) {
             52,
             54,
             "Поверх полноэкранных игр (FSO / Topmost)",
-            Some("Окно без рамки и FSO Windows 10/11 (без инжекта DLL, безопасно для античитов)"),
+            Some("Без инжекта DLL, безопасно для античитов"),
             None,
             true,
         ),
         row(
             106,
-            58,
+            56,
             "Интерактивная настройка на экране",
             Some(setup_sub),
             None,
             false,
         ),
     ];
-    let cy = b.add_card(Some("РЕЖИМ И НАСТРОЙКА"), o.setup_mode, rows);
-    let tx = b.content_x + b.content_w as i32 - 60;
+    let cy = b.add_card(None, o.setup_mode, rows);
+    let tx = b.content_x + b.content_w as i32 - 58;
     b.push_toggle(
         tx,
-        cy + 14,
+        cy + 15,
         o.auto_games_only,
         SettingsAction::SetOverlayAutoGamesOnly(!o.auto_games_only),
     );
     b.push_toggle(
         tx,
-        cy + 67,
+        cy + 68,
         o.force_topmost_fullscreen,
         SettingsAction::SetOverlayForceTopmost(!o.force_topmost_fullscreen),
     );
-    let (label, tone) = if o.setup_mode {
-        ("Готово (заблокировать клики)", ButtonTone::Amber)
+    let (label, tone, btn_w) = if o.setup_mode {
+        ("Готово (заблокировать клики)", ButtonTone::Amber, 226u32)
     } else {
-        ("Настроить на экране", ButtonTone::Primary)
+        ("Настроить на экране", ButtonTone::Primary, 184u32)
     };
-    let btn_w = if o.setup_mode { 226 } else { 184 };
-    let bx = b.content_x + b.content_w as i32 - btn_w as i32 - 16;
+    let bx = b.content_x + b.content_w as i32 - btn_w as i32 - 14;
     b.push_btn(
-        (bx, cy + 119, btn_w, 32),
+        (bx, cy + 118, btn_w, 30),
         label,
         tone,
         SettingsAction::SetOverlaySetupMode(!o.setup_mode),
@@ -87,6 +105,21 @@ fn add_overlay_mode_card(b: &mut LayoutBuilder, o: &OverlaySettingsView) {
 }
 
 fn add_overlay_pos_card(b: &mut LayoutBuilder, o: &OverlaySettingsView) {
+    let anchor_name = match o.anchor_index {
+        0 => "Верх-Л",
+        1 => "Верх-П",
+        2 => "Низ-Л",
+        3 => "Низ-П",
+        _ => "Своя позиция",
+    };
+    if !b.accordion(
+        "overlay_pos",
+        "Расположение на экране",
+        anchor_name,
+        "оверлей угол позиция расположение экран overlay position anchor",
+    ) {
+        return;
+    }
     let pos_hint = if o.anchor_index == 4 {
         format!(
             "Произвольная точка: X={}, Y={} (перетащите в режиме настройки)",
@@ -95,18 +128,14 @@ fn add_overlay_pos_card(b: &mut LayoutBuilder, o: &OverlaySettingsView) {
     } else {
         "Углы привязаны к активному монитору; перетаскивание переводит в «Своя»".to_owned()
     };
-    let rows = vec![row(
-        0,
-        58,
-        "Расположение на экране",
-        Some(&pos_hint),
+    let cy = b.add_card(
         None,
         false,
-    )];
-    let cy = b.add_card(Some("РАСПОЛОЖЕНИЕ"), false, rows);
+        vec![row(0, 56, "Угол привязки", Some(&pos_hint), None, false)],
+    );
     b.add_segmented_row(
         cy,
-        58,
+        56,
         vec![
             (
                 "↖ Верх-Л",
@@ -138,54 +167,63 @@ fn add_overlay_pos_card(b: &mut LayoutBuilder, o: &OverlaySettingsView) {
 }
 
 fn add_overlay_size_card(b: &mut LayoutBuilder, o: &OverlaySettingsView) {
+    let summary = format!("{}×{} · {}%", o.width, o.height, o.opacity_percent);
+    if !b.accordion(
+        "overlay_size",
+        "Прозрачность, размер и опрос",
+        &summary,
+        "оверлей прозрачность ширина высота размер частота fps overlay size opacity",
+    ) {
+        return;
+    }
     let rows = vec![
         row(
             0,
-            52,
+            50,
             "Прозрачность фона",
             None,
             Some(format!("{}%", o.opacity_percent)),
             true,
         ),
         row(
+            50,
             52,
-            54,
             "Ширина оверлея",
             Some("Можно также тянуть края и углы в режиме настройки"),
             Some(format!("{} px", o.width)),
             true,
         ),
         row(
-            106,
-            54,
+            102,
+            52,
             "Высота оверлея",
             Some("Шрифты, бары и отступы масштабируются пропорционально"),
             Some(format!("{} px", o.height)),
             true,
         ),
-        row(160, 52, "Пресеты размера", None, None, true),
+        row(154, 50, "Пресеты размера", None, None, true),
         row(
-            212,
-            54,
+            204,
+            52,
             "Частота обновления датчиков",
             Some("Оптимально 1 с — плавный HUD без нагрузки на игру"),
             None,
             false,
         ),
     ];
-    let cy = b.add_card(Some("ПРОЗРАЧНОСТЬ, РАЗМЕР И ОПРОС"), false, rows);
+    let cy = b.add_card(None, false, rows);
     let sx = b.content_x + b.content_w as i32 - 220;
     b.push_slider(
         sx,
-        cy + 14,
+        cy + 13,
         SliderKind::OverlayOpacity,
         u32::from(o.opacity_percent),
     );
-    b.push_slider(sx, cy + 67, SliderKind::OverlayWidth, o.width);
-    b.push_slider(sx, cy + 121, SliderKind::OverlayHeight, o.height);
+    b.push_slider(sx, cy + 64, SliderKind::OverlayWidth, o.width);
+    b.push_slider(sx, cy + 116, SliderKind::OverlayHeight, o.height);
     b.add_segmented_row(
-        cy + 160,
-        52,
+        cy + 154,
+        50,
         vec![
             (
                 "Компакт",
@@ -205,8 +243,8 @@ fn add_overlay_size_card(b: &mut LayoutBuilder, o: &OverlaySettingsView) {
         ],
     );
     b.add_segmented_row(
-        cy + 212,
-        54,
+        cy + 204,
+        52,
         vec![
             (
                 "0.5 с",

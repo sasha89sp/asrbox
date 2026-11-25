@@ -1,11 +1,12 @@
 use asrbox_core::IsolationMode;
-use asrbox_platform_api::{AccentPreset, AppLanguage, FontRenderer, PixelRect, ThemeMode};
+use asrbox_platform_api::{AppLanguage, FontRenderer, PixelRect, ThemeMode};
 
 use crate::i18n::tr;
 use crate::layout::{ButtonTone, HitKind, LayoutBuilder};
 use crate::layout_backup::build_backup_and_webdav_section;
+use crate::layout_dev::{add_developer_github_section, add_tray_menu_section};
 use crate::layout_tabs::row;
-use crate::types::{SettingsAction, SettingsSnapshot};
+use crate::types::{ComboKind, SettingsAction, SettingsSnapshot};
 
 pub(crate) fn build_general_tab(
     b: &mut LayoutBuilder,
@@ -17,152 +18,159 @@ pub(crate) fn build_general_tab(
         tr(lang, "Общие настройки", "General Settings"),
         tr(
             lang,
-            "Оформление, язык, бэкап и облако WebDAV, диагностика, история версий и пути программы",
-            "Appearance, language, backup & WebDAV cloud, diagnostics, version history and paths",
+            "Стиль и тема, система, контекстное меню трея, бэкап AES-256 и инструменты разработчика",
+            "Design theme, system, tray menu, AES-256 backup and developer tools",
         ),
     );
-    // Strict top-to-bottom order requested by user:
-    // 1. Theme & Accent
-    add_theme_card(b, snap);
-    // 2. Language (+ Autostart)
-    add_language_card(b, snap);
-    // 3. Backup, Multi-Server WebDAV & File/Folder Sync
+    add_appearance_section(b, snap);
+    add_system_section(b, snap);
+    add_tray_menu_section(b, snap.menus.tray);
     build_backup_and_webdav_section(b, &snap.backup, editing_server_dir);
-    // 4. Diagnostics (opens browser-style inner tab)
-    add_diagnostics_launcher_card(b, snap);
-    // 5. Version History (renamed from About, opens browser-style inner tab)
-    add_version_history_launcher_card(b, snap);
-    // 6. Program Paths + Open Folder / Copy Paths buttons
-    add_paths_card(b, snap);
+    add_diagnostics_and_history_section(b, snap);
+    add_paths_section(b, snap);
+    add_developer_github_section(b, &snap.github);
 }
 
-fn add_theme_card(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
+fn add_appearance_section(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
     let l = b.lang;
-    if !b.matches_search(
-        "тема оформление светлая тёмная акцент цвет шрифт directwrite cleartype theme dark light accent font",
+    let app = &snap.appearance;
+    let theme_lbl = match app.theme {
+        ThemeMode::Dark => tr(l, "Тёмная", "Dark"),
+        ThemeMode::Light => tr(l, "Светлая", "Light"),
+    };
+    let summary = format!("{} · {}", app.design_theme.label(l), theme_lbl);
+    let kw = "стиль стеклянный блок win11 тема светлая тёмная акцент цвет шрифт язык directwrite cleartype theme accent font language";
+    if !b.accordion(
+        "appearance",
+        tr(l, "Оформление и язык", "Appearance & Language"),
+        &summary,
+        kw,
     ) {
         return;
     }
     let rows = vec![
         row(
             0,
-            56,
-            tr(l, "Тема оформления", "Color theme"),
+            52,
+            tr(l, "Стиль оформления", "Design theme"),
             Some(tr(
                 l,
-                "Windows 11 Fluent Design — плавное переключение для всех окон",
-                "Windows 11 Fluent Design — smooth transition across all windows",
+                "Стеклянный блок ASR или классический Windows 11",
+                "ASR Glass Stack or classic Windows 11",
             )),
             None,
             true,
         ),
         row(
-            56,
-            56,
+            52,
+            50,
+            tr(l, "Цветовая тема", "Color theme"),
+            Some(tr(
+                l,
+                "Плавное переключение для всех окон и виджетов",
+                "Smooth transition across all windows",
+            )),
+            None,
+            true,
+        ),
+        row(
+            102,
+            50,
             tr(l, "Акцентный цвет", "Accent color"),
             Some(tr(
                 l,
-                "Цвет активных элементов, переключателей и индикаторов",
-                "Highlight color for active controls, toggles and indicators",
+                "Цвет активных элементов и индикаторов",
+                "Highlight color for controls and indicators",
             )),
             None,
             true,
         ),
         row(
-            112,
-            56,
+            152,
+            50,
             tr(l, "Рендеринг шрифтов", "Font rendering"),
             Some(tr(
                 l,
-                "Segoe UI Variable (Win 11): лёгкий GDI ClearType или DirectWrite",
-                "Segoe UI Variable (Win 11): lightweight GDI ClearType or DirectWrite",
+                "Лёгкий GDI ClearType или DirectWrite",
+                "Lightweight GDI ClearType or DirectWrite",
+            )),
+            None,
+            true,
+        ),
+        row(
+            202,
+            50,
+            tr(l, "Язык интерфейса", "Interface language"),
+            Some(tr(
+                l,
+                "Применяется мгновенно без перезапуска",
+                "Applies immediately without restarting",
             )),
             None,
             false,
         ),
     ];
-    let cy = b.add_card(Some(tr(l, "1. ОФОРМЛЕНИЕ", "1. APPEARANCE")), false, rows);
-    add_theme_card_controls(b, snap, cy);
-}
-
-fn add_theme_card_controls(b: &mut LayoutBuilder, snap: &SettingsSnapshot, cy: i32) {
-    let l = b.lang;
-    let app = &snap.appearance;
-    b.add_segmented_row(
-        cy,
-        56,
-        vec![
-            (
-                tr(l, "Светлая", "Light"),
-                app.theme == ThemeMode::Light,
-                SettingsAction::SetThemeMode(ThemeMode::Light),
-            ),
-            (
-                tr(l, "Тёмная", "Dark"),
-                app.theme == ThemeMode::Dark,
-                SettingsAction::SetThemeMode(ThemeMode::Dark),
-            ),
-        ],
+    let cy = b.add_card(None, false, rows);
+    let cw = 216u32;
+    let cx = b.content_x + b.content_w as i32 - 14 - cw as i32;
+    b.push_combo(
+        cx,
+        cy + 11,
+        cw,
+        app.design_theme.label(l),
+        None,
+        ComboKind::DesignTheme,
     );
-    let count = AccentPreset::ALL.len() as i32;
-    let start_x = b.content_x + b.content_w as i32 - 14 - count * 32 + 4;
-    let sy = b.sy(cy + 56 + 14);
-    for (idx, preset) in AccentPreset::ALL.iter().copied().enumerate() {
-        let rect = PixelRect {
-            x: start_x + (idx as i32) * 32,
-            y: sy,
-            width: 26,
-            height: 26,
-        };
-        b.push_control(
-            rect,
-            HitKind::AccentSwatch {
-                preset,
-                active: app.accent == preset,
-            },
-        );
-    }
-    b.add_segmented_row(
+    b.push_combo(cx, cy + 62, cw, theme_lbl, None, ComboKind::ThemeMode);
+    let accent_col = app
+        .accent
+        .colors_for_style(app.design_theme, app.theme == ThemeMode::Dark)
+        .0;
+    b.push_combo(
+        cx,
         cy + 112,
-        56,
-        vec![
-            (
-                "GDI ClearType",
-                app.font_renderer == FontRenderer::GdiClearType,
-                SettingsAction::SetFontRenderer(FontRenderer::GdiClearType),
-            ),
-            (
-                "DirectWrite",
-                app.font_renderer == FontRenderer::DirectWrite,
-                SettingsAction::SetFontRenderer(FontRenderer::DirectWrite),
-            ),
-        ],
+        cw,
+        app.accent.label(l),
+        Some(accent_col),
+        ComboKind::AccentPreset,
     );
+    let font_lbl = match app.font_renderer {
+        FontRenderer::GdiClearType => "GDI ClearType",
+        FontRenderer::DirectWrite => "DirectWrite",
+    };
+    b.push_combo(cx, cy + 162, cw, font_lbl, None, ComboKind::FontRenderer);
+    let lang_lbl = match app.language {
+        AppLanguage::Ru => "Русский",
+        AppLanguage::En => "English",
+    };
+    b.push_combo(cx, cy + 212, cw, lang_lbl, None, ComboKind::Language);
 }
 
-fn add_language_card(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
+fn add_system_section(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
     let l = b.lang;
-    if !b.matches_search(
-        "язык интерфейс русский english автозагрузка windows изоляция процессы перезапуск модули language autostart isolation restart",
+    let iso_lbl = match snap.isolation {
+        IsolationMode::Process => tr(l, "Отдельные процессы", "Separate processes"),
+        IsolationMode::InProc => tr(l, "Один процесс", "In-Process"),
+    };
+    let auto_lbl = if snap.autostart_enabled {
+        tr(l, "Автозапуск вкл", "Autostart on")
+    } else {
+        tr(l, "Автозапуск выкл", "Autostart off")
+    };
+    let summary = format!("{auto_lbl} · {iso_lbl}");
+    let kw = "автозагрузка windows изоляция процессы перезапуск модули сброс настроек сбросить reset autostart isolation restart";
+    if !b.accordion(
+        "system",
+        tr(l, "Система, модули и сброс", "System, Modules & Reset"),
+        &summary,
+        kw,
     ) {
         return;
     }
     let rows = vec![
         row(
             0,
-            54,
-            tr(l, "Язык интерфейса", "Interface language"),
-            Some(tr(
-                l,
-                "Применяется мгновенно без перезапуска программы",
-                "Applies immediately without restarting",
-            )),
-            None,
-            true,
-        ),
-        row(
-            54,
-            54,
+            52,
             tr(l, "Автозагрузка с Windows", "Launch with Windows"),
             Some(tr(
                 l,
@@ -173,8 +181,8 @@ fn add_language_card(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
             true,
         ),
         row(
-            108,
-            56,
+            52,
+            54,
             tr(l, "Изоляция модулей", "Module isolation"),
             Some(tr(
                 l,
@@ -185,220 +193,221 @@ fn add_language_card(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
             true,
         ),
         row(
-            164,
-            56,
+            106,
+            54,
             tr(l, "Перезапуск всех модулей", "Restart all modules"),
             Some(tr(
                 l,
-                "Перезагружает все включённые модули без выхода из asrbox",
-                "Restarts every enabled module without exiting asrbox",
+                "Перезагружает включённые модули без выхода из asrbox",
+                "Restarts enabled modules without exiting asrbox",
+            )),
+            None,
+            true,
+        ),
+        row(
+            160,
+            56,
+            tr(l, "Сброс настроек программы", "Reset all settings"),
+            Some(tr(
+                l,
+                "Вернуть оформление, доки, виджеты, меню и оверлей к заводским",
+                "Restore appearance, docks, widgets, menus and overlay defaults",
             )),
             None,
             false,
         ),
     ];
-    let cy = b.add_card(
-        Some(tr(l, "2. ЯЗЫК И СИСТЕМА", "2. LANGUAGE & SYSTEM")),
-        false,
-        rows,
-    );
-    add_language_card_controls(b, snap, cy);
-}
-
-fn add_language_card_controls(b: &mut LayoutBuilder, snap: &SettingsSnapshot, cy: i32) {
-    let l = b.lang;
-    let cur_lang = snap.appearance.language;
-    let is_proc = snap.isolation == IsolationMode::Process;
-    b.add_segmented_row(
-        cy,
-        54,
-        vec![
-            (
-                "Русский",
-                cur_lang == AppLanguage::Ru,
-                SettingsAction::SetLanguage(AppLanguage::Ru),
-            ),
-            (
-                "English",
-                cur_lang == AppLanguage::En,
-                SettingsAction::SetLanguage(AppLanguage::En),
-            ),
-        ],
-    );
+    let cy = b.add_card(None, false, rows);
     let tx = b.content_x + b.content_w as i32 - 58;
+    let rx = b.content_x + b.content_w as i32 - 14;
     b.push_toggle(
         tx,
-        cy + 54 + 16,
+        cy + 15,
         snap.autostart_enabled,
         SettingsAction::SetAutostart(!snap.autostart_enabled),
     );
-    b.add_segmented_row(
-        cy + 108,
-        56,
-        vec![
-            (
-                tr(l, "Процессы", "Processes"),
-                is_proc,
-                SettingsAction::SetIsolation(IsolationMode::Process),
-            ),
-            (
-                tr(l, "Один процесс", "In-Process"),
-                !is_proc,
-                SettingsAction::SetIsolation(IsolationMode::InProc),
-            ),
-        ],
-    );
-    let bx = b.content_x + b.content_w as i32 - 204 - 14;
+    b.push_combo(rx - 204, cy + 64, 204, iso_lbl, None, ComboKind::Isolation);
     b.push_btn(
-        (bx, cy + 164 + 13, 204, 30),
+        (rx - 204, cy + 118, 204, 30),
         tr(l, "Перезапустить все модули", "Restart All Modules"),
         ButtonTone::Secondary,
         SettingsAction::RestartAllModules,
     );
+    if !b.confirming_reset {
+        b.push_control(
+            PixelRect {
+                x: rx - 186,
+                y: b.sy(cy + 173),
+                width: 186,
+                height: 30,
+            },
+            HitKind::StartResetConfirm {
+                label: tr(l, "Сбросить настройки…", "Reset Settings…").to_owned(),
+            },
+        );
+    } else {
+        add_reset_warning_card(b);
+    }
 }
 
-fn add_diagnostics_launcher_card(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
-    let lang = b.lang;
-    if !b.matches_search("диагностика монитор логи trace cpu ram diagnostics logs monitor")
-    {
+fn add_reset_warning_card(b: &mut LayoutBuilder) {
+    let l = b.lang;
+    let warn_rows = vec![
+        row(0, 52, tr(l, "Подтвердите сброс настроек asrbox", "Confirm resetting asrbox settings"), Some(tr(l, "Будут сброшены: тема и акцент, конфиги док-панелей, виджетов, меню и игрового оверлея.", "Will reset: theme/accent, dock panels, widgets, context menus and overlay configs.")), None, false),
+        row(52, 50, "", Some(tr(l, "СОХРАНЯТСЯ без изменений: архивы в data/backups, заметки в data/notes и пароли в Windows Credential Manager.", "PRESERVED safely: archives in data/backups, notes in data/notes, and passwords in Credential Manager.")), None, false),
+    ];
+    b.add_card(None, true, warn_rows);
+    let (x, y) = (b.content_x, b.cursor_y - 4);
+    b.push_btn(
+        (x, y, 178, 30),
+        tr(l, "Подтвердить сброс", "Confirm Reset"),
+        ButtonTone::Danger,
+        SettingsAction::ConfirmResetAll,
+    );
+    b.push_control(
+        PixelRect {
+            x: x + 188,
+            y: b.sy(y),
+            width: 108,
+            height: 30,
+        },
+        HitKind::CancelResetConfirm {
+            label: tr(l, "Отмена", "Cancel").to_owned(),
+        },
+    );
+    b.cursor_y = y + 40;
+}
+
+fn add_diagnostics_and_history_section(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
+    let l = b.lang;
+    let ver = format!("v{}", snap.about.version);
+    let kw = "диагностика монитор логи trace cpu ram история версий changelog diagnostics logs version history";
+    if !b.accordion(
+        "diag_history",
+        tr(
+            l,
+            "Диагностика и история версий",
+            "Diagnostics & Version History",
+        ),
+        &ver,
+        kw,
+    ) {
         return;
     }
     let summary = if snap.diagnostics.summary_line.is_empty() {
         tr(
-            lang,
-            "Монитор ресурсов, модули и живые логи в отдельной вкладке",
-            "Live resource monitor, module stats and logs in a tab",
+            l,
+            "Монитор работает только при открытой вкладке «Диагностика»",
+            "Live monitor runs only while Diagnostics tab is open",
         )
     } else {
         snap.diagnostics.summary_line.as_str()
     };
-    let rows = vec![row(
-        0,
-        58,
-        tr(
-            lang,
-            "Монитор и журнал диагностики",
-            "Live Diagnostics & Logs",
+    let ver_title = format!("asrbox v{}", snap.about.version);
+    let rows = vec![
+        row(
+            0,
+            54,
+            tr(l, "Монитор и журнал диагностики", "Live Diagnostics & Logs"),
+            Some(summary),
+            None,
+            true,
         ),
-        Some(summary),
-        None,
-        false,
-    )];
-    let cy = b.add_card(
-        Some(tr(lang, "4. ДИАГНОСТИКА", "4. DIAGNOSTICS")),
-        false,
-        rows,
-    );
-    let bw = 188u32;
-    let bx = b.content_x + b.content_w as i32 - bw as i32 - 14;
+        row(
+            54,
+            54,
+            &ver_title,
+            Some(tr(
+                l,
+                "История изменений за все релизы в отдельной вкладке",
+                "Full changelog in an inner tab",
+            )),
+            None,
+            false,
+        ),
+    ];
+    let cy = b.add_card(None, false, rows);
+    let rx = b.content_x + b.content_w as i32 - 14;
     b.push_btn(
-        (bx, cy + 14, bw, 30),
-        tr(lang, "Открыть диагностику →", "Open Diagnostics →"),
+        (rx - 196, cy + 12, 196, 30),
+        tr(l, "Открыть диагностику →", "Open Diagnostics →"),
         ButtonTone::Primary,
         SettingsAction::OpenDiagnosticsTab,
     );
-}
-
-fn add_version_history_launcher_card(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
-    let lang = b.lang;
-    if !b.matches_search("история версий о программе changelog версия version history about")
-    {
-        return;
-    }
-    let ver_title = format!("asrbox v{}", snap.about.version);
-    let rows = vec![row(
-        0,
-        58,
-        &ver_title,
-        Some(tr(
-            lang,
-            "Полная история изменений за все версии откроется в новой вкладке этого окна",
-            "Full multi-version changelog opens in a new tab inside this window",
-        )),
-        None,
-        false,
-    )];
-    let cy = b.add_card(
-        Some(tr(lang, "5. ИСТОРИЯ ВЕРСИЙ", "5. VERSION HISTORY")),
-        false,
-        rows,
-    );
-    let bw = 204u32;
-    let bx = b.content_x + b.content_w as i32 - bw as i32 - 14;
     b.push_btn(
-        (bx, cy + 14, bw, 30),
-        tr(lang, "Открыть историю версий →", "Open Version History →"),
+        (rx - 196, cy + 66, 196, 30),
+        tr(l, "История версий →", "Version History →"),
         ButtonTone::Secondary,
         SettingsAction::OpenVersionHistoryTab,
     );
 }
 
-fn add_paths_card(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
-    let lang = b.lang;
-    if !b.matches_search("пути программа папка data config backups logs paths folder")
-    {
+fn add_paths_section(b: &mut LayoutBuilder, snap: &SettingsSnapshot) {
+    let l = b.lang;
+    if !b.accordion(
+        "paths",
+        tr(l, "Пути программы", "Program Paths"),
+        "portable · data/",
+        "пути программа папка data config backups logs paths folder",
+    ) {
         return;
     }
     let a = &snap.about;
     let rows = vec![
         row(
             0,
-            52,
-            tr(lang, "Исполняемый файл", "Executable"),
+            50,
+            tr(l, "Исполняемый файл", "Executable"),
             Some(&a.exe_path),
             None,
             true,
         ),
         row(
-            52,
-            52,
-            tr(lang, "Папка данных (data)", "Data directory"),
+            50,
+            50,
+            tr(l, "Папка данных (data)", "Data directory"),
             Some(&a.data_dir),
             None,
             true,
         ),
         row(
-            104,
-            52,
-            tr(lang, "Папка конфигов", "Config directory"),
+            100,
+            50,
+            tr(l, "Папка конфигов", "Config directory"),
             Some(&a.config_dir),
             None,
             true,
         ),
         row(
-            156,
-            52,
-            tr(lang, "Папка бэкапов", "Backups directory"),
+            150,
+            50,
+            tr(l, "Папка бэкапов", "Backups directory"),
             Some(&a.backups_dir),
             None,
             true,
         ),
         row(
-            208,
-            52,
-            tr(lang, "Папка логов", "Logs directory"),
+            200,
+            50,
+            tr(l, "Папка логов", "Logs directory"),
             Some(&a.logs_dir),
             None,
             false,
         ),
     ];
-    b.add_card(
-        Some(tr(lang, "6. ПУТИ ПРОГРАММЫ", "6. PROGRAM PATHS")),
-        false,
-        rows,
-    );
+    b.add_card(None, false, rows);
     let (x, y) = (b.content_x, b.cursor_y);
     b.push_btn(
         (x, y, 166, 30),
-        tr(lang, "Открыть папку", "Open Folder"),
+        tr(l, "Открыть папку", "Open Folder"),
         ButtonTone::Primary,
         SettingsAction::OpenDataFolder,
     );
     b.push_btn(
         (x + 176, y, 174, 30),
-        tr(lang, "Копировать пути", "Copy Paths"),
+        tr(l, "Копировать пути", "Copy Paths"),
         ButtonTone::Secondary,
         SettingsAction::CopyPathsToClipboard,
     );
-    b.cursor_y = y + 42;
+    b.cursor_y = y + 40;
 }

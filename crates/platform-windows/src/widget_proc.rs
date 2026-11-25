@@ -17,7 +17,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WM_TIMER, WM_WINDOWPOSCHANGING,
 };
 
-use crate::widget_win::{compute_resized_rect, cursor_for_edges, hit_resize_edges};
+use crate::widget_resize::{compute_resized_rect, cursor_for_edges, hit_resize_edges};
 use crate::window::{lparam_point, push_event, WM_MOUSELEAVE};
 
 pub(crate) const WIDGET_MINUTE_TIMER_ID: usize = 101;

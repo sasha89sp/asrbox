@@ -252,3 +252,27 @@ pub(crate) fn copy_text_to_clipboard(owner: HWND, text: &str) -> Result<(), Stri
     }
     Ok(())
 }
+
+pub(crate) fn launch_system_tool(cmd: &str, args: &str) -> Result<(), String> {
+    let verb = encode_wide_str("open");
+    let target = encode_wide_str(cmd);
+    let params = (!args.is_empty()).then(|| encode_wide_str(args));
+    shell_exec(&verb, &target, params.as_deref())
+}
+
+pub(crate) fn random_bytes_win(len: usize) -> Result<Vec<u8>, String> {
+    use windows::Win32::Security::Cryptography::{
+        BCryptGenRandom, BCRYPT_USE_SYSTEM_PREFERRED_RNG,
+    };
+
+    let mut buf = vec![0u8; len];
+    if len == 0 {
+        return Ok(buf);
+    }
+    // SAFETY: `buf` is valid writable memory; using system-preferred CSPRNG without custom handle.
+    let status = unsafe { BCryptGenRandom(None, &mut buf, BCRYPT_USE_SYSTEM_PREFERRED_RNG) };
+    if status.is_err() {
+        return Err(format!("BCryptGenRandom failed: {status:?}"));
+    }
+    Ok(buf)
+}

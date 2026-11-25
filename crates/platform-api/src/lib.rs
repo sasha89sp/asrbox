@@ -1,4 +1,6 @@
+pub mod logo;
 pub mod menu;
+pub mod menu_cfg;
 pub mod palette;
 pub mod telemetry;
 pub mod theme;
@@ -7,9 +9,14 @@ pub mod tools;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+pub use logo::{draw_asr_glass_logo, sample_asr_glyph};
 pub use menu::{
     DockMenuAction, DockMenuState, TrayAction, TrayMenuEntry, TrayModuleFlags, WidgetLayer,
     WidgetMenuAction, WidgetMenuState,
+};
+pub use menu_cfg::{
+    load_menu_config, parse_menu_config, save_menu_config, serialize_menu_config,
+    ContextMenuConfig, DockMenuVisibility, TrayMenuVisibility, WidgetMenuVisibility,
 };
 pub use telemetry::{
     CpuTelemetry, DriveTelemetry, GpuTelemetry, NetTelemetry, OverlayTelemetry, ProcUsage,
@@ -17,12 +24,13 @@ pub use telemetry::{
 };
 pub use theme::{
     lerp_rgba, load_appearance_config, parse_appearance_config, save_appearance_config,
-    serialize_appearance_config, AccentPreset, AppLanguage, AppearanceConfig, FluentPalette,
-    FontRenderer, ThemeMode,
+    serialize_appearance_config, AccentPreset, AppLanguage, AppearanceConfig, DesignTheme,
+    FluentPalette, FontRenderer, ThemeMode,
 };
 pub use tools::{
-    AboutUiCommand, DebugUiCommand, FluentMenuItem, FluentMenuSpec, FluentQuickBtn, ProcessMetrics,
-    SettingsInputRects, SettingsUiEvent, ToolsPlatform, WebDavDirEntry, WebDavOpKind, WebDavResult,
+    AboutUiCommand, DebugUiCommand, FluentMenuItem, FluentMenuSpec, FluentQuickBtn,
+    GitHubFetchResult, NotesInputRects, NotesUiEvent, ProcessMetrics, SettingsInputRects,
+    SettingsUiEvent, ToolsPlatform, WebDavDirEntry, WebDavOpKind, WebDavResult,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -235,7 +243,9 @@ pub enum PlatformEvent {
     DebugCommand(DebugUiCommand),
     AboutCommand(AboutUiCommand),
     SettingsEvent(SettingsUiEvent),
+    NotesEvent(NotesUiEvent),
     WebDavDone(WebDavResult),
+    GitHubFetchDone(GitHubFetchResult),
     SupervisorTick,
 }
 
@@ -342,5 +352,28 @@ pub trait WidgetPlatform {
     fn start_http_get(&mut self, request_id: u64, url: &str) -> Result<(), String>;
     fn open_url(&self, url: &str) -> Result<(), String>;
     fn open_text_file(&self, path: &Path) -> Result<(), String>;
+    fn launch_system_tool(&self, cmd: &str, args: &str) -> Result<(), String>;
+    fn open_notes_window(
+        &mut self,
+        title: &str,
+        rect: PixelRect,
+        layer: WidgetLayer,
+        opacity_percent: u8,
+        palette: FluentPalette,
+    ) -> Result<(), String>;
+    fn close_notes_window(&mut self);
+    fn present_notes_frame(&mut self, frame: &WidgetFrame, inputs: NotesInputRects);
+    fn notes_input_text(&self, slot: u8) -> String;
+    fn set_notes_input_text(&self, slot: u8, text: &str);
+    fn focus_notes_input(&self, slot: u8);
+    fn apply_notes_theme(&mut self, palette: FluentPalette);
+    fn set_notes_layer(&mut self, layer: WidgetLayer);
+    fn set_notes_opacity(&mut self, opacity_percent: u8);
+    fn show_notes_popup_menu(
+        &mut self,
+        screen_pt: PixelPoint,
+        spec: &FluentMenuSpec,
+        palette: FluentPalette,
+    ) -> Result<Option<u32>, String>;
     fn set_theme(&mut self, palette: FluentPalette);
 }

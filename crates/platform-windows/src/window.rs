@@ -20,8 +20,11 @@ use crate::dock_proc::dock_wnd_proc;
 use crate::dwrite_text::cleanup_dwrite_cache;
 use crate::fluent_menu::fluent_menu_wnd_proc;
 use crate::font_engine::cleanup_font_cache;
+use crate::github_http::{drain_github_results, WM_GITHUB_DONE};
 use crate::http::{drain_http_results, WM_HTTP_DONE};
 use crate::metrics::ProcessMetricsSampler;
+use crate::notes_proc::notes_wnd_proc;
+use crate::notes_win::close_notes_win;
 use crate::overlay_telemetry::{drain_overlay_results, WM_OVERLAY_DONE};
 use crate::query_primary_work_area;
 use crate::settings_proc::settings_wnd_proc;
@@ -106,6 +109,12 @@ impl WindowsDockHost {
                 hinstance,
                 w!("AsrboxSettingsWindow"),
                 Some(settings_wnd_proc),
+                HBRUSH::default(),
+            )?;
+            register_class(
+                hinstance,
+                w!("AsrboxNotesWindow"),
+                Some(notes_wnd_proc),
                 HBRUSH::default(),
             )?;
 
@@ -202,6 +211,7 @@ pub fn wake_host_window(hwnd_raw: usize) {
 
 impl Drop for WindowsDockHost {
     fn drop(&mut self) {
+        close_notes_win();
         self.tools.cleanup();
         let dock_hwnds: Vec<HWND> = self.windows.values().copied().collect();
         let widget_hwnds: Vec<HWND> = self.widget_windows.values().copied().collect();
@@ -307,6 +317,12 @@ unsafe extern "system" fn host_wnd_proc(
         WM_WEBDAV_DONE => {
             for res in drain_webdav_results() {
                 push_event(PlatformEvent::WebDavDone(res));
+            }
+            LRESULT(0)
+        }
+        WM_GITHUB_DONE => {
+            for res in drain_github_results() {
+                push_event(PlatformEvent::GitHubFetchDone(res));
             }
             LRESULT(0)
         }

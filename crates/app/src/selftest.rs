@@ -15,15 +15,20 @@ use asrbox_mod_overlay::{
     OverlayConfig,
 };
 use asrbox_mod_widgets::{
-    parse_ics_bytes, parse_sysmon_config, parse_widget_config, render_calendar_widget,
-    render_sysmon_widget, serialize_sysmon_config, serialize_widget_config, CalendarWidgetConfig,
-    DateFormatMode, DisplayRow, IcsDateTime, ParseOptions, PeriodFilter, RenderView, SysHitTarget,
-    SysMonitorConfig, SysRenderInput, WidgetHitTarget,
+    parse_ics_bytes, parse_notes_config, parse_notes_db, parse_open_meteo_forecast,
+    parse_sysmon_config, parse_weather_config, parse_widget_config, render_calendar_widget,
+    render_notes_widget, render_sysmon_widget, render_weather_widget, serialize_notes_config,
+    serialize_notes_db, serialize_sysmon_config, serialize_weather_config, serialize_widget_config,
+    CalendarWidgetConfig, DateFormatMode, DisplayRow, IcsDateTime, InlineEditMode, NotesDb,
+    NotesRenderInput, NotesWidgetConfig, ParseOptions, PeriodFilter, RenderView, SysHitTarget,
+    SysMonitorConfig, SysRenderInput, WeatherData, WeatherHitTarget, WeatherRenderInput,
+    WeatherWidgetConfig, WidgetHitTarget,
 };
 use asrbox_platform_api::{
-    parse_appearance_config, serialize_appearance_config, AccentPreset, AppLanguage,
-    AppearanceConfig, FluentPalette, FontRenderer, LocalDateTime, OverlayTelemetry, PixelRect,
-    SysTelemetry, ThemeMode, WidgetLayer,
+    draw_asr_glass_logo, parse_appearance_config, parse_menu_config, serialize_appearance_config,
+    serialize_menu_config, AccentPreset, AppLanguage, AppearanceConfig, BgraFrame,
+    ContextMenuConfig, DesignTheme, FluentPalette, FontRenderer, LocalDateTime, OverlayTelemetry,
+    PixelRect, SysTelemetry, ThemeMode, WidgetLayer,
 };
 
 use crate::selftest_tools::{
@@ -62,6 +67,7 @@ fn selftest_core_and_theme() -> Result<(), String> {
         return Err("worker IPC roundtrip mismatch".to_owned());
     }
     let app_cfg = AppearanceConfig {
+        design_theme: DesignTheme::AsrGlass,
         theme: ThemeMode::Light,
         accent: AccentPreset::Emerald,
         language: AppLanguage::En,
@@ -69,6 +75,15 @@ fn selftest_core_and_theme() -> Result<(), String> {
     };
     if parse_appearance_config(&serialize_appearance_config(&app_cfg)) != app_cfg {
         return Err("appearance.cfg roundtrip mismatch".to_owned());
+    }
+    let mcfg = ContextMenuConfig::default();
+    if parse_menu_config(&serialize_menu_config(&mcfg)) != mcfg {
+        return Err("menus.cfg roundtrip mismatch".to_owned());
+    }
+    let mut logo_frame = BgraFrame::transparent(48, 48);
+    draw_asr_glass_logo(&mut logo_frame, 0, 0, 48, true, true);
+    if !logo_frame.pixels.iter().any(|&b| b > 0) {
+        return Err("ASR Glass logo render selftest failed".to_owned());
     }
     let dark = FluentPalette::from_theme(ThemeMode::Dark, AccentPreset::Blue);
     let light = FluentPalette::from_theme(ThemeMode::Light, AccentPreset::Blue);
@@ -82,6 +97,7 @@ fn selftest_core_and_theme() -> Result<(), String> {
 fn selftest_dock(app_version: &str) -> Result<(), String> {
     let mut cfg = DockConfig::new(1, "Selftest Dock");
     cfg.locked = false;
+    cfg.lock_items = true;
     cfg.opacity_percent = 65;
     cfg.icon_size_px = 54;
     cfg.layer = WidgetLayer::Wallpaper;
@@ -118,6 +134,7 @@ fn selftest_dock(app_version: &str) -> Result<(), String> {
     if parsed.len() != 1
         || parsed[0].opacity_percent != 65
         || parsed[0].locked
+        || !parsed[0].lock_items
         || parsed[0].layer != WidgetLayer::Wallpaper
         || parsed[0].label_mode != DockLabelMode::IconAndLabel
         || parsed[0].launch_animation_enabled
@@ -200,6 +217,48 @@ fn selftest_widgets() -> Result<(), String> {
     });
     if sframe.bgra.pixels.is_empty() || sframe.texts.is_empty() {
         return Err("sysmon widget frame render failed".to_owned());
+    }
+    let w_cfg = WeatherWidgetConfig::default();
+    if parse_weather_config(&serialize_weather_config(&w_cfg)) != w_cfg {
+        return Err("weather config roundtrip mismatch".to_owned());
+    }
+    let sample_meteo = r#"{"current":{"temperature_2m":4.1,"apparent_temperature":1.2,"relative_humidity_2m":76,"surface_pressure":1002.6,"wind_speed_10m":3.4,"weather_code":2},"hourly":{"time":["2026-11-25T12:00"],"temperature_2m":[4.0],"weather_code":[2]},"daily":{"time":["2026-11-25"],"weather_code":[2],"temperature_2m_min":[0.0],"temperature_2m_max":[4.0]}}"#;
+    let wdata = parse_open_meteo_forecast(sample_meteo.as_bytes(), 12, "12:00".to_owned())
+        .unwrap_or_else(|_| WeatherData::default());
+    let wframe = render_weather_widget(&WeatherRenderInput {
+        width: w_cfg.width,
+        height: w_cfg.height,
+        opacity_percent: w_cfg.opacity_percent,
+        city: &w_cfg.city,
+        now,
+        data: &wdata,
+        loading: false,
+        error: None,
+        hovered: WeatherHitTarget::None,
+        palette,
+    });
+    if wframe.bgra.pixels.is_empty() || wframe.texts.is_empty() {
+        return Err("weather widget frame render failed".to_owned());
+    }
+    let n_cfg = NotesWidgetConfig::default();
+    if parse_notes_config(&serialize_notes_config(&n_cfg)) != n_cfg {
+        return Err("notes config roundtrip mismatch".to_owned());
+    }
+    let db = NotesDb::default_seeded();
+    if parse_notes_db(&serialize_notes_db(&db)) != db {
+        return Err("notes db roundtrip mismatch".to_owned());
+    }
+    let nframe = render_notes_widget(&NotesRenderInput {
+        cfg: &n_cfg,
+        db: &db,
+        search_query: "",
+        hovered: None,
+        list_scroll: 0,
+        inline_mode: InlineEditMode::None,
+        palette,
+    });
+    if nframe.frame.bgra.pixels.is_empty() || nframe.frame.texts.is_empty() {
+        return Err("notes widget frame render failed".to_owned());
     }
     Ok(())
 }

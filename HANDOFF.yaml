@@ -1,32 +1,36 @@
-version: 0.0.7
+version: 0.0.8
 updated: 2026-11-25
-spec_ids: [NF-001, NF-002, NF-005, NF-006, NF-007, NF-010, ST-001, ST-002, ST-005, ST-007]
+spec_ids: [NF-001, NF-002, NF-005, NF-006, NF-007, NF-010, DK-021, DK-022, ST-001, ST-004, ST-005, ST-009, WG-021, WG-022, WG-023]
 atlas_updated: true
 last_session:
-  goal: "Версия 0.0.7: дизайн Настроек в стиле Windows 11 Settings, встроенная PE-иконка asrbox.exe (BUG-008), «Открыть расположение файла» в ПКМ-меню дока и исправления по итогам аудита кода"
+  goal: "Релиз 0.0.8: дизайн-система «Стеклянный блок ASR» + Win11Classic, lock_items и свободный drag дока без автопримагничивания, AES-256 ZIP и GitHub-бэкап, интерактивный Системный монитор, menus.cfg, подтверждение сброса, виджеты Погода и Заметки"
   done:
-    - "Версия workspace поднята до 0.0.7 (Cargo.toml + CHANGELOG.md + ADR-018 + BUG-008 + MAP.md + HANDOFF.yaml)"
-    - "Дизайн Windows 11 Settings (palette.rs, render.rs, render_controls.rs): единый фон #202020/#F3F3F3, раздельные карточки #2B2B2B с зазором 3px, мягкие сегменты с нижней акцентной полоской и клиппинг скролла под шапкой"
-    - "BUG-008 (crates/app/build.rs, app_icon.rs): zero-dependency генератор Win32 .res (6 размеров 16..128px) для asrbox.exe + DPI-aware LoadImageW и исправленный bottom-up фолбэк CreateIconIndirect"
-    - "ПКМ-меню дока (menu.rs, lib.rs, mod-dock, dock_menu.rs, shell.rs, dock_win.rs, dock_ops.rs): добавлен пункт «Открыть расположение файла» с разыменованием .lnk и explorer.exe /select"
-    - "Аудит кода (settings_ctl.rs, dock_proc.rs, fluent_menu.rs, shell.rs, dwrite_text.rs, font_engine.rs, docks.rs, settings_widgets.rs): кэш SettingsSnapshot, фикс WM_CAPTURECHANGED и ReleaseCapture, «Segoe UI Variable» и гамма в DirectWrite, очистка data/shortcuts/"
+    - "Версия workspace поднята до 0.0.8 (Cargo.toml + CHANGELOG.md + ADR-019 + ARCHITECTURE.md + ATLAS.md + specs/mod-{dock,settings,widgets}.md + HANDOFF.yaml)"
+    - "Дизайн-система AsrGlass (по умолчанию) + Win11Classic: фирменный логотип ASR Glass (logo.rs + PE-иконка 16..256px в build.rs + app_icon.rs), аккордеоны Настроек (settings_ui.cfg), глобальный поиск, Fluent ComboBox, перенос Сброса с подтверждением в Общие настройки"
+    - "Док-панели: независимое закрепление значков lock_items, отключение автопримагничивания к краям при свободном перетаскивании, плавающая капсула ASR Glass с плиткой настроек ASR и верхним индикатором запущенных программ"
+    - "Бэкапы: чистый Rust WinZip AE-2 AES-256 (crypto.rs + BCryptGenRandom + пароль в Credential Manager) и блок «Для разработчика · Бэкап исходного кода GitHub» (github_backup.cfg + PAT в Credential Manager + WinHTTP zipball)"
+    - "Интерактивный Системный монитор (клики -> taskmgr, Этот компьютер, resmon, ms-settings:display, ncpa.cpl, msinfo32) и настраиваемые контекстные меню трея/доков/виджетов (menus.cfg)"
+    - "Два новых виджета в mod-widgets: Погода (WEATHER_WIDGET_ID=3, Open-Meteo без ключа, weather.cfg) и 3-колоночные Заметки и задачи (NOTES_WIDGET_ID=4, data/notes/notes_db.cfg, notes.cfg, [◧][◫][▭] + Ctrl+1/2/3); 4 подвкладки Виджетов в Настройках"
   not_done:
     - "Прогон GitHub Actions (.github/workflows/ci.yml) на windows-latest"
-    - "Ручная проверка v0.0.7 на Windows 10/11: дизайн Настроек, иконка в Диспетчере задач/панели задач/трее и «Открыть расположение файла» в док-панели"
+    - "Ручная проверка asrbox.exe v0.0.8 на Windows 10/11: AsrGlass дизайн, lock_items/свободный drag, AES-256 ZIP в 7-Zip, GitHub zipball, интерактивный Системный монитор, menus.cfg, Погода и Заметки"
   verified:
     ci_build: false
     tests: true
     manual_run: false
 open_bugs: [BUG-003, BUG-004, BUG-005, BUG-006, BUG-007, BUG-008]
-next_step: "Запустить GitHub Actions (windows-latest), скачать asrbox.exe v0.0.7, проверить дизайн Настроек, иконку в Диспетчере задач/панели задач и пункт «Открыть расположение файла»; после подтверждения закрыть исправленные баги"
+next_step: "Запустить GitHub Actions (windows-latest), скачать asrbox.exe v0.0.8 и выполнить ручную проверку всех 10 функций релиза на Windows 10/11"
 touched_files:
-  - Cargo.toml, CHANGELOG.md, BUGS.md, DECISIONS.md, ARCHITECTURE.md, HANDOFF.yaml
-  - crates/platform-api/src/ (palette.rs, menu.rs, lib.rs)
-  - crates/mod-dock/src/lib.rs
-  - crates/mod-settings/src/ (events.rs, render.rs, render_controls.rs, tests.rs)
-  - crates/platform-windows/ (MAP.md, src/app_icon.rs, src/dock_menu.rs, src/dock_proc.rs, src/dock_win.rs, src/dwrite_text.rs, src/fluent_menu.rs, src/font_engine.rs, src/shell.rs, src/widget_text.rs)
-  - crates/app/ (MAP.md, build.rs, src/main.rs, src/docks.rs, src/dock_ops.rs, src/dock_drag.rs, src/settings_ctl.rs, src/settings_widgets.rs)
+  - Cargo.toml, CHANGELOG.md, DECISIONS.md, ARCHITECTURE.md, ATLAS.md, HANDOFF.yaml, specs/mod-{dock,settings,widgets}.md
+  - crates/platform-api/ (MAP.md, src/{lib.rs, logo.rs, menu.rs, menu_cfg.rs, palette.rs, theme.rs, tools.rs, widget.rs})
+  - crates/core/src/ipc.rs, crates/mod-about/src/lib.rs
+  - crates/mod-dock/src/ ({config.rs, layout_ops.rs, lib.rs, render.rs, storage.rs})
+  - crates/mod-backup/ (MAP.md, src/{crypto.rs, github.rs, lib.rs, zip.rs})
+  - crates/mod-widgets/ (MAP.md, src/{lib.rs, notes_model.rs, notes_render.rs, notes_storage.rs, notes_widget.rs, render.rs, sys_render.rs, sys_widget.rs, weather_api.rs, weather_config.rs, weather_render.rs, weather_widget.rs})
+  - crates/mod-settings/ (MAP.md, src/{events.rs, layout.rs, layout_backup.rs, layout_dev.rs, layout_dock.rs, layout_general.rs, layout_overlay.rs, layout_tabs.rs, layout_widgets.rs, lib.rs, render.rs, render_controls.rs, tests.rs, types.rs, ui_cfg.rs})
+  - crates/platform-windows/ (Cargo.toml, MAP.md, src/{app_icon.rs, crypto.rs, dock_menu.rs, dock_win.rs, github_http.rs, host.rs, lib.rs, notes_proc.rs, notes_win.rs, settings_proc.rs, shell.rs, tools_host.rs, tray_menu.rs, widget_menu.rs, widget_win.rs})
+  - crates/app/ (MAP.md, build.rs, src/{backup_ctl.rs, dock_drag.rs, docks.rs, github_ctl.rs, inproc_widgets.rs, main.rs, selftest.rs, selftest_tools.rs, settings_combo.rs, settings_ctl.rs, settings_general.rs, settings_widgets.rs, tools.rs, worker.rs, worker_bus.rs, worker_widgets.rs})
 warnings:
-  - "Ожидает сборки на GitHub Actions (windows-latest). Локально проверены cargo fmt --check, atlas-check, cargo test --workspace, --version, --selftest, host clippy и cargo clippy --workspace --all-targets --no-deps --target x86_64-pc-windows-msvc -- -D warnings"
+  - "Ожидает сборки на GitHub Actions (windows-latest). Локально проверены cargo fmt --check, atlas-check, cargo test --workspace, --version, --selftest, host clippy и x86_64-pc-windows-msvc clippy -D warnings"
 ideas:
   - "Глобальный хоткей показа/скрытия игрового оверлея"

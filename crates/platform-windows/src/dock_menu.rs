@@ -15,6 +15,7 @@ const CMD_LAYER_WALLPAPER: u32 = 111;
 const CMD_LAYER_NORMAL: u32 = 112;
 const CMD_LAYER_TOPMOST: u32 = 119;
 const CMD_TOGGLE_LOCK: u32 = 113;
+const CMD_TOGGLE_LOCK_ITEMS: u32 = 164;
 const CMD_OPACITY_100: u32 = 114;
 const CMD_OPACITY_85: u32 = 115;
 const CMD_OPACITY_70: u32 = 116;
@@ -56,68 +57,37 @@ pub(crate) fn show_dock_context_menu(
 }
 
 fn build_dock_menu_spec(state: &DockMenuState) -> FluentMenuSpec {
-    let quick_actions = vec![
-        FluentQuickBtn {
-            id: CMD_OPEN_SETTINGS,
-            glyph: "⚙".to_owned(),
-            enabled: true,
-        },
-        FluentQuickBtn {
+    let vis = state.menu_vis;
+    let mut quick_actions = vec![FluentQuickBtn {
+        id: CMD_OPEN_SETTINGS,
+        glyph: "⚙".to_owned(),
+        enabled: true,
+    }];
+    if vis.show_add_separator {
+        quick_actions.push(FluentQuickBtn {
             id: CMD_ADD_SEPARATOR,
             glyph: "|".to_owned(),
             enabled: true,
-        },
-        FluentQuickBtn {
+        });
+    }
+    if vis.show_lock_controls {
+        quick_actions.push(FluentQuickBtn {
             id: CMD_TOGGLE_LOCK,
             glyph: if state.locked { "🔒" } else { "🔓" }.to_owned(),
             enabled: true,
-        },
-        FluentQuickBtn {
+        });
+    }
+    if vis.show_dock_management {
+        quick_actions.push(FluentQuickBtn {
             id: CMD_ADD_DOCK,
             glyph: "+".to_owned(),
             enabled: true,
-        },
-    ];
+        });
+    }
+
     let mut items = Vec::new();
-    if state.hovered_item_id.is_some() {
-        if state.hovered_is_separator {
-            items.push(act(
-                CMD_REMOVE_ITEM,
-                "Удалить разделитель",
-                Some("✕"),
-                false,
-                true,
-            ));
-        } else {
-            items.push(act(
-                CMD_OPEN_ITEM_FOLDER,
-                "Открыть расположение файла",
-                Some("↗"),
-                false,
-                true,
-            ));
-            items.push(act(
-                CMD_CHOOSE_ICON,
-                "Сменить иконку...",
-                Some("✎"),
-                false,
-                true,
-            ));
-            items.push(act(
-                CMD_RESET_ICON,
-                "Авто-иконка Windows",
-                Some("↻"),
-                false,
-                true,
-            ));
-            items.push(act(
-                CMD_REMOVE_ITEM,
-                "Удалить значок",
-                Some("✕"),
-                false,
-                true,
-            ));
-        }
+    if vis.show_item_actions && state.hovered_item_id.is_some() {
+        push_hovered_item_actions(&mut items, state.hovered_is_separator);
         items.push(FluentMenuItem::Separator);
     }
     items.push(act(
@@ -127,21 +97,124 @@ fn build_dock_menu_spec(state: &DockMenuState) -> FluentMenuSpec {
         false,
         true,
     ));
-    items.push(act(
-        CMD_ADD_SEPARATOR,
-        "Добавить разделитель",
-        Some("|"),
-        false,
-        true,
-    ));
-    items.push(act(
-        CMD_TOGGLE_LOCK,
-        "Закрепить панель",
-        None,
-        state.locked,
-        true,
-    ));
-    items.push(FluentMenuItem::Separator);
+    if vis.show_add_separator {
+        items.push(act(
+            CMD_ADD_SEPARATOR,
+            "Добавить разделитель",
+            Some("|"),
+            false,
+            true,
+        ));
+    }
+    if vis.show_lock_controls {
+        items.push(act(
+            CMD_TOGGLE_LOCK,
+            "Закрепить панель",
+            None,
+            state.locked,
+            true,
+        ));
+        items.push(act(
+            CMD_TOGGLE_LOCK_ITEMS,
+            "Закрепить значки",
+            None,
+            state.lock_items,
+            true,
+        ));
+    }
+    if vis.show_edge_and_layer || vis.show_appearance || vis.show_behavior {
+        items.push(FluentMenuItem::Separator);
+    }
+    if vis.show_edge_and_layer {
+        push_edge_and_layer_submenus(&mut items, state);
+    }
+    if vis.show_appearance {
+        push_appearance_submenus(&mut items, state);
+    }
+    if vis.show_behavior {
+        items.push(build_behavior_submenu(state));
+    }
+    if vis.show_dock_management {
+        items.push(FluentMenuItem::Separator);
+        items.push(act(
+            CMD_OPEN_DOCK_CFG,
+            "Открыть docks.cfg",
+            Some("✎"),
+            false,
+            true,
+        ));
+        items.push(act(
+            CMD_RELOAD_DOCK_CFG,
+            "Перечитать docks.cfg",
+            Some("↻"),
+            false,
+            true,
+        ));
+        items.push(FluentMenuItem::Separator);
+        items.push(act(
+            CMD_ADD_DOCK,
+            "Добавить док-панель",
+            Some("+"),
+            false,
+            true,
+        ));
+        items.push(act(
+            CMD_REMOVE_DOCK,
+            "Удалить эту панель",
+            Some("✕"),
+            false,
+            state.can_remove_dock,
+        ));
+    }
+    FluentMenuSpec {
+        quick_actions,
+        items,
+        min_width: 244,
+    }
+}
+
+fn push_hovered_item_actions(items: &mut Vec<FluentMenuItem>, is_separator: bool) {
+    if is_separator {
+        items.push(act(
+            CMD_REMOVE_ITEM,
+            "Удалить разделитель",
+            Some("✕"),
+            false,
+            true,
+        ));
+    } else {
+        items.push(act(
+            CMD_OPEN_ITEM_FOLDER,
+            "Открыть расположение файла",
+            Some("↗"),
+            false,
+            true,
+        ));
+        items.push(act(
+            CMD_CHOOSE_ICON,
+            "Сменить иконку...",
+            Some("✎"),
+            false,
+            true,
+        ));
+        items.push(act(
+            CMD_RESET_ICON,
+            "Авто-иконка Windows",
+            Some("↻"),
+            false,
+            true,
+        ));
+        items.push(act(
+            CMD_REMOVE_ITEM,
+            "Удалить значок",
+            Some("✕"),
+            false,
+            true,
+        ));
+    }
+}
+
+fn push_edge_and_layer_submenus(items: &mut Vec<FluentMenuItem>, state: &DockMenuState) {
     items.push(FluentMenuItem::Submenu {
         label: "Положение на экране".to_owned(),
         icon: Some("⊞".to_owned()),
@@ -183,6 +256,9 @@ fn build_dock_menu_spec(state: &DockMenuState) -> FluentMenuSpec {
             ),
         ],
     });
+}
+
+fn push_appearance_submenus(items: &mut Vec<FluentMenuItem>, state: &DockMenuState) {
     items.push(FluentMenuItem::Submenu {
         label: "Отображение имён".to_owned(),
         icon: Some("Aa".to_owned()),
@@ -231,8 +307,11 @@ fn build_dock_menu_spec(state: &DockMenuState) -> FluentMenuSpec {
             act(CMD_OPACITY_35, "35%", None, p == 35, true),
         ],
     });
+}
+
+fn build_behavior_submenu(state: &DockMenuState) -> FluentMenuItem {
     let md = (43..=56).contains(&state.icon_size_px);
-    items.push(FluentMenuItem::Submenu {
+    FluentMenuItem::Submenu {
         label: "Значки и поведение".to_owned(),
         icon: Some("✦".to_owned()),
         enabled: true,
@@ -289,41 +368,6 @@ fn build_dock_menu_spec(state: &DockMenuState) -> FluentMenuSpec {
                 true,
             ),
         ],
-    });
-    items.push(FluentMenuItem::Separator);
-    items.push(act(
-        CMD_OPEN_DOCK_CFG,
-        "Открыть docks.cfg",
-        Some("✎"),
-        false,
-        true,
-    ));
-    items.push(act(
-        CMD_RELOAD_DOCK_CFG,
-        "Перечитать docks.cfg",
-        Some("↻"),
-        false,
-        true,
-    ));
-    items.push(FluentMenuItem::Separator);
-    items.push(act(
-        CMD_ADD_DOCK,
-        "Добавить док-панель",
-        Some("+"),
-        false,
-        true,
-    ));
-    items.push(act(
-        CMD_REMOVE_DOCK,
-        "Удалить эту панель",
-        Some("✕"),
-        false,
-        state.can_remove_dock,
-    ));
-    FluentMenuSpec {
-        quick_actions,
-        items,
-        min_width: 244,
     }
 }
 
@@ -353,6 +397,7 @@ fn decode_dock_command(cmd: u32, hovered: Option<u64>) -> Option<DockMenuAction>
         CMD_LABEL_ICON_TEXT => Some(DockMenuAction::SetLabelMode(2)),
         CMD_LABEL_ONLY => Some(DockMenuAction::SetLabelMode(3)),
         CMD_TOGGLE_LOCK => Some(DockMenuAction::ToggleLock),
+        CMD_TOGGLE_LOCK_ITEMS => Some(DockMenuAction::ToggleLockItems),
         CMD_OPACITY_100 => Some(DockMenuAction::SetOpacity(100)),
         CMD_OPACITY_85 => Some(DockMenuAction::SetOpacity(85)),
         CMD_OPACITY_70 => Some(DockMenuAction::SetOpacity(70)),

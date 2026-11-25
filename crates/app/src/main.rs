@@ -11,8 +11,14 @@ mod dock_ops;
 mod dock_shortcuts;
 #[cfg(windows)]
 mod docks;
+#[cfg(windows)]
+mod github_ctl;
+#[cfg(windows)]
+mod inproc_widgets;
 mod selftest;
 mod selftest_tools;
+#[cfg(windows)]
+mod settings_combo;
 #[cfg(windows)]
 mod settings_ctl;
 #[cfg(windows)]
@@ -50,13 +56,16 @@ use asrbox_mod_dock::{to_dock_rect, Rect};
 #[cfg(windows)]
 use asrbox_mod_overlay::GameOverlay;
 #[cfg(windows)]
-use asrbox_mod_settings::{SettingsSnapshot, SettingsTab, SettingsUiState};
+use asrbox_mod_settings::{SettingsSnapshot, SettingsTab, SettingsUiState, WidgetSubTab};
 #[cfg(windows)]
-use asrbox_mod_widgets::{CalendarWidget, SysMonitorWidget, CALENDAR_WIDGET_ID, SYS_WIDGET_ID};
+use asrbox_mod_widgets::{
+    CalendarWidget, NotesWidget, SysMonitorWidget, WeatherWidget, CALENDAR_WIDGET_ID,
+    SYS_WIDGET_ID, WEATHER_WIDGET_ID,
+};
 #[cfg(windows)]
 use asrbox_platform_api::{
-    load_appearance_config, AppearanceConfig, DockPlatform, IconProvider, PlatformEvent,
-    ToolsPlatform, WidgetPlatform,
+    load_appearance_config, load_menu_config, AppearanceConfig, ContextMenuConfig, DockPlatform,
+    IconProvider, PlatformEvent, ToolsPlatform, WidgetPlatform,
 };
 
 #[cfg(windows)]
@@ -66,7 +75,7 @@ use crate::docks::DockManager;
 #[cfg(windows)]
 use crate::supervisor::ModuleSupervisor;
 #[cfg(windows)]
-use crate::tools::resolve_app_paths;
+use crate::tools::{install_crash_log_hook, resolve_app_paths};
 
 pub(crate) const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -171,16 +180,20 @@ pub(crate) struct AppController<I: IconProvider> {
     pub(crate) make_icons: fn() -> I,
     pub(crate) modules_cfg: ModulesConfig,
     pub(crate) appearance: AppearanceConfig,
+    pub(crate) menus_cfg: ContextMenuConfig,
     pub(crate) supervisor: ModuleSupervisor,
     pub(crate) docks: Option<DockManager<I>>,
     pub(crate) calendar: Option<CalendarWidget>,
     pub(crate) sysmon: Option<SysMonitorWidget>,
+    pub(crate) weather: Option<WeatherWidget>,
+    pub(crate) notes: Option<NotesWidget>,
     pub(crate) overlay: Option<GameOverlay>,
     pub(crate) overlay_setup_mode: bool,
     pub(crate) backup: BackupController,
     pub(crate) settings_ui: SettingsUiState,
     pub(crate) cached_settings_snap: Option<SettingsSnapshot>,
     pub(crate) last_settings_tab: Option<SettingsTab>,
+    pub(crate) last_widget_subtab: Option<WidgetSubTab>,
     pub(crate) diagnostics_monitor_enabled: bool,
     pub(crate) debug: DebugHub,
     pub(crate) safe_mode: bool,
@@ -201,7 +214,9 @@ impl<I: IconProvider> AppController<I> {
     ) -> Self {
         let debug = DebugHub::new(paths.logs_dir.clone());
         let supervisor = ModuleSupervisor::new(host_hwnd_raw, safe_mode);
+        let menus_cfg = load_menu_config(&paths.menus_cfg);
         let mut settings_ui = SettingsUiState::default();
+        settings_ui.bind_ui_state_path(paths.settings_ui_cfg.clone());
         settings_ui.set_palette_immediate(appearance.palette());
         Self {
             paths,
@@ -209,16 +224,20 @@ impl<I: IconProvider> AppController<I> {
             make_icons,
             modules_cfg,
             appearance,
+            menus_cfg,
             supervisor,
             docks: None,
             calendar: None,
             sysmon: None,
+            weather: None,
+            notes: None,
             overlay: None,
             overlay_setup_mode: false,
             backup,
             settings_ui,
             cached_settings_snap: None,
             last_settings_tab: None,
+            last_widget_subtab: None,
             diagnostics_monitor_enabled: true,
             debug,
             safe_mode,
@@ -245,6 +264,7 @@ impl<I: IconProvider> AppController<I> {
                 host,
             ) {
                 dm.palette = pal;
+                dm.menu_vis = self.menus_cfg.dock;
                 let _ = dm.sync_windows(host, self.safe_mode);
                 self.docks = Some(dm);
             }
@@ -254,11 +274,13 @@ impl<I: IconProvider> AppController<I> {
             }
         }
 
-        let want_inproc_cal =
+        let want_inproc_w =
             self.modules_cfg.isolation == IsolationMode::InProc && self.modules_cfg.widgets_enabled;
-        if want_inproc_cal && self.calendar.is_none() {
+        let wvis = self.menus_cfg.widget;
+        if want_inproc_w && self.calendar.is_none() {
             let mut cal =
                 CalendarWidget::load(self.paths.widgets_cfg.clone(), self.paths.cache_dir.clone());
+            cal.set_menu_visibility(wvis);
             cal.set_palette(host, pal);
             let _ = cal.sync_window(host, self.safe_mode);
             self.debug.log(
@@ -268,22 +290,38 @@ impl<I: IconProvider> AppController<I> {
                 format!("Календарь (inproc): {}", cal.status_summary()),
             );
             self.calendar = Some(cal);
-        } else if !want_inproc_cal && self.calendar.take().is_some() {
+        } else if !want_inproc_w && self.calendar.take().is_some() {
             let _ = host.destroy_widget_window(CALENDAR_WIDGET_ID);
         }
-        if want_inproc_cal && self.sysmon.is_none() {
+        if want_inproc_w && self.sysmon.is_none() {
             let mut sys = SysMonitorWidget::load(self.paths.sysmon_cfg.clone());
+            sys.set_menu_visibility(wvis);
             sys.set_palette(host, pal);
             let _ = sys.sync_window(host, self.safe_mode);
-            self.debug.log(
-                now,
-                LogLevel::Info,
-                "widgets",
-                format!("Системный монитор (inproc): {}", sys.status_summary()),
-            );
             self.sysmon = Some(sys);
-        } else if !want_inproc_cal && self.sysmon.take().is_some() {
+        } else if !want_inproc_w && self.sysmon.take().is_some() {
             let _ = host.destroy_widget_window(SYS_WIDGET_ID);
+        }
+        if want_inproc_w && self.weather.is_none() {
+            let mut weather = WeatherWidget::load(self.paths.weather_cfg.clone());
+            weather.set_menu_visibility(wvis);
+            weather.set_palette(host, pal);
+            let _ = weather.sync_window(host, self.safe_mode);
+            self.weather = Some(weather);
+        } else if !want_inproc_w && self.weather.take().is_some() {
+            let _ = host.destroy_widget_window(WEATHER_WIDGET_ID);
+        }
+        if want_inproc_w && self.notes.is_none() {
+            let mut notes = NotesWidget::load(
+                self.paths.notes_cfg.clone(),
+                self.paths.notes_dir.join("notes_db.cfg"),
+            );
+            notes.set_menu_visibility(wvis);
+            notes.set_palette(host, pal);
+            let _ = notes.sync_window(host, self.safe_mode);
+            self.notes = Some(notes);
+        } else if !want_inproc_w && self.notes.take().is_some() {
+            host.close_notes_window();
         }
         self.sync_inproc_overlay(host);
     }
@@ -306,6 +344,13 @@ impl<I: IconProvider> AppController<I> {
                 let msg = self.backup.on_webdav_done(host, res, now);
                 let lvl = if ok { LogLevel::Info } else { LogLevel::Error };
                 self.debug.log(now, lvl, "webdav", msg);
+                self.render_settings_ui(host);
+            }
+            PlatformEvent::GitHubFetchDone(res) => {
+                let now = host.local_time_now();
+                let (ok, msg) = self.backup.on_github_fetch_done(host, res, now);
+                let lvl = if ok { LogLevel::Info } else { LogLevel::Error };
+                self.debug.log(now, lvl, "backup", msg);
                 self.render_settings_ui(host);
             }
             PlatformEvent::DisplayChanged { work_area } => {
@@ -332,37 +377,4 @@ impl<I: IconProvider> AppController<I> {
             self.refresh_debug_ui(host);
         }
     }
-}
-
-#[cfg(windows)]
-fn install_crash_log_hook(logs_dir: &std::path::Path) {
-    use std::fs::{self, OpenOptions};
-    use std::io::Write;
-    let dir = logs_dir.to_path_buf();
-    let prev = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |info| {
-        let _ = fs::create_dir_all(&dir);
-        if let Ok(mut file) = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(dir.join("crash.log"))
-        {
-            let loc = info.location().map_or_else(
-                || "unknown".to_owned(),
-                |l| format!("{}:{}:{}", l.file(), l.line(), l.column()),
-            );
-            let msg = info
-                .payload()
-                .downcast_ref::<&str>()
-                .copied()
-                .or_else(|| info.payload().downcast_ref::<String>().map(String::as_str))
-                .unwrap_or("<non-string panic>");
-            let _ = writeln!(
-                file,
-                "[v{APP_VERSION}] pid={} panic at {loc}: {msg}",
-                std::process::id()
-            );
-        }
-        prev(info);
-    }));
 }

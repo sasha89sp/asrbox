@@ -216,76 +216,14 @@ fn build_and_mask(top_down: &[u8], size: usize) -> Vec<u8> {
 }
 
 fn render_fluent_icon_bgra(size: u32) -> Vec<u8> {
-    let mut buf = vec![0u8; (size as usize) * (size as usize) * 4];
-    let s = size as f32;
-    let margin = s * 0.06;
-    let body = s - margin * 2.0;
-    let rad = s * 0.24;
-
-    for y in 0..size {
-        for x in 0..size {
-            let fx = x as f32 + 0.5;
-            let fy = y as f32 + 0.5;
-            let d = rounded_sdf(fx - s * 0.5, fy - s * 0.5, body * 0.5, body * 0.5, rad);
-            let cov = (0.6 - d).clamp(0.0, 1.0);
-            if cov <= 0.0 {
-                continue;
-            }
-            let ux = ((fx - margin) / body).clamp(0.0, 1.0);
-            let uy = ((fy - margin) / body).clamp(0.0, 1.0);
-            let mut rgb = sample_fluent_surface(ux, uy);
-            if d > -1.2 {
-                let rim = ((d + 1.2) / 1.2).clamp(0.0, 1.0) * 0.30;
-                rgb[0] = lerp_u8(rgb[0], 190, rim);
-                rgb[1] = lerp_u8(rgb[1], 232, rim);
-                rgb[2] = lerp_u8(rgb[2], 255, rim);
-            }
-            let a = (cov * 255.0).round().clamp(0.0, 255.0) as u8;
-            let idx = ((y as usize) * (size as usize) + (x as usize)) * 4;
-            buf[idx] = rgb[2];
-            buf[idx + 1] = rgb[1];
-            buf[idx + 2] = rgb[0];
-            buf[idx + 3] = a;
-        }
-    }
-    buf
-}
-
-fn sample_fluent_surface(ux: f32, uy: f32) -> [u8; 3] {
-    let diag = (ux * 0.45 + uy * 0.55).clamp(0.0, 1.0);
-    let bg = [
-        lerp_u8(22, 0, diag),
-        lerp_u8(136, 84, diag),
-        lerp_u8(224, 174, diag),
-    ];
-    if in_box(ux, uy, 0.17, 0.17, 0.46, 0.46, 0.07) {
-        return [255, 255, 255];
-    }
-    if in_box(ux, uy, 0.54, 0.17, 0.83, 0.46, 0.07) {
-        return [140, 224, 255];
-    }
-    if in_box(ux, uy, 0.17, 0.54, 0.83, 0.83, 0.07) {
-        return [230, 244, 255];
-    }
-    bg
-}
-
-fn in_box(ux: f32, uy: f32, x0: f32, y0: f32, x1: f32, y1: f32, r: f32) -> bool {
-    let cx = (x0 + x1) * 0.5;
-    let cy = (y0 + y1) * 0.5;
-    let hx = (x1 - x0) * 0.5;
-    let hy = (y1 - y0) * 0.5;
-    rounded_sdf(ux - cx, uy - cy, hx, hy, r) <= 0.0
-}
-
-fn rounded_sdf(px: f32, py: f32, hx: f32, hy: f32, r: f32) -> f32 {
-    let qx = px.abs() - (hx - r);
-    let qy = py.abs() - (hy - r);
-    qx.max(0.0).hypot(qy.max(0.0)) + qx.max(qy).min(0.0) - r
-}
-
-fn lerp_u8(a: u8, b: u8, t: f32) -> u8 {
-    (f32::from(a) + (f32::from(b) - f32::from(a)) * t)
-        .round()
-        .clamp(0.0, 255.0) as u8
+    let mut frame = asrbox_platform_api::BgraFrame::transparent(size, size);
+    asrbox_platform_api::draw_asr_glass_logo(
+        &mut frame,
+        0,
+        0,
+        i32::try_from(size).unwrap_or(32),
+        true,
+        false,
+    );
+    frame.pixels
 }

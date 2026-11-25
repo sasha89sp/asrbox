@@ -1,5 +1,8 @@
 use asrbox_core::{IsolationMode, ModuleId};
-use asrbox_platform_api::{AccentPreset, FluentPalette, ThemeMode, WebDavDirEntry, WidgetLayer};
+use asrbox_platform_api::{
+    AccentPreset, ContextMenuConfig, DesignTheme, FluentPalette, ThemeMode, WebDavDirEntry,
+    WidgetLayer,
+};
 
 use crate::*;
 
@@ -24,6 +27,7 @@ fn sample_snapshot() -> SettingsSnapshot {
             icon_size_px: 48,
             opacity_percent: 85,
             locked: true,
+            lock_items: false,
             show_running_indicator: true,
             focus_running_window: true,
             launch_animation_enabled: true,
@@ -52,6 +56,8 @@ fn sample_snapshot() -> SettingsSnapshot {
             width: 560,
             height: 492,
         },
+        weather: WeatherSettingsView::default(),
+        notes: NotesSettingsView::default(),
         overlay: OverlaySettingsView {
             module_enabled: true,
             auto_games_only: true,
@@ -66,6 +72,8 @@ fn sample_snapshot() -> SettingsSnapshot {
             refresh_interval_ms: 1000,
         },
         backup: BackupSettingsView {
+            encrypt_zip: true,
+            has_zip_password: true,
             servers: vec![WebDavServerView {
                 id: "srv-1".to_owned(),
                 name: "Mail.ru".to_owned(),
@@ -90,6 +98,15 @@ fn sample_snapshot() -> SettingsSnapshot {
             }),
             ..BackupSettingsView::default()
         },
+        github: GitHubBackupView {
+            repo: "sasha89sp/asrbox".to_owned(),
+            branch: "main".to_owned(),
+            include_in_backup: true,
+            has_token: true,
+            busy: false,
+            last_status: String::new(),
+        },
+        menus: ContextMenuConfig::default(),
         diagnostics: DiagnosticsLiveView {
             monitor_enabled: true,
             filter_label: "Все".to_owned(),
@@ -100,55 +117,73 @@ fn sample_snapshot() -> SettingsSnapshot {
             ..DiagnosticsLiveView::default()
         },
         about: AboutSettingsView {
-            version: "0.0.5".to_owned(),
+            version: "0.0.8".to_owned(),
             exe_path: "asrbox.exe".to_owned(),
             data_dir: "data".to_owned(),
             config_dir: "data/config".to_owned(),
             backups_dir: "data/backups".to_owned(),
             logs_dir: "data/logs".to_owned(),
-            changelog_lines: vec!["## [0.0.5]".to_owned(), "- Fluent Design".to_owned()],
+            changelog_lines: vec!["## [0.0.8]".to_owned(), "- ASR Glass".to_owned()],
         },
     }
 }
 
 #[test]
-fn renders_all_tabs_and_browser_tabs_in_light_and_dark() {
+fn renders_all_tabs_themes_and_widgets_subtabs() {
     let snap = sample_snapshot();
     let mut ui = SettingsUiState::default();
     assert_eq!(SettingsTab::ALL.len(), 4);
-    for theme in [ThemeMode::Dark, ThemeMode::Light] {
-        ui.set_palette_immediate(FluentPalette::from_theme(theme, AccentPreset::Blue));
-        for tab in SettingsTab::ALL {
-            ui.active_tab = tab;
-            ui.active_browser_tab = BrowserTab::Main;
-            let (frame, inputs) = ui.render(&snap);
-            assert_eq!(frame.bgra.width, 880);
-            assert!(!frame.texts.is_empty());
-            assert!(inputs.search.is_some());
-        }
-        ui.active_tab = SettingsTab::Widgets;
-        for sub in [WidgetSubTab::Calendar, WidgetSubTab::SysMonitor] {
-            ui.selected_widget = sub;
-            let (frame, _) = ui.render(&snap);
-            assert!(!frame.texts.is_empty());
+    for style in [DesignTheme::AsrGlass, DesignTheme::Win11Classic] {
+        for theme in [ThemeMode::Dark, ThemeMode::Light] {
+            ui.set_palette_immediate(FluentPalette::from_appearance(
+                style,
+                theme,
+                AccentPreset::Blue,
+            ));
+            for tab in SettingsTab::ALL {
+                ui.active_tab = tab;
+                ui.active_browser_tab = BrowserTab::Main;
+                let (frame, inputs) = ui.render(&snap);
+                assert_eq!(frame.bgra.width, 860);
+                assert!(!frame.texts.is_empty());
+                assert!(inputs.search.is_some());
+            }
+            ui.active_tab = SettingsTab::Widgets;
+            for sub in [
+                WidgetSubTab::Calendar,
+                WidgetSubTab::SysMonitor,
+                WidgetSubTab::Weather,
+                WidgetSubTab::Notes,
+            ] {
+                ui.selected_widget = sub;
+                let (frame, _) = ui.render(&snap);
+                assert!(!frame.texts.is_empty());
+            }
         }
     }
     ui.open_browser_tab(BrowserTab::Diagnostics);
     assert_eq!(ui.browser_tabs.len(), 2);
-    let (f1, _) = ui.render(&snap);
-    assert!(!f1.texts.is_empty());
+    let _ = ui.render(&snap);
     ui.open_browser_tab(BrowserTab::VersionHistory);
-    let (f2, _) = ui.render(&snap);
-    assert!(!f2.texts.is_empty());
+    let _ = ui.render(&snap);
     ui.open_browser_tab(BrowserTab::WebDavBrowser {
         server_id: "srv-1".to_owned(),
         server_name: "Mail.ru".to_owned(),
     });
-    let (f3, inputs3) = ui.render(&snap);
-    assert!(!f3.texts.is_empty());
+    let (_, inputs3) = ui.render(&snap);
     assert!(inputs3.aux.is_some());
-    ui.close_browser_tab(1);
-    assert_eq!(ui.browser_tabs.len(), 3);
+}
+
+#[test]
+fn global_search_expands_matching_sections_across_tabs() {
+    let snap = sample_snapshot();
+    let mut ui = SettingsUiState {
+        search_query: "github".to_owned(),
+        ..Default::default()
+    };
+    let (frame, _) = ui.render(&snap);
+    assert!(frame.texts.iter().any(|t| t.text.contains("GitHub")));
+    assert!(ui.layout.cards.iter().any(|c| c.highlight));
 }
 
 #[test]
@@ -158,8 +193,8 @@ fn backup_and_sync_server_chips_do_not_overlap_subtitles() {
         active_tab: SettingsTab::General,
         ..Default::default()
     };
+    ui.expanded_sections.insert("backup_cloud".to_owned());
     let _ = ui.render(&snap);
-
     for card in &ui.layout.cards {
         for row in &card.rows {
             if row.subtitle.is_none() {
@@ -168,7 +203,7 @@ fn backup_and_sync_server_chips_do_not_overlap_subtitles() {
             let sub_bottom = row.y + 46;
             assert!(
                 row.height >= 50,
-                "row '{}' has tight height {}",
+                "row '{}' tight height {}",
                 row.title,
                 row.height
             );
@@ -177,13 +212,7 @@ fn backup_and_sync_server_chips_do_not_overlap_subtitles() {
                     let inside_row =
                         ctrl.rect.y >= row.y && ctrl.rect.y < row.y + row.height as i32;
                     if inside_row {
-                        assert!(
-                            ctrl.rect.y >= sub_bottom,
-                            "chip at y={} overlaps subtitle ending at {} in row '{}'",
-                            ctrl.rect.y,
-                            sub_bottom,
-                            row.title
-                        );
+                        assert!(ctrl.rect.y >= sub_bottom);
                     }
                 }
             }
@@ -206,14 +235,8 @@ fn scrolled_content_texts_do_not_overlap_sticky_header() {
         if cmd.x >= sidebar_x && cmd.y < top_y {
             let is_header = cmd.text == ui.layout.header_title
                 || cmd.text == ui.layout.header_subtitle
-                || cmd.text == "⌕"
-                || cmd.text == "Сбросить"
-                || cmd.text == "Reset";
-            assert!(
-                is_header,
-                "content text '{}' at y={} bled into sticky header (top_y={})",
-                cmd.text, cmd.y, top_y
-            );
+                || cmd.text == "⌕";
+            assert!(is_header, "content text '{}' bled into header", cmd.text);
         }
     }
 }

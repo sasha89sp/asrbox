@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use asrbox_platform_api::{
-    FluentPalette, HttpFetchResult, LocalDateTime, PixelRect, WidgetMenuState, WidgetSizeBounds,
+    FluentPalette, HttpFetchResult, LocalDateTime, PixelRect, WidgetMenuState,
+    WidgetMenuVisibility, WidgetSizeBounds,
 };
 
 use crate::format::{
@@ -36,12 +37,16 @@ pub fn calendar_window_rect(cfg: &CalendarWidgetConfig) -> PixelRect {
     }
 }
 
-pub fn calendar_menu_state(cfg: &CalendarWidgetConfig) -> WidgetMenuState {
+pub fn calendar_menu_state(
+    cfg: &CalendarWidgetConfig,
+    menu_vis: WidgetMenuVisibility,
+) -> WidgetMenuState {
     WidgetMenuState {
         layer: cfg.layer,
         opacity_percent: cfg.opacity_percent,
         refresh_ms: None,
         sync_interval_sec: Some(cfg.refresh_interval_sec),
+        menu_vis,
     }
 }
 

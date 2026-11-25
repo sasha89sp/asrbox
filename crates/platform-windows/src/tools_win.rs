@@ -11,14 +11,15 @@ use crate::autostart::{
     cred_delete, cred_load, cred_save, is_autostart_enabled, set_autostart_enabled,
 };
 use crate::fluent_menu::show_fluent_menu;
+use crate::github_http::spawn_github_zipball;
 use crate::settings_proc::{
     apply_settings_window_theme, is_settings_open, open_or_focus_settings_window, present_settings,
-    read_settings_input_text, set_settings_window_anim_timer, settings_hwnd_or,
-    write_settings_input_text,
+    read_settings_input_text, set_settings_window_anim_timer, settings_client_to_screen,
+    settings_hwnd_or, write_settings_input_text,
 };
 use crate::shell::{
     copy_text_to_clipboard, open_in_explorer, open_in_notepad, pick_sync_files_dialog,
-    pick_sync_folder_dialog,
+    pick_sync_folder_dialog, random_bytes_win,
 };
 use crate::tools_proc::{create_about_window, create_debug_window, ABOUT_UI, DEBUG_UI};
 pub(crate) use crate::tools_state::{
@@ -152,6 +153,10 @@ impl ToolsPlatform for WindowsDockHost {
         is_settings_open()
     }
 
+    fn settings_client_to_screen(&self, pt: PixelPoint) -> PixelPoint {
+        settings_client_to_screen(pt)
+    }
+
     fn show_fluent_popup_menu(
         &mut self,
         screen_point: PixelPoint,
@@ -197,6 +202,31 @@ impl ToolsPlatform for WindowsDockHost {
 
     fn cred_delete(&self, target: &str) -> Result<(), String> {
         cred_delete(target)
+    }
+
+    fn random_bytes(&self, len: usize) -> Result<Vec<u8>, String> {
+        random_bytes_win(len)
+    }
+
+    fn github_fetch_zipball(
+        &self,
+        op_id: u64,
+        repo: &str,
+        branch: &str,
+        token: &str,
+        dest_path: &Path,
+        include_in_pending_backup: bool,
+    ) -> Result<(), String> {
+        spawn_github_zipball(
+            self.host_hwnd,
+            op_id,
+            repo.to_owned(),
+            branch.to_owned(),
+            token.to_owned(),
+            dest_path.to_path_buf(),
+            include_in_pending_backup,
+        );
+        Ok(())
     }
 
     fn webdav_test(

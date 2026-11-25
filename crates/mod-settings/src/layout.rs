@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use asrbox_platform_api::{AppLanguage, PixelRect};
 
 use crate::i18n::tr;
@@ -5,8 +7,8 @@ use crate::layout_browser_tabs::build_browser_tab;
 use crate::layout_dock::build_dock_tab;
 use crate::layout_general::build_general_tab;
 use crate::layout_overlay::build_overlay_tab;
-use crate::layout_tabs::build_widgets_tab;
-use crate::types::{BrowserTab, SettingsAction, SettingsTab, SliderKind};
+use crate::layout_tabs::{build_all_widgets_for_search, build_widgets_tab};
+use crate::types::{BrowserTab, ComboKind, SettingsAction, SettingsTab, SliderKind};
 
 pub use crate::layout_types::{
     rect_contains, BuildLayoutArgs, ButtonTone, CardBlock, CardRow, ControlItem, HitKind,
@@ -26,23 +28,52 @@ pub fn build_layout(args: &BuildLayoutArgs<'_>) -> SettingsLayout {
         args.scroll_y,
         args.snap.appearance.language,
         args.search_query,
+        args.expanded_sections,
+        args.confirming_reset,
     );
     b.add_sidebar_tabs();
     if has_strip {
         b.add_browser_tab_strip(args.browser_tabs, args.active_browser);
     }
     if matches!(args.active_browser, BrowserTab::Main) {
-        b.add_header_search_and_reset(args.tab);
-        match args.tab {
-            SettingsTab::General => build_general_tab(&mut b, args.snap, args.editing_server_dir),
-            SettingsTab::Dock => build_dock_tab(
+        b.add_header_search();
+        if !b.search_lower.is_empty() {
+            let lang = b.lang;
+            b.set_header(
+                tr(lang, "Результаты поиска", "Search Results"),
+                &format!(
+                    "{}: «{}»",
+                    tr(
+                        lang,
+                        "Совпадения по всем разделам настроек",
+                        "Matches across all settings tabs"
+                    ),
+                    args.search_query.trim()
+                ),
+            );
+            build_general_tab(&mut b, args.snap, args.editing_server_dir);
+            build_dock_tab(
                 &mut b,
                 args.snap,
                 args.selected_dock,
                 args.selected_dock_item,
-            ),
-            SettingsTab::Widgets => build_widgets_tab(&mut b, args.snap, args.selected_widget),
-            SettingsTab::Overlay => build_overlay_tab(&mut b, args.snap),
+            );
+            build_all_widgets_for_search(&mut b, args.snap);
+            build_overlay_tab(&mut b, args.snap);
+        } else {
+            match args.tab {
+                SettingsTab::General => {
+                    build_general_tab(&mut b, args.snap, args.editing_server_dir)
+                }
+                SettingsTab::Dock => build_dock_tab(
+                    &mut b,
+                    args.snap,
+                    args.selected_dock,
+                    args.selected_dock_item,
+                ),
+                SettingsTab::Widgets => build_widgets_tab(&mut b, args.snap, args.selected_widget),
+                SettingsTab::Overlay => build_overlay_tab(&mut b, args.snap),
+            }
         }
     } else {
         build_browser_tab(&mut b, args.snap, args.active_browser);
@@ -50,10 +81,12 @@ pub fn build_layout(args: &BuildLayoutArgs<'_>) -> SettingsLayout {
     b.finish()
 }
 
-pub(crate) struct LayoutBuilder {
+pub(crate) struct LayoutBuilder<'a> {
     pub out: SettingsLayout,
     pub lang: AppLanguage,
     pub search_lower: String,
+    pub expanded: &'a HashSet<String>,
+    pub confirming_reset: bool,
     scroll_y: i32,
     pub content_x: i32,
     pub content_w: u32,
@@ -61,7 +94,8 @@ pub(crate) struct LayoutBuilder {
     next_id: usize,
 }
 
-impl LayoutBuilder {
+impl<'a> LayoutBuilder<'a> {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         width: u32,
         height: u32,
@@ -70,6 +104,8 @@ impl LayoutBuilder {
         scroll_y: i32,
         lang: AppLanguage,
         search_query: &str,
+        expanded: &'a HashSet<String>,
+        confirming_reset: bool,
     ) -> Self {
         let content_x = SIDEBAR_WIDTH as i32 + 24;
         let content_w = width.saturating_sub(SIDEBAR_WIDTH + 48).max(460);
@@ -83,12 +119,18 @@ impl LayoutBuilder {
             },
             lang,
             search_lower: search_query.trim().to_lowercase(),
+            expanded,
+            confirming_reset,
             scroll_y: scroll_y.max(0),
             content_x,
             content_w,
-            cursor_y: content_top_y + 16,
+            cursor_y: content_top_y + 14,
             next_id: 1,
         }
+    }
+
+    pub(crate) fn is_searching(&self) -> bool {
+        !self.search_lower.is_empty()
     }
 
     pub(crate) fn matches_search(&self, haystack: &str) -> bool {
@@ -98,8 +140,42 @@ impl LayoutBuilder {
         haystack.to_lowercase().contains(&self.search_lower)
     }
 
+    /// Collapsible accordion header (`42px`). Auto-expands and highlights when search matches.
+    pub(crate) fn accordion(
+        &mut self,
+        id: &str,
+        title: &str,
+        summary: &str,
+        keywords: &str,
+    ) -> bool {
+        let searching = self.is_searching();
+        let hay = format!("{title} {summary} {keywords}");
+        if searching && !self.matches_search(&hay) {
+            return false;
+        }
+        let is_expanded = searching || self.expanded.contains(id);
+        let y = self.cursor_y;
+        self.push_control(
+            PixelRect {
+                x: self.content_x,
+                y: self.sy(y),
+                width: self.content_w,
+                height: 42,
+            },
+            HitKind::AccordionHeader {
+                id: id.to_owned(),
+                title: title.to_owned(),
+                summary: summary.to_owned(),
+                expanded: is_expanded,
+                matched: searching,
+            },
+        );
+        self.cursor_y = y + if is_expanded { 48 } else { 52 };
+        is_expanded
+    }
+
     fn add_sidebar_tabs(&mut self) {
-        let mut y = 76;
+        let mut y = 86;
         for tab in SettingsTab::ALL {
             self.push_control(
                 PixelRect {
@@ -110,7 +186,7 @@ impl LayoutBuilder {
                 },
                 HitKind::Tab(tab),
             );
-            y += 40;
+            y += 42;
         }
     }
 
@@ -156,46 +232,35 @@ impl LayoutBuilder {
         }
     }
 
-    fn add_header_search_and_reset(&mut self, tab: SettingsTab) {
+    fn add_header_search(&mut self) {
         let hy = if self.out.has_tab_strip {
             TAB_STRIP_H
         } else {
             0
         };
-        let reset_w = 88u32;
-        let search_w = 186u32;
+        let search_w = 220u32;
         let right_edge = self.out.width as i32 - 24;
-        let reset_x = right_edge - reset_w as i32;
-        let search_x = reset_x - search_w as i32 - 10;
-        let ctrl_y = hy + 22;
+        let search_x = right_edge - search_w as i32;
+        let ctrl_y = hy + 21;
         let search_r = PixelRect {
             x: search_x,
             y: ctrl_y,
             width: search_w,
-            height: 28,
+            height: 30,
         };
         self.out.search_rect = Some(search_r);
         self.out.input_rects.search = Some(PixelRect {
-            x: search_r.x + 26,
-            y: search_r.y + 2,
-            width: search_r.width.saturating_sub(32),
+            x: search_r.x + 28,
+            y: search_r.y + 3,
+            width: search_r.width.saturating_sub(34),
             height: 24,
         });
-        self.push_control(
-            PixelRect {
-                x: reset_x,
-                y: ctrl_y,
-                width: reset_w,
-                height: 28,
-            },
-            HitKind::HeaderButton {
-                label: tr(self.lang, "Сбросить", "Reset").to_owned(),
-                action: SettingsAction::ResetSection(tab),
-            },
-        );
     }
 
     pub(crate) fn set_header(&mut self, title: &str, subtitle: &str) {
+        if self.is_searching() && !self.out.header_title.is_empty() {
+            return;
+        }
         self.out.header_title = title.to_owned();
         self.out.header_subtitle = subtitle.to_owned();
     }
@@ -230,11 +295,36 @@ impl LayoutBuilder {
         self.out.cards.push(CardBlock {
             rect,
             amber,
+            highlight: self.is_searching(),
             title: title.map(str::to_owned),
             rows: shifted_rows,
         });
-        self.cursor_y = top + header_h + body_h as i32 + 16;
+        self.cursor_y = top + header_h + body_h as i32 + 14;
         top + header_h
+    }
+
+    pub(crate) fn push_combo(
+        &mut self,
+        x: i32,
+        y_log: i32,
+        width: u32,
+        label: &str,
+        dot_color: Option<[u8; 4]>,
+        kind: ComboKind,
+    ) {
+        self.push_control(
+            PixelRect {
+                x,
+                y: self.sy(y_log),
+                width,
+                height: 30,
+            },
+            HitKind::ComboBox {
+                label: label.to_owned(),
+                dot_color,
+                kind,
+            },
+        );
     }
 
     pub(crate) fn add_segmented_row(
@@ -268,25 +358,26 @@ impl LayoutBuilder {
     }
 
     pub(crate) fn push_toggle(&mut self, x: i32, y_log: i32, on: bool, action: SettingsAction) {
-        let r = PixelRect {
-            x,
-            y: self.sy(y_log),
-            width: 44,
-            height: 22,
-        };
-        self.push_control(r, HitKind::Toggle { on, action });
+        self.push_control(
+            PixelRect {
+                x,
+                y: self.sy(y_log),
+                width: 44,
+                height: 22,
+            },
+            HitKind::Toggle { on, action },
+        );
     }
 
     pub(crate) fn push_slider(&mut self, x: i32, y_log: i32, kind: SliderKind, value: u32) {
         let (min, max) = kind.range();
-        let r = PixelRect {
-            x,
-            y: self.sy(y_log),
-            width: 150,
-            height: 24,
-        };
         self.push_control(
-            r,
+            PixelRect {
+                x,
+                y: self.sy(y_log),
+                width: 150,
+                height: 24,
+            },
             HitKind::Slider {
                 kind,
                 value,
@@ -304,14 +395,13 @@ impl LayoutBuilder {
         action: SettingsAction,
     ) {
         let (x, y_log, width, height) = bounds;
-        let r = PixelRect {
-            x,
-            y: self.sy(y_log),
-            width,
-            height,
-        };
         self.push_control(
-            r,
+            PixelRect {
+                x,
+                y: self.sy(y_log),
+                width,
+                height,
+            },
             HitKind::Button {
                 label: label.to_owned(),
                 tone,
@@ -328,14 +418,13 @@ impl LayoutBuilder {
         action: SettingsAction,
     ) {
         let (x, y_log, width, height) = bounds;
-        let r = PixelRect {
-            x,
-            y: self.sy(y_log),
-            width,
-            height,
-        };
         self.push_control(
-            r,
+            PixelRect {
+                x,
+                y: self.sy(y_log),
+                width,
+                height,
+            },
             HitKind::Chip {
                 label: label.to_owned(),
                 active,

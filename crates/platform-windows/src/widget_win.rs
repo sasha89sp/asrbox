@@ -1,24 +1,30 @@
 use std::path::Path;
 
 use asrbox_platform_api::{
-    LocalDateTime, PixelPoint, PixelRect, WidgetFrame, WidgetLayer, WidgetMenuAction,
-    WidgetMenuState, WidgetPlatform, WidgetSizeBounds,
+    FluentMenuSpec, FluentPalette, LocalDateTime, NotesInputRects, PixelPoint, PixelRect,
+    WidgetFrame, WidgetLayer, WidgetMenuAction, WidgetMenuState, WidgetPlatform,
 };
 use windows::core::{w, PCWSTR};
-use windows::Win32::Foundation::{HWND, POINT, RECT};
+use windows::Win32::Foundation::{HWND, POINT};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DestroyWindow, GetCursorPos, GetWindowLongPtrW, KillTimer, SetTimer,
     SetWindowLongPtrW, SetWindowPos, ShowWindow, GWLP_USERDATA, GWL_EXSTYLE, HWND_TOPMOST,
-    IDC_ARROW, IDC_SIZENESW, IDC_SIZENS, IDC_SIZENWSE, IDC_SIZEWE, SWP_FRAMECHANGED,
-    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_HIDE, SW_SHOWNOACTIVATE,
-    WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
+    SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_HIDE,
+    SW_SHOWNOACTIVATE, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
+    WS_EX_TRANSPARENT, WS_POPUP,
 };
 
+use crate::fluent_menu::show_fluent_menu;
 use crate::font_engine::set_active_font_renderer;
 use crate::http::spawn_http_get;
+use crate::notes_win::{
+    apply_notes_win_theme, close_notes_win, focus_notes_input_win, notes_hwnd_or, open_notes_win,
+    present_notes_win, read_notes_input, set_notes_win_layer, set_notes_win_opacity,
+    write_notes_input,
+};
 use crate::overlay_telemetry::request_overlay_sample;
 use crate::present_layered_bgra;
-use crate::shell::{open_in_notepad, open_url_str};
+use crate::shell::{launch_system_tool, open_in_notepad, open_url_str};
 use crate::sys_telemetry::request_telemetry_sample;
 use crate::widget_menu::show_widget_context_menu;
 use crate::widget_proc::{
@@ -263,7 +269,74 @@ impl WidgetPlatform for WindowsDockHost {
         open_in_notepad(path)
     }
 
-    fn set_theme(&mut self, palette: asrbox_platform_api::FluentPalette) {
+    fn launch_system_tool(&self, cmd: &str, args: &str) -> Result<(), String> {
+        launch_system_tool(cmd, args)
+    }
+
+    fn open_notes_window(
+        &mut self,
+        title: &str,
+        rect: PixelRect,
+        layer: WidgetLayer,
+        opacity_percent: u8,
+        palette: FluentPalette,
+    ) -> Result<(), String> {
+        let (ui_font, _) = self.tools.ensure_fonts();
+        open_notes_win(
+            self.hinstance,
+            title,
+            rect,
+            layer,
+            opacity_percent,
+            ui_font,
+            palette,
+        )
+    }
+
+    fn close_notes_window(&mut self) {
+        close_notes_win();
+    }
+
+    fn present_notes_frame(&mut self, frame: &WidgetFrame, inputs: NotesInputRects) {
+        present_notes_win(frame, inputs);
+    }
+
+    fn notes_input_text(&self, slot: u8) -> String {
+        read_notes_input(slot)
+    }
+
+    fn set_notes_input_text(&self, slot: u8, text: &str) {
+        write_notes_input(slot, text);
+    }
+
+    fn focus_notes_input(&self, slot: u8) {
+        focus_notes_input_win(slot);
+    }
+
+    fn apply_notes_theme(&mut self, palette: FluentPalette) {
+        self.theme = palette;
+        apply_notes_win_theme(palette);
+    }
+
+    fn set_notes_layer(&mut self, layer: WidgetLayer) {
+        set_notes_win_layer(layer);
+    }
+
+    fn set_notes_opacity(&mut self, opacity_percent: u8) {
+        set_notes_win_opacity(opacity_percent);
+    }
+
+    fn show_notes_popup_menu(
+        &mut self,
+        screen_pt: PixelPoint,
+        spec: &FluentMenuSpec,
+        palette: FluentPalette,
+    ) -> Result<Option<u32>, String> {
+        let owner = notes_hwnd_or(self.host_hwnd);
+        show_fluent_menu(self.hinstance, owner, screen_pt, spec, palette)
+    }
+
+    fn set_theme(&mut self, palette: FluentPalette) {
         self.theme = palette;
         set_active_font_renderer(palette.font_renderer);
     }
@@ -328,75 +401,5 @@ impl WindowsDockHost {
         };
         self.tooltip_hwnd = Some(hwnd);
         Ok(hwnd)
-    }
-}
-
-const EDGE_LEFT: u8 = 1;
-const EDGE_RIGHT: u8 = 2;
-const EDGE_TOP: u8 = 4;
-const EDGE_BOTTOM: u8 = 8;
-const RESIZE_BORDER_PX: i32 = 8;
-const RESIZE_CORNER_PX: i32 = 14;
-
-pub(crate) fn hit_resize_edges(pt: PixelPoint, w: i32, h: i32) -> u8 {
-    if pt.x < 0 || pt.y < 0 || pt.x >= w || pt.y >= h {
-        return 0;
-    }
-    let (l_c, r_c) = (pt.x < RESIZE_CORNER_PX, pt.x >= w - RESIZE_CORNER_PX);
-    let (t_c, b_c) = (pt.y < RESIZE_CORNER_PX, pt.y >= h - RESIZE_CORNER_PX);
-    if (l_c || r_c) && (t_c || b_c) {
-        return if l_c { EDGE_LEFT } else { EDGE_RIGHT } | if t_c { EDGE_TOP } else { EDGE_BOTTOM };
-    }
-    let mut edges = 0u8;
-    if pt.x < RESIZE_BORDER_PX {
-        edges |= EDGE_LEFT;
-    } else if pt.x >= w - RESIZE_BORDER_PX {
-        edges |= EDGE_RIGHT;
-    }
-    if pt.y < RESIZE_BORDER_PX {
-        edges |= EDGE_TOP;
-    } else if pt.y >= h - RESIZE_BORDER_PX {
-        edges |= EDGE_BOTTOM;
-    }
-    edges
-}
-
-pub(crate) fn cursor_for_edges(edges: u8) -> Option<PCWSTR> {
-    match edges {
-        0 => Some(IDC_ARROW),
-        e if e == EDGE_LEFT || e == EDGE_RIGHT => Some(IDC_SIZEWE),
-        e if e == EDGE_TOP || e == EDGE_BOTTOM => Some(IDC_SIZENS),
-        e if e == (EDGE_LEFT | EDGE_TOP) || e == (EDGE_RIGHT | EDGE_BOTTOM) => Some(IDC_SIZENWSE),
-        e if e == (EDGE_RIGHT | EDGE_TOP) || e == (EDGE_LEFT | EDGE_BOTTOM) => Some(IDC_SIZENESW),
-        _ => None,
-    }
-}
-
-pub(crate) fn compute_resized_rect(
-    start: RECT,
-    edges: u8,
-    dx: i32,
-    dy: i32,
-    bounds: WidgetSizeBounds,
-) -> RECT {
-    let (mut left, mut right, mut top, mut bottom) =
-        (start.left, start.right, start.top, start.bottom);
-    let (min_w, max_w) = (bounds.min_w as i32, bounds.max_w as i32);
-    let (min_h, max_h) = (bounds.min_h as i32, bounds.max_h as i32);
-    if (edges & EDGE_RIGHT) != 0 {
-        right = left + (right - left + dx).clamp(min_w, max_w);
-    } else if (edges & EDGE_LEFT) != 0 {
-        left = right - (right - left - dx).clamp(min_w, max_w);
-    }
-    if (edges & EDGE_BOTTOM) != 0 {
-        bottom = top + (bottom - top + dy).clamp(min_h, max_h);
-    } else if (edges & EDGE_TOP) != 0 {
-        top = bottom - (bottom - top - dy).clamp(min_h, max_h);
-    }
-    RECT {
-        left,
-        top,
-        right,
-        bottom,
     }
 }

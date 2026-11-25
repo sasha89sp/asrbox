@@ -1,6 +1,6 @@
 use asrbox_platform_api::{
-    AppLanguage, BgraFrame, FluentPalette, PixelRect, SettingsInputRects, TextAlign, WidgetFrame,
-    WidgetTextCmd,
+    draw_asr_glass_logo, AppLanguage, BgraFrame, FluentPalette, PixelRect, SettingsInputRects,
+    TextAlign, WidgetFrame, WidgetTextCmd,
 };
 
 use crate::draw::{fill_rect, fill_rounded_rect, push_text, stroke_rounded_rect};
@@ -39,14 +39,13 @@ pub fn render_settings_frame(
         if is_chrome_control(&ctrl.kind) {
             continue;
         }
-        let hov = hovered_id == Some(ctrl.id);
         draw_control(
             &mut bgra,
             &mut texts,
             ctrl,
             active_tab,
             selected_dock,
-            hov,
+            hovered_id == Some(ctrl.id),
             layout.content_top_y,
             pal,
             lang,
@@ -57,14 +56,13 @@ pub fn render_settings_frame(
         if !is_chrome_control(&ctrl.kind) {
             continue;
         }
-        let hov = hovered_id == Some(ctrl.id);
         draw_control(
             &mut bgra,
             &mut texts,
             ctrl,
             active_tab,
             selected_dock,
-            hov,
+            hovered_id == Some(ctrl.id),
             layout.content_top_y,
             pal,
             lang,
@@ -80,6 +78,10 @@ pub fn render_settings_frame(
         extra: clip(layout.input_rects.extra),
         search: layout.input_rects.search,
         aux: clip(layout.input_rects.aux),
+        zip_secret: clip(layout.input_rects.zip_secret),
+        gh_repo: clip(layout.input_rects.gh_repo),
+        gh_branch: clip(layout.input_rects.gh_branch),
+        gh_token: clip(layout.input_rects.gh_token),
     };
     (WidgetFrame { bgra, texts }, inputs)
 }
@@ -92,34 +94,70 @@ fn draw_sidebar(
     lang: AppLanguage,
 ) {
     fill_rect(bgra, pr(0, 0, SIDEBAR_WIDTH, height), pal.sidebar_bg);
-    fill_rounded_rect(bgra, pr(16, 18, 30, 30), 6, pal.accent);
-    push_text(
-        texts,
-        pr(16, 18, 30, 30),
-        "A",
-        15,
-        true,
-        pal.accent_on,
-        TextAlign::Center,
+    fill_rect(
+        bgra,
+        pr(SIDEBAR_WIDTH as i32 - 1, 0, 1, height),
+        pal.divider,
     );
-    push_text(
-        texts,
-        pr(56, 16, 140, 19),
-        "asrbox",
-        14,
-        true,
-        pal.text_primary,
-        TextAlign::Left,
-    );
-    push_text(
-        texts,
-        pr(56, 35, 140, 16),
-        tr(lang, "Настройки", "Settings"),
-        12,
-        false,
-        pal.text_secondary,
-        TextAlign::Left,
-    );
+    if pal.design_theme.is_glass() {
+        draw_asr_glass_logo(bgra, 16, 14, 52, pal.is_dark, false);
+        push_text(
+            texts,
+            pr(76, 18, 124, 20),
+            "asrbox",
+            15,
+            true,
+            pal.text_primary,
+            TextAlign::Left,
+        );
+        push_text(
+            texts,
+            pr(76, 38, 124, 16),
+            concat!("v", env!("CARGO_PKG_VERSION")),
+            12,
+            false,
+            pal.text_secondary,
+            TextAlign::Left,
+        );
+        push_text(
+            texts,
+            pr(76, 54, 124, 14),
+            tr(lang, "Настройки", "Settings"),
+            11,
+            false,
+            pal.text_muted,
+            TextAlign::Left,
+        );
+    } else {
+        fill_rounded_rect(bgra, pr(16, 20, 34, 34), 6, pal.accent);
+        push_text(
+            texts,
+            pr(16, 20, 34, 34),
+            "A",
+            16,
+            true,
+            pal.accent_on,
+            TextAlign::Center,
+        );
+        push_text(
+            texts,
+            pr(58, 19, 140, 19),
+            "asrbox",
+            14,
+            true,
+            pal.text_primary,
+            TextAlign::Left,
+        );
+        push_text(
+            texts,
+            pr(58, 39, 140, 16),
+            tr(lang, "Настройки", "Settings"),
+            12,
+            false,
+            pal.text_secondary,
+            TextAlign::Left,
+        );
+    }
 }
 
 fn draw_content_header(
@@ -138,7 +176,7 @@ fn draw_content_header(
     let hy = if l.has_tab_strip { TAB_STRIP_H } else { 0 };
     fill_rect(bgra, pr(x, hy, w, HEADER_H as u32), pal.window_bg);
     let title_w = if l.search_rect.is_some() {
-        w.saturating_sub(334).max(160)
+        w.saturating_sub(274).max(160)
     } else {
         w.saturating_sub(48)
     };
@@ -161,18 +199,9 @@ fn draw_content_header(
         TextAlign::Left,
     );
     if let Some(sr) = l.search_rect {
-        fill_rounded_rect(bgra, sr, 4, pal.input_bg);
-        stroke_rounded_rect(bgra, sr, 4, pal.control_border);
-        fill_rect(
-            bgra,
-            pr(
-                sr.x + 2,
-                sr.y + sr.height as i32 - 1,
-                sr.width.saturating_sub(4),
-                1,
-            ),
-            pal.text_muted,
-        );
+        let rad = if pal.design_theme.is_glass() { 6 } else { 4 };
+        fill_rounded_rect(bgra, sr, rad, pal.input_bg);
+        stroke_rounded_rect(bgra, sr, rad, pal.control_border);
         push_text(
             texts,
             pr(sr.x + 6, sr.y, 18, sr.height),
@@ -194,6 +223,7 @@ fn draw_content_cards(
 ) {
     let win_h = l.height as i32;
     let top_y = l.content_top_y;
+    let rad = if pal.design_theme.is_glass() { 10 } else { 5 };
     for card in &l.cards {
         let cr = card.rect;
         if cr.y + cr.height as i32 <= top_y || cr.y >= win_h {
@@ -215,24 +245,33 @@ fn draw_content_cards(
         let bg = if card.amber { pal.warn_bg } else { pal.card_bg };
         let brd = if card.amber {
             pal.warn_border
+        } else if card.highlight {
+            asrbox_platform_api::lerp_rgba(pal.card_border, pal.accent, 0.55)
         } else {
             pal.card_border
         };
-        let has_splits = !card.amber && card.rows.iter().any(|r| r.divider);
-        if has_splits {
+        let split_cards =
+            !pal.design_theme.is_glass() && !card.amber && card.rows.iter().any(|r| r.divider);
+        if split_cards {
             draw_split_win11_cards(bgra, cr, &card.rows, bg, brd, top_y, win_h);
         } else {
-            fill_rounded_rect(bgra, cr, 5, bg);
-            stroke_rounded_rect(bgra, cr, 5, brd);
+            fill_rounded_rect(bgra, cr, rad, bg);
+            stroke_rounded_rect(bgra, cr, rad, brd);
         }
         draw_card_rows(
-            bgra, texts, cr, card.amber, has_splits, &card.rows, top_y, win_h, pal,
+            bgra,
+            texts,
+            cr,
+            card.amber,
+            split_cards,
+            &card.rows,
+            top_y,
+            win_h,
+            pal,
         );
     }
 }
 
-/// Renders each divider-separated setting group as an individual Windows 11 Fluent card
-/// with a crisp 3px canvas gap between cards (matching native Win11 Settings rows).
 fn draw_split_win11_cards(
     bgra: &mut BgraFrame,
     cr: PixelRect,
@@ -284,7 +323,7 @@ fn draw_card_rows(
         if !row.title.is_empty() && ty >= top_y {
             push_text(
                 texts,
-                pr(cr.x + 16, ty, cr.width.saturating_sub(180), 20),
+                pr(cr.x + 16, ty, cr.width.saturating_sub(210), 20),
                 &row.title,
                 14,
                 false,
@@ -306,7 +345,7 @@ fn draw_card_rows(
             let sw = if row.title.is_empty() {
                 cr.width.saturating_sub(32)
             } else {
-                cr.width.saturating_sub(180)
+                cr.width.saturating_sub(210)
             };
             if sy >= top_y {
                 push_text(

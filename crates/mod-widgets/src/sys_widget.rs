@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use asrbox_platform_api::{
     FluentPalette, PixelPoint, PixelRect, SysTelemetry, WidgetLayer, WidgetMenuAction,
-    WidgetMenuState, WidgetPlatform, WidgetSizeBounds,
+    WidgetMenuState, WidgetMenuVisibility, WidgetPlatform, WidgetSizeBounds,
 };
 
 use crate::storage::{MAX_OPACITY_PERCENT, MIN_OPACITY_PERCENT};
@@ -24,6 +24,7 @@ pub struct SysMonitorWidget {
     last_tooltip: Option<String>,
     telemetry: SysTelemetry,
     palette: FluentPalette,
+    menu_vis: WidgetMenuVisibility,
 }
 
 impl SysMonitorWidget {
@@ -37,7 +38,12 @@ impl SysMonitorWidget {
             last_tooltip: None,
             telemetry: SysTelemetry::default(),
             palette: FluentPalette::default(),
+            menu_vis: WidgetMenuVisibility::default(),
         }
+    }
+
+    pub fn set_menu_visibility(&mut self, vis: WidgetMenuVisibility) {
+        self.menu_vis = vis;
     }
 
     pub fn set_palette(&mut self, host: &mut dyn WidgetPlatform, palette: FluentPalette) {
@@ -126,8 +132,14 @@ impl SysMonitorWidget {
         }
         self.hovered = hit;
         let tip = match hit {
+            SysHitTarget::SysInfoBtn => Some("Сведения о системе (msinfo32)".to_owned()),
             SysHitTarget::SettingsBtn => Some("Настройки системного монитора".to_owned()),
             SysHitTarget::RefreshBtn => Some("Обновить показатели сейчас".to_owned()),
+            SysHitTarget::CpuSection => Some("Клик: открыть Монитор ресурсов (resmon)".to_owned()),
+            SysHitTarget::GpuSection => Some("Клик: открыть Параметры экрана".to_owned()),
+            SysHitTarget::RamDiskSection => Some("Клик: открыть Этот компьютер".to_owned()),
+            SysHitTarget::NetSection => Some("Клик: открыть Сетевые подключения".to_owned()),
+            SysHitTarget::TopProcsSection => Some("Клик: открыть Диспетчер задач".to_owned()),
             _ => None,
         };
         if tip != self.last_tooltip {
@@ -155,7 +167,22 @@ impl SysMonitorWidget {
                 let _ = host.request_sys_telemetry();
                 "sysmon manual refresh".to_owned()
             }
+            SysHitTarget::SysInfoBtn => Self::launch_tool(host, "msinfo32.exe", ""),
+            SysHitTarget::CpuSection => Self::launch_tool(host, "resmon.exe", ""),
+            SysHitTarget::GpuSection => Self::launch_tool(host, "ms-settings:display", ""),
+            SysHitTarget::RamDiskSection => {
+                Self::launch_tool(host, "explorer.exe", "shell:MyComputerFolder")
+            }
+            SysHitTarget::NetSection => Self::launch_tool(host, "ncpa.cpl", ""),
+            SysHitTarget::TopProcsSection => Self::launch_tool(host, "taskmgr.exe", ""),
             SysHitTarget::HeaderDrag | SysHitTarget::None => String::new(),
+        }
+    }
+
+    fn launch_tool(host: &dyn WidgetPlatform, cmd: &str, args: &str) -> String {
+        match host.launch_system_tool(cmd, args) {
+            Ok(()) => format!("sysmon launch: {cmd}"),
+            Err(e) => format!("error: sysmon launch {cmd}: {e}"),
         }
     }
 
@@ -165,6 +192,7 @@ impl SysMonitorWidget {
             opacity_percent: self.config.opacity_percent,
             refresh_ms: Some(self.config.refresh_interval_ms),
             sync_interval_sec: None,
+            menu_vis: self.menu_vis,
         };
         let Ok(Some(action)) = host.show_widget_menu(SYS_WIDGET_ID, screen, &state) else {
             return String::new();

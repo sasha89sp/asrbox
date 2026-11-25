@@ -81,12 +81,13 @@ pub(crate) fn draw_cpu_section(
 
     let (r1, mid) = (y + 24, (w * 46 / 100).max(205));
     c.l(14, r1, 96, format!("Нагрузка: {:>2}%", cpu.usage_pct));
+    let bar_h = if c.pal.design_theme.is_glass() { 5 } else { 7 };
     fill_glow_bar(
         c.frame,
         106,
-        r1 + 5,
+        r1 + 6,
         (mid - 116).clamp(50, 140),
-        7,
+        bar_h,
         cpu.usage_pct,
         c.pal,
     );
@@ -175,12 +176,13 @@ pub(crate) fn draw_gpu_section(
         |u| format!("Нагрузка: {u:>2}%"),
     );
     c.l(14, r1, 96, load);
+    let bar_h = if c.pal.design_theme.is_glass() { 5 } else { 7 };
     fill_glow_bar(
         c.frame,
         106,
-        r1 + 5,
+        r1 + 6,
         (mid - 114).clamp(40, 110),
-        7,
+        bar_h,
         gpu.usage_pct.unwrap_or(0),
         c.pal,
     );
@@ -199,9 +201,9 @@ pub(crate) fn draw_gpu_section(
     fill_glow_bar(
         c.frame,
         vx + 44,
-        r1 + 5,
+        r1 + 6,
         (w - vx - 58).clamp(32, 110),
-        7,
+        bar_h,
         vpct,
         c.pal,
     );
@@ -260,7 +262,8 @@ pub(crate) fn draw_ram_disk_section(
     let bx = (w * 51 / 100).max(245);
     let bw = (w * 15 / 100).clamp(44, 96);
     c.l(14, r1, bx - 18, ram_s);
-    fill_glow_bar(c.frame, bx, r1 + 5, bw, 7, ram.usage_pct, c.pal);
+    let bar_h = if c.pal.design_theme.is_glass() { 5 } else { 7 };
+    fill_glow_bar(c.frame, bx, r1 + 6, bw, bar_h, ram.usage_pct, c.pal);
     if let Some(p) = &ram.top_proc {
         let top = format!("Топ: {} ({})", truncate(&p.name, 14), fmt_mem(p.mem_mb));
         let tx = bx + bw + 8;
@@ -278,7 +281,7 @@ pub(crate) fn draw_ram_disk_section(
             0
         };
         c.l(14, ry, 86, format!("Диск {}: {:>2}%", d.letter, d.busy_pct));
-        fill_glow_bar(c.frame, 102, ry + 5, 54, 7, pct, c.pal);
+        fill_glow_bar(c.frame, 102, ry + 6, 54, bar_h, pct, c.pal);
         let (rd, wr) = (
             f64::from(d.read_tenths_mb_s) / 10.0,
             f64::from(d.write_tenths_mb_s) / 10.0,

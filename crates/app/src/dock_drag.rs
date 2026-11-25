@@ -127,6 +127,13 @@ impl DockDragState {
                 if slot_kind == SlotKind::SettingsButton {
                     return false;
                 }
+                if docks
+                    .iter()
+                    .find(|d| d.instance.config().id == source_dock_id)
+                    .is_some_and(|d| d.instance.config().lock_items)
+                {
+                    return false;
+                }
                 let dist =
                     (screen_pt.x - start_screen.x).abs() + (screen_pt.y - start_screen.y).abs();
                 if dist < DRAG_THRESHOLD_PX {

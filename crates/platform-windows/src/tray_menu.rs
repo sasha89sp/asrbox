@@ -24,6 +24,9 @@ const TRAY_TOGGLE_OVERLAY_MOD: u32 = 1018;
 const TRAY_OVERLAY_SETUP: u32 = 1019;
 const TRAY_OPEN_OVERLAY_TAB: u32 = 1020;
 const TRAY_OPEN_OVERLAY_CFG: u32 = 1021;
+const TRAY_TOGGLE_WEATHER: u32 = 1022;
+const TRAY_REFRESH_WEATHER: u32 = 1023;
+const TRAY_TOGGLE_NOTES: u32 = 1024;
 const TRAY_TOGGLE_BASE: u32 = 2000;
 const TRAY_REMOVE_BASE: u32 = 3000;
 
@@ -31,97 +34,121 @@ pub(crate) fn build_tray_menu_spec(
     docks: &[TrayMenuEntry],
     flags: TrayModuleFlags,
 ) -> FluentMenuSpec {
-    let quick_actions = vec![
-        FluentQuickBtn {
-            id: TRAY_OPEN_SETTINGS,
-            glyph: "⚙".to_owned(),
-            enabled: true,
-        },
-        FluentQuickBtn {
+    let vis = flags.menu_vis;
+    let mut quick_actions = vec![FluentQuickBtn {
+        id: TRAY_OPEN_SETTINGS,
+        glyph: "⚙".to_owned(),
+        enabled: true,
+    }];
+    if vis.show_backup {
+        quick_actions.push(FluentQuickBtn {
             id: TRAY_BACKUP_SETTINGS,
             glyph: "☁".to_owned(),
             enabled: true,
-        },
-        FluentQuickBtn {
+        });
+    }
+    if vis.show_debug {
+        quick_actions.push(FluentQuickBtn {
             id: TRAY_OPEN_DEBUG,
             glyph: "◉".to_owned(),
             enabled: true,
-        },
-        FluentQuickBtn {
-            id: TRAY_EXIT,
-            glyph: "✕".to_owned(),
-            enabled: true,
-        },
-    ];
-    let items = vec![
-        act(
-            TRAY_OPEN_SETTINGS,
-            "Настройки asrbox",
-            Some("⚙"),
-            Some("Ctrl+,"),
-            false,
-            true,
-        ),
-        FluentMenuItem::Separator,
-        FluentMenuItem::Submenu {
+        });
+    }
+    quick_actions.push(FluentQuickBtn {
+        id: TRAY_EXIT,
+        glyph: "✕".to_owned(),
+        enabled: true,
+    });
+
+    let mut items = vec![act(
+        TRAY_OPEN_SETTINGS,
+        "Настройки asrbox",
+        Some("⚙"),
+        Some("Ctrl+,"),
+        false,
+        true,
+    )];
+
+    let any_mod = vis.show_docks || vis.show_widgets || vis.show_overlay || vis.show_backup;
+    if any_mod {
+        items.push(FluentMenuItem::Separator);
+    }
+    if vis.show_docks {
+        items.push(FluentMenuItem::Submenu {
             label: "Док-панели".to_owned(),
             icon: Some("▤".to_owned()),
             enabled: true,
             items: build_dock_submenu(docks, flags),
-        },
-        FluentMenuItem::Submenu {
+        });
+    }
+    if vis.show_widgets {
+        items.push(FluentMenuItem::Submenu {
             label: "Виджеты".to_owned(),
             icon: Some("◫".to_owned()),
             enabled: true,
             items: build_widgets_submenu(flags),
-        },
-        FluentMenuItem::Submenu {
+        });
+    }
+    if vis.show_overlay {
+        items.push(FluentMenuItem::Submenu {
             label: "Игровой оверлей".to_owned(),
             icon: Some("◈".to_owned()),
             enabled: true,
             items: build_overlay_submenu(flags),
-        },
-        FluentMenuItem::Submenu {
+        });
+    }
+    if vis.show_backup {
+        items.push(FluentMenuItem::Submenu {
             label: "Бэкап и облако".to_owned(),
             icon: Some("☁".to_owned()),
             enabled: true,
             items: build_backup_submenu(),
-        },
-        FluentMenuItem::Separator,
-        act(
+        });
+    }
+
+    if vis.show_autostart || vis.show_debug || vis.show_about {
+        items.push(FluentMenuItem::Separator);
+    }
+    if vis.show_autostart {
+        items.push(act(
             TRAY_TOGGLE_AUTOSTART,
             "Автозагрузка с Windows",
             Some("↻"),
             None,
             flags.autostart_enabled,
             true,
-        ),
-        act(
+        ));
+    }
+    if vis.show_debug {
+        items.push(act(
             TRAY_OPEN_DEBUG,
             "Диагностика и логи",
             Some("◉"),
             None,
             false,
             true,
-        ),
-        act(
+        ));
+    }
+    if vis.show_about {
+        items.push(act(
             TRAY_OPEN_ABOUT,
             "История версий",
             Some("ⓘ"),
             None,
             false,
             true,
-        ),
-        FluentMenuItem::Separator,
-        act(
-            TRAY_EXIT,
-            "Выход из asrbox",
-            Some("✕"),
-            Some("Alt+Q"),
-            false,
-            true,
-        ),
-    ];
+        ));
+    }
+    items.push(FluentMenuItem::Separator);
+    items.push(act(
+        TRAY_EXIT,
+        "Выход из asrbox",
+        Some("✕"),
+        Some("Alt+Q"),
+        false,
+        true,
+    ));
+
     FluentMenuSpec {
         quick_actions,
         items,
@@ -187,13 +214,14 @@ fn build_dock_submenu(docks: &[TrayMenuEntry], flags: TrayModuleFlags) -> Vec<Fl
 }
 
 fn build_widgets_submenu(flags: TrayModuleFlags) -> Vec<FluentMenuItem> {
+    let w_on = flags.widgets_module_enabled;
     vec![
         act(
             TRAY_TOGGLE_WIDGETS_MOD,
             "Модуль включён",
             None,
             None,
-            flags.widgets_module_enabled,
+            w_on,
             true,
         ),
         FluentMenuItem::Separator,
@@ -203,7 +231,7 @@ fn build_widgets_submenu(flags: TrayModuleFlags) -> Vec<FluentMenuItem> {
             None,
             None,
             flags.calendar_visible,
-            flags.widgets_module_enabled,
+            w_on,
         ),
         act(
             TRAY_REFRESH_CALENDAR,
@@ -211,7 +239,7 @@ fn build_widgets_submenu(flags: TrayModuleFlags) -> Vec<FluentMenuItem> {
             Some("↻"),
             None,
             false,
-            flags.widgets_module_enabled,
+            w_on,
         ),
         act(
             TRAY_OPEN_WIDGET_CFG,
@@ -228,7 +256,7 @@ fn build_widgets_submenu(flags: TrayModuleFlags) -> Vec<FluentMenuItem> {
             None,
             None,
             flags.sys_monitor_visible,
-            flags.widgets_module_enabled,
+            w_on,
         ),
         act(
             TRAY_REFRESH_SYSMON,
@@ -236,7 +264,7 @@ fn build_widgets_submenu(flags: TrayModuleFlags) -> Vec<FluentMenuItem> {
             Some("↻"),
             None,
             false,
-            flags.widgets_module_enabled,
+            w_on,
         ),
         act(
             TRAY_OPEN_SYSMON_CFG,
@@ -245,6 +273,32 @@ fn build_widgets_submenu(flags: TrayModuleFlags) -> Vec<FluentMenuItem> {
             None,
             false,
             true,
+        ),
+        FluentMenuItem::Separator,
+        act(
+            TRAY_TOGGLE_WEATHER,
+            "Погода: показывать",
+            None,
+            None,
+            flags.weather_visible,
+            w_on,
+        ),
+        act(
+            TRAY_REFRESH_WEATHER,
+            "Погода: обновить",
+            Some("↻"),
+            None,
+            false,
+            w_on,
+        ),
+        FluentMenuItem::Separator,
+        act(
+            TRAY_TOGGLE_NOTES,
+            "Заметки и задачи",
+            None,
+            None,
+            flags.notes_visible,
+            w_on,
         ),
     ]
 }
@@ -348,6 +402,9 @@ pub(crate) fn decode_tray_command(cmd: u32, docks: &[TrayMenuEntry]) -> Option<T
         TRAY_TOGGLE_SYSMON => Some(TrayAction::ToggleSysMonitorWidget),
         TRAY_REFRESH_SYSMON => Some(TrayAction::RefreshSysMonitorWidget),
         TRAY_OPEN_SYSMON_CFG => Some(TrayAction::OpenSysMonitorConfig),
+        TRAY_TOGGLE_WEATHER => Some(TrayAction::ToggleWeatherWidget),
+        TRAY_REFRESH_WEATHER => Some(TrayAction::RefreshWeatherWidget),
+        TRAY_TOGGLE_NOTES => Some(TrayAction::ToggleNotesWidget),
         TRAY_BACKUP_SETTINGS => Some(TrayAction::BackupSettingsNow),
         TRAY_BACKUP_FULL => Some(TrayAction::BackupFullNow),
         TRAY_OPEN_BACKUP_TAB => Some(TrayAction::OpenBackupTab),

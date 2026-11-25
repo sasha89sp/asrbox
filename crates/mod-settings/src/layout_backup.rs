@@ -11,8 +11,17 @@ pub(crate) fn build_backup_and_webdav_section(
     bk: &BackupSettingsView,
     editing_server_dir: Option<&str>,
 ) {
-    if !b.matches_search(
-        "бэкап облако webdav яндекс mail.ru сервер папка синхронизация backup cloud sync",
+    let lang = b.lang;
+    let summary = if bk.encrypt_zip {
+        format!("AES-256 · {} WebDAV", bk.servers.len())
+    } else {
+        format!("ZIP · {} WebDAV", bk.servers.len())
+    };
+    if !b.accordion(
+        "backup_cloud",
+        tr(lang, "Бэкап, шифрование AES-256 и WebDAV", "Backup, AES-256 Encryption & WebDAV"),
+        &summary,
+        "бэкап шифрование пароль aes 256 zip облако webdav яндекс mail.ru сервер папка синхронизация backup encrypt password cloud sync",
     ) {
         return;
     }
@@ -52,26 +61,64 @@ fn add_backup_card(b: &mut LayoutBuilder, bk: &BackupSettingsView) {
     } else {
         bk.cloud_status.clone()
     };
+    let pwd_sub = if bk.has_zip_password {
+        tr(
+            lang,
+            "Пароль сохранён в Windows Credential Manager (WinZip AE-2 AES-256)",
+            "Password saved in Credential Manager (WinZip AE-2 AES-256)",
+        )
+    } else {
+        tr(
+            lang,
+            "Пароль не задан — введите пароль ниже и нажмите «Сохранить»",
+            "No password set — enter below and click Save",
+        )
+    };
     let has_servers = !bk.servers.is_empty();
-    let chip_rows = if has_servers {
-        bk.servers.len().div_ceil(2) as u32
+    let chips_h = if has_servers {
+        56 + bk.servers.len().div_ceil(2) as u32 * 34
     } else {
         0
     };
-    let chips_h = if has_servers { 56 + chip_rows * 34 } else { 0 };
-    let mut rows = vec![row(
-        0,
-        52,
-        tr(lang, "Автозагрузка в облако", "Auto-upload to cloud"),
-        Some(tr(
-            lang,
-            "Отправлять новый ZIP на выбранные WebDAV серверы после бэкапа",
-            "Upload new ZIP archives to selected WebDAV servers after backup",
-        )),
-        None,
-        true,
-    )];
-    let mut off = 52i32;
+    let mut rows = vec![
+        row(
+            0,
+            50,
+            tr(
+                lang,
+                "Шифровать ZIP паролем (AES-256)",
+                "Encrypt ZIP with password (AES-256)",
+            ),
+            Some(tr(
+                lang,
+                "Защита архива стандартом WinZip AES-256 (совместимо с 7-Zip / WinRAR)",
+                "Protect backup ZIP with WinZip AES-256 (7-Zip / WinRAR compatible)",
+            )),
+            None,
+            true,
+        ),
+        row(
+            50,
+            54,
+            tr(lang, "Пароль архива ZIP", "ZIP Archive Password"),
+            Some(pwd_sub),
+            None,
+            true,
+        ),
+        row(
+            104,
+            50,
+            tr(lang, "Автозагрузка в облако", "Auto-upload to cloud"),
+            Some(tr(
+                lang,
+                "Отправлять новый ZIP на выбранные WebDAV серверы после бэкапа",
+                "Upload new ZIP archives to selected WebDAV servers after backup",
+            )),
+            None,
+            true,
+        ),
+    ];
+    let mut off = 154i32;
     if has_servers {
         rows.push(row(
             off,
@@ -89,40 +136,73 @@ fn add_backup_card(b: &mut LayoutBuilder, bk: &BackupSettingsView) {
     }
     rows.push(row(
         off,
-        52,
+        50,
         tr(lang, "Последний бэкап", "Last backup"),
         Some(&last_info),
         None,
         true,
     ));
     rows.push(row(
-        off + 52,
-        52,
+        off + 50,
+        50,
         tr(lang, "Статус облака", "Cloud status"),
         Some(&cloud_info),
         None,
         false,
     ));
-    let cy = b.add_card(
-        Some(tr(
-            lang,
-            "3. БЭКАП И ОБЛАКО WEBDAV",
-            "3. BACKUP & WEBDAV CLOUD",
-        )),
-        false,
-        rows,
-    );
+
+    let cy = b.add_card(None, false, rows);
     let tx = b.content_x + b.content_w as i32 - 58;
+    let rx = b.content_x + b.content_w as i32 - 14;
     b.push_toggle(
         tx,
-        cy + 15,
+        cy + 14,
+        bk.encrypt_zip,
+        SettingsAction::SetBackupEncryptZip(!bk.encrypt_zip),
+    );
+
+    // AES-256 password input (slot 5) + Save / Clear buttons
+    let clr_w = if bk.has_zip_password { 76u32 } else { 0 };
+    let save_w = 96u32;
+    let inp_w = 156u32;
+    let total_right = inp_w + 6 + save_w + if clr_w > 0 { 6 + clr_w } else { 0 };
+    let px = rx - total_right as i32;
+    b.out.input_rects.zip_secret = Some(PixelRect {
+        x: px,
+        y: b.sy(cy + 63),
+        width: inp_w,
+        height: 28,
+    });
+    b.push_btn(
+        (px + inp_w as i32 + 6, cy + 63, save_w, 28),
+        tr(lang, "Сохранить", "Save"),
+        ButtonTone::Primary,
+        SettingsAction::SaveBackupZipPassword,
+    );
+    if clr_w > 0 {
+        b.push_btn(
+            (
+                px + inp_w as i32 + 6 + save_w as i32 + 6,
+                cy + 63,
+                clr_w,
+                28,
+            ),
+            tr(lang, "Удалить", "Clear"),
+            ButtonTone::Danger,
+            SettingsAction::ClearBackupZipPassword,
+        );
+    }
+
+    b.push_toggle(
+        tx,
+        cy + 118,
         bk.auto_upload_cloud,
         SettingsAction::SetAutoUploadBackup(!bk.auto_upload_cloud),
     );
     if has_servers {
         push_server_chips(
             b,
-            cy + 52 + 52,
+            cy + 154 + 52,
             &bk.servers,
             &bk.target_server_ids,
             SettingsAction::ToggleBackupTargetServer,
@@ -164,7 +244,7 @@ fn add_webdav_servers_block(
     let lang = b.lang;
     let y = b.cursor_y;
     b.push_btn(
-        (b.content_x, y, 254, 32),
+        (b.content_x, y, 254, 30),
         tr(
             lang,
             "+ Добавить новый WebDAV сервер",
@@ -173,23 +253,27 @@ fn add_webdav_servers_block(
         ButtonTone::Primary,
         SettingsAction::OpenAddWebDavMenu,
     );
-    b.cursor_y = y + 44;
+    b.cursor_y = y + 40;
 
     if let Some(draft) = &bk.draft {
         add_webdav_draft_card(b, draft);
     }
     if bk.servers.is_empty() && bk.draft.is_none() {
         b.add_card(
-            Some(tr(lang, "СОХРАНЁННЫЕ WEBDAV СЕРВЕРЫ", "SAVED WEBDAV SERVERS")),
+            None,
             false,
             vec![row(
                 0,
-                52,
-                tr(lang, "Серверы ещё не добавлены", "No WebDAV servers added yet"),
+                50,
+                tr(
+                    lang,
+                    "Серверы WebDAV ещё не добавлены",
+                    "No WebDAV servers added yet",
+                ),
                 Some(tr(
                     lang,
-                    "Нажмите «+ Добавить новый WebDAV сервер», выберите Яндекс.Диск, Mail.ru или свой сервер",
-                    "Click «+ Add New WebDAV Server» to add Yandex Disk, Mail.ru or a custom HTTPS server",
+                    "Добавьте Яндекс.Диск, Mail.ru или свой HTTPS WebDAV сервер",
+                    "Add Yandex Disk, Mail.ru or a custom HTTPS WebDAV server",
                 )),
                 None,
                 false,
@@ -197,22 +281,12 @@ fn add_webdav_servers_block(
         );
         return;
     }
-    for (idx, srv) in bk.servers.iter().enumerate() {
-        let title = (idx == 0).then_some(tr(
-            lang,
-            "СОХРАНЁННЫЕ WEBDAV СЕРВЕРЫ",
-            "SAVED WEBDAV SERVERS",
-        ));
-        add_saved_server_card(b, title, srv, editing_server_dir == Some(srv.id.as_str()));
+    for srv in &bk.servers {
+        add_saved_server_card(b, srv, editing_server_dir == Some(srv.id.as_str()));
     }
 }
 
-fn add_saved_server_card(
-    b: &mut LayoutBuilder,
-    card_title: Option<&str>,
-    srv: &WebDavServerView,
-    editing_dir: bool,
-) {
+fn add_saved_server_card(b: &mut LayoutBuilder, srv: &WebDavServerView, editing_dir: bool) {
     let lang = b.lang;
     let cred_tag = if srv.has_saved_password {
         tr(lang, "пароль сохранён", "password saved")
@@ -228,44 +302,40 @@ fn add_saved_server_card(
         )
     };
     let dir_display = format!("/{}", srv.remote_dir.trim_matches('/'));
-    let dir_sub = if editing_dir {
-        None
-    } else {
-        Some(dir_display.as_str())
-    };
+    let dir_sub = (!editing_dir).then_some(dir_display.as_str());
     let rows = vec![
-        row(0, 52, &srv.name, Some(&sub1), None, true),
+        row(0, 50, &srv.name, Some(&sub1), None, true),
         row(
-            52,
-            52,
+            50,
+            50,
             tr(lang, "Путь хранения на сервере", "Remote storage path"),
             dir_sub,
             None,
             true,
         ),
         row(
-            104,
-            52,
+            100,
+            50,
             tr(lang, "Обзор папок WebDAV", "WebDAV Folder Browser"),
             Some(tr(
                 lang,
-                "Просмотр каталогов, создание папок и выбор папки хранения",
-                "Browse directories, create folders and pick storage folder",
+                "Просмотр каталогов, создание папок и выбор папки",
+                "Browse directories, create folders and pick path",
             )),
             None,
             false,
         ),
     ];
-    let cy = b.add_card(card_title, false, rows);
+    let cy = b.add_card(None, false, rows);
     let rx = b.content_x + b.content_w as i32 - 14;
     b.push_btn(
-        (rx - 80, cy + 12, 80, 28),
+        (rx - 80, cy + 11, 80, 28),
         tr(lang, "Удалить", "Delete"),
         ButtonTone::Danger,
         SettingsAction::DeleteWebDavServer(srv.id.clone()),
     );
     b.push_btn(
-        (rx - 154, cy + 12, 68, 28),
+        (rx - 154, cy + 11, 68, 28),
         tr(lang, "Тест", "Test"),
         ButtonTone::Secondary,
         SettingsAction::TestWebDavServer(srv.id.clone()),
@@ -275,12 +345,12 @@ fn add_saved_server_card(
         let inp_w = b.content_w.saturating_sub(364).max(120);
         b.out.input_rects.aux = Some(PixelRect {
             x: inp_x,
-            y: b.sy(cy + 62),
+            y: b.sy(cy + 60),
             width: inp_w,
             height: 28,
         });
         b.push_btn(
-            (inp_x + inp_w as i32 + 6, cy + 62, 92, 28),
+            (inp_x + inp_w as i32 + 6, cy + 60, 92, 28),
             tr(lang, "Сохранить", "Save"),
             ButtonTone::Primary,
             SettingsAction::SaveWebDavServerRemoteDir(srv.id.clone()),
@@ -288,7 +358,7 @@ fn add_saved_server_card(
         b.push_control(
             PixelRect {
                 x: inp_x + inp_w as i32 + 104,
-                y: b.sy(cy + 62),
+                y: b.sy(cy + 60),
                 width: 66,
                 height: 28,
             },
@@ -300,7 +370,7 @@ fn add_saved_server_card(
         b.push_control(
             PixelRect {
                 x: rx - 124,
-                y: b.sy(cy + 62),
+                y: b.sy(cy + 60),
                 width: 124,
                 height: 28,
             },
@@ -311,7 +381,7 @@ fn add_saved_server_card(
         );
     }
     b.push_btn(
-        (rx - 148, cy + 116, 148, 28),
+        (rx - 148, cy + 111, 148, 28),
         tr(lang, "Открыть папку →", "Open Folder →"),
         ButtonTone::Secondary,
         SettingsAction::OpenWebDavBrowser(srv.id.clone()),

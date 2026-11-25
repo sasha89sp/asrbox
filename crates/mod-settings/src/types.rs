@@ -1,9 +1,10 @@
 use asrbox_core::{IsolationMode, ModuleId};
 use asrbox_platform_api::{
-    AccentPreset, AppLanguage, FontRenderer, ThemeMode, WebDavDirEntry, WidgetLayer,
+    AccentPreset, AppLanguage, ContextMenuConfig, DesignTheme, FontRenderer, ThemeMode,
+    WebDavDirEntry, WidgetLayer,
 };
 
-pub use crate::actions::{SettingsAction, SliderKind};
+pub use crate::actions::{ComboKind, SettingsAction, SliderKind};
 use crate::i18n::tr;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -42,6 +43,8 @@ pub enum WidgetSubTab {
     #[default]
     Calendar,
     SysMonitor,
+    Weather,
+    Notes,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -72,6 +75,7 @@ impl BrowserTab {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppearanceSettingsView {
+    pub design_theme: DesignTheme,
     pub theme: ThemeMode,
     pub accent: AccentPreset,
     pub language: AppLanguage,
@@ -81,6 +85,7 @@ pub struct AppearanceSettingsView {
 impl Default for AppearanceSettingsView {
     fn default() -> Self {
         Self {
+            design_theme: DesignTheme::AsrGlass,
             theme: ThemeMode::Dark,
             accent: AccentPreset::Blue,
             language: AppLanguage::Ru,
@@ -114,6 +119,7 @@ pub struct DockSettingsView {
     pub icon_size_px: u32,
     pub opacity_percent: u8,
     pub locked: bool,
+    pub lock_items: bool,
     pub show_running_indicator: bool,
     pub focus_running_window: bool,
     pub launch_animation_enabled: bool,
@@ -148,6 +154,54 @@ pub struct SysMonitorSettingsView {
     pub refresh_interval_ms: u32,
     pub width: u32,
     pub height: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WeatherSettingsView {
+    pub visible: bool,
+    pub city: String,
+    pub opacity_percent: u8,
+    pub layer: WidgetLayer,
+    pub refresh_interval_min: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl Default for WeatherSettingsView {
+    fn default() -> Self {
+        Self {
+            visible: true,
+            city: "Москва".to_owned(),
+            opacity_percent: 90,
+            layer: WidgetLayer::Wallpaper,
+            refresh_interval_min: 30,
+            width: 360,
+            height: 410,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NotesSettingsView {
+    pub visible: bool,
+    pub opacity_percent: u8,
+    pub layer: WidgetLayer,
+    pub show_folders_pane: bool,
+    pub show_list_pane: bool,
+    pub show_editor_pane: bool,
+}
+
+impl Default for NotesSettingsView {
+    fn default() -> Self {
+        Self {
+            visible: false,
+            opacity_percent: 94,
+            layer: WidgetLayer::Normal,
+            show_folders_pane: true,
+            show_list_pane: true,
+            show_editor_pane: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -217,6 +271,8 @@ pub struct FileSyncSettingsView {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct BackupSettingsView {
     pub auto_upload_cloud: bool,
+    pub encrypt_zip: bool,
+    pub has_zip_password: bool,
     pub target_server_ids: Vec<String>,
     pub last_backup_file: String,
     pub last_backup_time: String,
@@ -226,6 +282,16 @@ pub struct BackupSettingsView {
     pub draft: Option<WebDavDraftView>,
     pub browser: Option<WebDavBrowserView>,
     pub sync: FileSyncSettingsView,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct GitHubBackupView {
+    pub repo: String,
+    pub branch: String,
+    pub include_in_backup: bool,
+    pub has_token: bool,
+    pub busy: bool,
+    pub last_status: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -260,8 +326,12 @@ pub struct SettingsSnapshot {
     pub docks: Vec<DockSettingsView>,
     pub calendar: CalendarSettingsView,
     pub sysmon: SysMonitorSettingsView,
+    pub weather: WeatherSettingsView,
+    pub notes: NotesSettingsView,
     pub overlay: OverlaySettingsView,
     pub backup: BackupSettingsView,
+    pub github: GitHubBackupView,
+    pub menus: ContextMenuConfig,
     pub diagnostics: DiagnosticsLiveView,
     pub about: AboutSettingsView,
 }

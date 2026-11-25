@@ -6,6 +6,7 @@ pub mod layout;
 pub mod layout_backup;
 pub mod layout_browser_tabs;
 pub mod layout_cal;
+pub mod layout_dev;
 pub mod layout_dock;
 pub mod layout_general;
 pub mod layout_overlay;
@@ -13,13 +14,17 @@ pub mod layout_sync;
 pub mod layout_sys;
 pub mod layout_tabs;
 pub mod layout_types;
+pub mod layout_weather_notes;
 pub mod render;
 mod render_controls;
 pub mod types;
+pub mod ui_state_store;
 
 #[cfg(test)]
 mod tests;
 
+use std::collections::HashSet;
+use std::path::PathBuf;
 use std::time::Instant;
 
 use asrbox_platform_api::{FluentPalette, PixelRect, SettingsInputRects, WidgetFrame};
@@ -28,11 +33,13 @@ pub use layout::{build_layout, BuildLayoutArgs, MIN_SETTINGS_HEIGHT, MIN_SETTING
 pub use render::render_settings_frame;
 pub use types::{
     AboutSettingsView, AppearanceSettingsView, BackupSettingsView, BrowserTab,
-    CalendarSettingsView, CalendarSourceView, DiagnosticsLiveView, DockItemView, DockSettingsView,
-    FileSyncSettingsView, ModuleStatusView, OverlaySettingsView, SettingsAction, SettingsSnapshot,
-    SettingsTab, SliderKind, SyncItemView, SysMonitorSettingsView, WebDavBrowserView,
-    WebDavDraftView, WebDavServerView, WidgetSubTab,
+    CalendarSettingsView, CalendarSourceView, ComboKind, DiagnosticsLiveView, DockItemView,
+    DockSettingsView, FileSyncSettingsView, GitHubBackupView, ModuleStatusView, NotesSettingsView,
+    OverlaySettingsView, SettingsAction, SettingsSnapshot, SettingsTab, SliderKind, SyncItemView,
+    SysMonitorSettingsView, WeatherSettingsView, WebDavBrowserView, WebDavDraftView,
+    WebDavServerView, WidgetSubTab,
 };
+use ui_state_store::{default_expanded_sections, load_expanded_sections, save_expanded_sections};
 
 use layout::SettingsLayout;
 
@@ -46,6 +53,9 @@ pub struct SettingsUiState {
     pub selected_dock_item: Option<u64>,
     pub selected_widget: WidgetSubTab,
     pub editing_server_dir: Option<String>,
+    pub expanded_sections: HashSet<String>,
+    pub ui_state_path: Option<PathBuf>,
+    pub confirming_reset: bool,
     pub search_query: String,
     pub width: u32,
     pub height: u32,
@@ -72,9 +82,12 @@ impl Default for SettingsUiState {
             selected_dock_item: None,
             selected_widget: WidgetSubTab::Calendar,
             editing_server_dir: None,
+            expanded_sections: default_expanded_sections(),
+            ui_state_path: None,
+            confirming_reset: false,
             search_query: String::new(),
-            width: 880,
-            height: 620,
+            width: 860,
+            height: 560,
             scroll_y: 0,
             hovered_id: None,
             dragging_slider: None,
@@ -90,6 +103,20 @@ impl Default for SettingsUiState {
 }
 
 impl SettingsUiState {
+    pub fn bind_ui_state_path(&mut self, path: PathBuf) {
+        self.expanded_sections = load_expanded_sections(&path);
+        self.ui_state_path = Some(path);
+    }
+
+    pub fn toggle_accordion(&mut self, id: &str) {
+        if !self.expanded_sections.remove(id) {
+            self.expanded_sections.insert(id.to_owned());
+        }
+        if let Some(p) = &self.ui_state_path {
+            let _ = save_expanded_sections(p, &self.expanded_sections);
+        }
+    }
+
     pub fn set_palette_immediate(&mut self, pal: FluentPalette) {
         self.anim_from = pal;
         self.anim_to = pal;
@@ -121,7 +148,6 @@ impl SettingsUiState {
             self.anim_from = self.anim_to;
             return self.anim_to;
         }
-        // Smooth cubic ease-out for native Fluent feel
         let eased = 1.0 - (1.0 - t).powi(3);
         FluentPalette::lerp(self.anim_from, self.anim_to, eased)
     }
@@ -222,6 +248,8 @@ impl SettingsUiState {
             selected_dock_item: self.selected_dock_item,
             selected_widget: self.selected_widget,
             editing_server_dir: self.editing_server_dir.as_deref(),
+            expanded_sections: &self.expanded_sections,
+            confirming_reset: self.confirming_reset,
             search_query: &self.search_query,
             width: self.width,
             height: self.height,

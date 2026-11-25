@@ -287,7 +287,8 @@ fn draw_event_rows(
         }
         let bar_a = if row.is_past { 118 } else { 255 };
         let bar = [row.bar_rgb[0], row.bar_rgb[1], row.bar_rgb[2], bar_a];
-        fill_rounded_rect(frame, 14, ry + 10, 4, 32, 2.0, bar);
+        let bar_w = if pal.design_theme.is_glass() { 3 } else { 4 };
+        fill_rounded_rect(frame, 14, ry + 10, bar_w, 32, 1.5, bar);
         let (title_col, sub_col) = if row.is_past {
             (pal.text_secondary, pal.text_muted)
         } else {

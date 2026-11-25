@@ -24,6 +24,7 @@ pub fn serialize_docks(docks: &[DockConfig], app_version: &str) -> String {
         out.push_str(&format!("name={}\n", escape_field(&dock.name)));
         out.push_str(&format!("enabled={}\n", dock.enabled));
         out.push_str(&format!("locked={}\n", dock.locked));
+        out.push_str(&format!("lock_items={}\n", dock.lock_items));
         out.push_str(&format!("layer={}\n", layer_to_str(dock.layer)));
         out.push_str(&format!("label_mode={}\n", dock.label_mode.as_str()));
         if let Some((x, y)) = dock.free_pos {
@@ -132,6 +133,7 @@ fn apply_field(dock: &mut DockConfig, key: &str, val: &str) -> Result<(), String
         "name" => dock.name = unescape_field(val),
         "enabled" => dock.enabled = parse_bool(val),
         "locked" => dock.locked = parse_bool(val),
+        "lock_items" => dock.lock_items = parse_bool(val),
         "layer" => dock.layer = str_to_layer(val),
         "label_mode" => dock.label_mode = DockLabelMode::from_str_value(val),
         "free_pos" => {
@@ -350,6 +352,7 @@ mod tests {
     fn roundtrip_preserves_new_fields_and_separators() -> Result<(), Box<dyn Error>> {
         let mut first = DockConfig::new(1, "Основная | Панель");
         first.locked = false;
+        first.lock_items = true;
         first.layer = WidgetLayer::Normal;
         first.label_mode = DockLabelMode::IconAndLabel;
         first.free_pos = Some((320, 48));

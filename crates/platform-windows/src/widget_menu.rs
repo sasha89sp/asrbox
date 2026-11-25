@@ -42,147 +42,152 @@ pub(crate) fn show_widget_context_menu(
 }
 
 fn build_widget_menu_spec(state: &WidgetMenuState) -> FluentMenuSpec {
+    let vis = state.menu_vis;
     let is_sysmon = state.refresh_ms.is_some();
     let active_opacity = closest_opacity_preset(state.opacity_percent);
-    let quick_actions = vec![
-        FluentQuickBtn {
-            id: CMD_OPEN_SETTINGS,
-            glyph: "⚙".to_owned(),
-            enabled: true,
-        },
-        FluentQuickBtn {
+
+    let mut quick_actions = vec![FluentQuickBtn {
+        id: CMD_OPEN_SETTINGS,
+        glyph: "⚙".to_owned(),
+        enabled: true,
+    }];
+    if vis.show_refresh {
+        quick_actions.push(FluentQuickBtn {
             id: CMD_REFRESH,
             glyph: "↻".to_owned(),
             enabled: true,
-        },
-        FluentQuickBtn {
+        });
+    }
+    if vis.show_open_config {
+        quick_actions.push(FluentQuickBtn {
             id: CMD_OPEN_CFG,
             glyph: "✎".to_owned(),
             enabled: true,
-        },
-        FluentQuickBtn {
+        });
+    }
+    if vis.show_hide {
+        quick_actions.push(FluentQuickBtn {
             id: CMD_HIDE,
             glyph: "✕".to_owned(),
             enabled: true,
-        },
-    ];
+        });
+    }
 
-    let mut items = vec![
-        act(
-            CMD_OPEN_SETTINGS,
-            if is_sysmon {
-                "Настройки монитора"
-            } else {
-                "Настройки календаря"
-            },
-            Some("⚙"),
-            false,
-        ),
-        act(
-            CMD_REFRESH,
-            if is_sysmon {
-                "Обновить данные"
-            } else {
-                "Обновить календарь"
-            },
-            Some("↻"),
-            false,
-        ),
-        act(
+    let mut items = vec![act(
+        CMD_OPEN_SETTINGS,
+        if is_sysmon {
+            "Настройки монитора"
+        } else {
+            "Настройки виджета"
+        },
+        Some("⚙"),
+        false,
+    )];
+    if vis.show_refresh {
+        items.push(act(CMD_REFRESH, "Обновить данные", Some("↻"), false));
+    }
+    if vis.show_open_config {
+        items.push(act(
             CMD_OPEN_CFG,
-            if is_sysmon {
-                "Открыть sysmon.cfg"
-            } else {
-                "Открыть widgets.cfg"
-            },
+            "Открыть файл конфигурации",
             Some("✎"),
             false,
-        ),
-    ];
+        ));
+    }
 
-    if let Some(ms) = state.refresh_ms {
-        let active_ms = closest_rate_preset(ms);
+    if vis.show_interval {
+        if let Some(ms) = state.refresh_ms {
+            let active_ms = closest_rate_preset(ms);
+            items.push(FluentMenuItem::Separator);
+            items.push(FluentMenuItem::Submenu {
+                label: "Частота обновления".to_owned(),
+                icon: Some("⏱".to_owned()),
+                enabled: true,
+                items: vec![
+                    act(CMD_RATE_1S, "1 сек (живой)", None, active_ms == 1000),
+                    act(CMD_RATE_2S, "2 сек (баланс)", None, active_ms == 2000),
+                    act(CMD_RATE_3S, "3 сек (эконом)", None, active_ms == 3000),
+                    act(CMD_RATE_5S, "5 сек (тихий)", None, active_ms == 5000),
+                    act(
+                        CMD_RATE_10S,
+                        "10 сек (минимум CPU)",
+                        None,
+                        active_ms == 10_000,
+                    ),
+                ],
+            });
+        }
+        if let Some(sec) = state.sync_interval_sec {
+            let active_s = closest_sync_preset(sec);
+            items.push(FluentMenuItem::Separator);
+            items.push(FluentMenuItem::Submenu {
+                label: "Синхронизация".to_owned(),
+                icon: Some("⏱".to_owned()),
+                enabled: true,
+                items: vec![
+                    act(CMD_SYNC_5M, "Каждые 5 мин", None, active_s == 300),
+                    act(CMD_SYNC_15M, "Каждые 15 мин", None, active_s == 900),
+                    act(CMD_SYNC_30M, "Каждые 30 мин", None, active_s == 1800),
+                    act(CMD_SYNC_1H, "Каждый час", None, active_s == 3600),
+                    act(CMD_SYNC_3H, "Каждые 3 часа", None, active_s == 10_800),
+                ],
+            });
+        }
+    }
+
+    if vis.show_layer || vis.show_opacity {
         items.push(FluentMenuItem::Separator);
+    }
+    if vis.show_layer {
         items.push(FluentMenuItem::Submenu {
-            label: "Частота обновления".to_owned(),
-            icon: Some("⏱".to_owned()),
+            label: "Слой отображения".to_owned(),
+            icon: Some("◫".to_owned()),
             enabled: true,
             items: vec![
-                act(CMD_RATE_1S, "1 сек (живой)", None, active_ms == 1000),
-                act(CMD_RATE_2S, "2 сек (баланс)", None, active_ms == 2000),
-                act(CMD_RATE_3S, "3 сек (эконом)", None, active_ms == 3000),
-                act(CMD_RATE_5S, "5 сек (тихий)", None, active_ms == 5000),
                 act(
-                    CMD_RATE_10S,
-                    "10 сек (минимум CPU)",
+                    CMD_LAYER_WALLPAPER,
+                    "На рабочем столе",
                     None,
-                    active_ms == 10_000,
+                    state.layer == WidgetLayer::Wallpaper,
+                ),
+                act(
+                    CMD_LAYER_NORMAL,
+                    "Обычное окно",
+                    None,
+                    state.layer == WidgetLayer::Normal,
+                ),
+                act(
+                    CMD_LAYER_TOPMOST,
+                    "Поверх всех окон",
+                    None,
+                    state.layer == WidgetLayer::Topmost,
                 ),
             ],
         });
     }
-    if let Some(sec) = state.sync_interval_sec {
-        let active_s = closest_sync_preset(sec);
-        items.push(FluentMenuItem::Separator);
+    if vis.show_opacity {
         items.push(FluentMenuItem::Submenu {
-            label: "Синхронизация".to_owned(),
-            icon: Some("⏱".to_owned()),
+            label: "Прозрачность фона".to_owned(),
+            icon: Some("◐".to_owned()),
             enabled: true,
             items: vec![
-                act(CMD_SYNC_5M, "Каждые 5 мин", None, active_s == 300),
-                act(CMD_SYNC_15M, "Каждые 15 мин", None, active_s == 900),
-                act(CMD_SYNC_30M, "Каждые 30 мин", None, active_s == 1800),
-                act(CMD_SYNC_1H, "Каждый час", None, active_s == 3600),
-                act(CMD_SYNC_3H, "Каждые 3 часа", None, active_s == 10_800),
+                act(
+                    CMD_OPACITY_100,
+                    "100% (плотный)",
+                    None,
+                    active_opacity == 100,
+                ),
+                act(CMD_OPACITY_85, "85%", None, active_opacity == 85),
+                act(CMD_OPACITY_70, "70%", None, active_opacity == 70),
+                act(CMD_OPACITY_50, "50%", None, active_opacity == 50),
+                act(CMD_OPACITY_35, "35%", None, active_opacity == 35),
             ],
         });
     }
-
-    items.push(FluentMenuItem::Separator);
-    items.push(FluentMenuItem::Submenu {
-        label: "Слой отображения".to_owned(),
-        icon: Some("◫".to_owned()),
-        enabled: true,
-        items: vec![
-            act(
-                CMD_LAYER_WALLPAPER,
-                "На рабочем столе",
-                None,
-                state.layer == WidgetLayer::Wallpaper,
-            ),
-            act(
-                CMD_LAYER_NORMAL,
-                "Обычное окно",
-                None,
-                state.layer == WidgetLayer::Normal,
-            ),
-            act(
-                CMD_LAYER_TOPMOST,
-                "Поверх всех окон",
-                None,
-                state.layer == WidgetLayer::Topmost,
-            ),
-        ],
-    });
-    items.push(FluentMenuItem::Submenu {
-        label: "Прозрачность фона".to_owned(),
-        icon: Some("◐".to_owned()),
-        enabled: true,
-        items: vec![
-            act(
-                CMD_OPACITY_100,
-                "100% (плотный)",
-                None,
-                active_opacity == 100,
-            ),
-            act(CMD_OPACITY_85, "85%", None, active_opacity == 85),
-            act(CMD_OPACITY_70, "70%", None, active_opacity == 70),
-            act(CMD_OPACITY_50, "50%", None, active_opacity == 50),
-            act(CMD_OPACITY_35, "35%", None, active_opacity == 35),
-        ],
-    });
-    items.push(FluentMenuItem::Separator);
-    items.push(act(CMD_HIDE, "Скрыть виджет", Some("✕"), false));
+    if vis.show_hide {
+        items.push(FluentMenuItem::Separator);
+        items.push(act(CMD_HIDE, "Скрыть виджет", Some("✕"), false));
+    }
 
     FluentMenuSpec {
         quick_actions,

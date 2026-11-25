@@ -2,7 +2,8 @@ use std::cell::RefCell;
 use std::ffi::c_void;
 
 use asrbox_platform_api::{
-    BgraFrame, FluentPalette, PlatformEvent, SettingsInputRects, SettingsUiEvent, WidgetFrame,
+    BgraFrame, DesignTheme, FluentPalette, PlatformEvent, SettingsInputRects, SettingsUiEvent,
+    WidgetFrame,
 };
 use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, RECT, WPARAM};
@@ -20,17 +21,20 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use crate::app_icon::apply_window_icon;
 use crate::font_engine::set_active_font_renderer;
 use crate::settings_helpers::{
-    apply_dwm_dark_mode, make_child_edit, paint_settings, position_child_edit, rgba_to_colorref,
+    apply_dwm_backdrop, apply_dwm_dark_mode, make_child_edit, paint_settings, position_child_edit,
+    rgba_to_colorref,
 };
-pub(crate) use crate::settings_helpers::{read_settings_input_text, write_settings_input_text};
+pub(crate) use crate::settings_helpers::{
+    read_settings_input_text, settings_client_to_screen, write_settings_input_text,
+};
 use crate::shell::encode_wide_str;
 use crate::tools_win::focus_window;
 use crate::widget_text::composite_widget_frame;
 use crate::window::{lparam_point, push_event};
 
-const MIN_CLIENT_W: i32 = 760;
-const MIN_CLIENT_H: i32 = 520;
-const EDIT_SLOTS: usize = 5;
+const MIN_CLIENT_W: i32 = 720;
+const MIN_CLIENT_H: i32 = 460;
+const EDIT_SLOTS: usize = 9;
 const EDIT_ID_BASE: usize = 700;
 const EN_CHANGE: u32 = 0x0300;
 const SETTINGS_ANIM_TIMER_ID: usize = 61;
@@ -91,6 +95,7 @@ pub(crate) fn apply_settings_window_theme(palette: FluentPalette) {
         }
         if let Some(hwnd) = hwnd {
             apply_dwm_dark_mode(hwnd, palette.is_dark);
+            apply_dwm_backdrop(hwnd, palette.design_theme == DesignTheme::AsrGlass);
             for eh in edits.into_iter().flatten() {
                 let _ = InvalidateRect(Some(eh), None, true);
             }
@@ -155,12 +160,17 @@ pub(crate) fn open_or_focus_settings_window(
 
         apply_window_icon(hwnd);
         apply_dwm_dark_mode(hwnd, palette.is_dark);
+        apply_dwm_backdrop(hwnd, palette.design_theme == DesignTheme::AsrGlass);
         let edits = [
             make_child_edit(hwnd, hinstance, ui_font, false, EDIT_ID_BASE),
             make_child_edit(hwnd, hinstance, ui_font, true, EDIT_ID_BASE + 1),
             make_child_edit(hwnd, hinstance, ui_font, false, EDIT_ID_BASE + 2),
             make_child_edit(hwnd, hinstance, ui_font, false, EDIT_ID_BASE + 3),
             make_child_edit(hwnd, hinstance, ui_font, false, EDIT_ID_BASE + 4),
+            make_child_edit(hwnd, hinstance, ui_font, true, EDIT_ID_BASE + 5),
+            make_child_edit(hwnd, hinstance, ui_font, false, EDIT_ID_BASE + 6),
+            make_child_edit(hwnd, hinstance, ui_font, false, EDIT_ID_BASE + 7),
+            make_child_edit(hwnd, hinstance, ui_font, true, EDIT_ID_BASE + 8),
         ];
         let bg = rgba_to_colorref(palette.input_bg);
         let fg = rgba_to_colorref(palette.text_primary);
@@ -199,6 +209,10 @@ pub(crate) fn present_settings(frame: &WidgetFrame, inputs: SettingsInputRects) 
         inputs.extra,
         inputs.search,
         inputs.aux,
+        inputs.zip_secret,
+        inputs.gh_repo,
+        inputs.gh_branch,
+        inputs.gh_token,
     ];
     for (edit_opt, rect_opt) in edits.into_iter().zip(rects) {
         if let Some(eh) = edit_opt {
