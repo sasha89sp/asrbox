@@ -14,7 +14,7 @@ use asrbox_mod_widgets::{
     ParseOptions, PeriodFilter,
 };
 use asrbox_platform_api::{AppearanceConfig, WidgetMenuVisibility};
-use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel};
+use slint::{Color, ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel};
 
 use crate::generated::ui::{CalendarWindow, SlintCalEventRow};
 use crate::settings_state::apply_theme_to_window;
@@ -387,9 +387,7 @@ fn sync_calendar_ui(s: &CalendarSlintState) {
             SlintCalEventRow {
                 summary: SharedString::from(ev.summary.as_str()),
                 subtitle: SharedString::from(format_event_subtitle(ev, now, s.cfg.date_format)),
-                accent_r: i32::from(rgb[0]),
-                accent_g: i32::from(rgb[1]),
-                accent_b: i32::from(rgb[2]),
+                accent_color: Color::from_rgb_u8(rgb[0], rgb[1], rgb[2]),
                 url: SharedString::from(event_day_url(ev)),
                 is_today: ev.start.days_since_epoch() <= today,
             }

@@ -139,9 +139,9 @@ export component TrayMenuWindow inherits Window {
         key-pressed(ev) => {
             if (ev.text == Key.Escape) {
                 root.hide-menu();
-                return accept;
+                return EventResult.accept;
             }
-            reject
+            EventResult.reject
         }
 
         Rectangle {

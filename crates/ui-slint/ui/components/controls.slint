@@ -514,10 +514,17 @@ export component AccordionCard inherits Rectangle {
             }
         }
 
-        if (root.expanded) : VerticalLayout {
-            spacing: 0px;
-            padding-bottom: 6px;
-            @children
+        Rectangle {
+            visible: root.expanded;
+            clip: true;
+            height: root.expanded ? body-col.preferred-height : 0px;
+
+            body-col := VerticalLayout {
+                width: parent.width;
+                spacing: 0px;
+                padding-bottom: 6px;
+                @children
+            }
         }
     }
 }

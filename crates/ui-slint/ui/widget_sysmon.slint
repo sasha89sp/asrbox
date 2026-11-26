@@ -197,8 +197,8 @@ export component SysMonitorWindow inherits Window {
         height: 100%;
         border-radius: 14px;
         background: Theme.dark-mode
-            ? rgba(24, 27, 32, Math.clamp((root.opacity-pct * 1.0) / 100.0, 0.25, 0.98))
-            : rgba(243, 245, 248, Math.clamp((root.opacity-pct * 1.0) / 100.0, 0.30, 0.98));
+            ? #181B20.with-alpha(Math.clamp((root.opacity-pct * 1.0) / 100.0, 0.25, 0.98))
+            : #F3F5F8.with-alpha(Math.clamp((root.opacity-pct * 1.0) / 100.0, 0.30, 0.98));
         border-width: 1px;
         border-color: Theme.border-color;
         clip: true;
