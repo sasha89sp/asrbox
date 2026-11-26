@@ -53,7 +53,7 @@ impl<I: IconProvider> AppController<I> {
         }
     }
 
-    pub(crate) fn toggle_slint_notes<H: ToolsPlatform>(&mut self, host: &mut H) {
+    pub(crate) fn toggle_slint_notes<H: ToolsPlatform + WidgetPlatform>(&mut self, host: &mut H) {
         let mut cfg = load_notes_config(&self.paths.notes_cfg).unwrap_or_default();
         let next = !self.slint_ui.is_notes_open();
         cfg.visible = next;

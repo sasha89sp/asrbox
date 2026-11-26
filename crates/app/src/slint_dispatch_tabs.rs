@@ -38,7 +38,7 @@ impl<I: IconProvider> AppController<I> {
         arg: &str,
     ) -> (bool, bool) {
         if act == "tray_toggle_theme" {
-            let next = if self.appearance.theme_mode == ThemeMode::Light {
+            let next = if self.appearance.theme == ThemeMode::Light {
                 ThemeMode::Dark
             } else {
                 ThemeMode::Light

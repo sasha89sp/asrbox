@@ -10,7 +10,7 @@ use asrbox_mod_widgets::{
     WEATHER_WIDGET_ID,
 };
 use asrbox_platform_api::{
-    DockPlatform, IconProvider, PixelPoint, PlatformEvent, ThemePalette, ToolsPlatform,
+    DockPlatform, FluentPalette, IconProvider, PixelPoint, PlatformEvent, ToolsPlatform,
     WidgetPlatform,
 };
 
@@ -247,7 +247,7 @@ impl<I: IconProvider> AppController<I> {
     pub(crate) fn sync_inproc_widgets<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
         &mut self,
         host: &mut H,
-        pal: ThemePalette,
+        pal: FluentPalette,
     ) {
         let now = host.local_time_now();
         let want_inproc_w =
