@@ -19,9 +19,9 @@ use slint::{Color, ComponentHandle, ModelRc, SharedString, Timer, TimerMode, Vec
 use crate::generated::ui::{CalendarWindow, SlintCalEventRow};
 use crate::settings_state::apply_theme_to_window;
 use crate::vibrancy::{
-    apply_acrylic_vibrancy, apply_window_opacity, configure_desktop_window,
-    install_bounds_tracker, resize_window_to, set_window_layer, set_window_visible,
-    start_window_drag, start_window_resize, DesktopWindowSpec,
+    apply_acrylic_vibrancy, apply_window_opacity, configure_desktop_window, install_bounds_tracker,
+    resize_window_to, set_window_layer, set_window_visible, start_window_drag, start_window_resize,
+    DesktopWindowSpec,
 };
 use crate::win_os::{
     emit_config_changed, emit_open_settings, emit_worker_log, http_get, idx_to_layer, layer_to_idx,
@@ -124,7 +124,11 @@ pub fn trigger_calendar_refresh(state: &SharedCalendar) {
         }
         s.loading = true;
         s.ui.set_loading(true);
-        (s.cfg.sources.clone(), s.cfg.lookahead_days, s.cache_dir.clone())
+        (
+            s.cfg.sources.clone(),
+            s.cfg.lookahead_days,
+            s.cache_dir.clone(),
+        )
     };
     thread::spawn(move || {
         let (per_source, error) = fetch_sources_blocking(&sources, lookahead, &cache_dir);
@@ -203,11 +207,14 @@ fn apply_calendar_window_state(state: &SharedCalendar, safe_mode: bool, trigger_
 fn arm_calendar_timer(state: &SharedCalendar, interval_sec: u32) {
     let dur = Duration::from_secs(u64::from(interval_sec.clamp(60, 86_400)));
     let st_weak = Rc::downgrade(state);
-    state.borrow().sync_timer.start(TimerMode::Repeated, dur, move || {
-        if let Some(rc) = st_weak.upgrade() {
-            trigger_calendar_refresh(&rc);
-        }
-    });
+    state
+        .borrow()
+        .sync_timer
+        .start(TimerMode::Repeated, dur, move || {
+            if let Some(rc) = st_weak.upgrade() {
+                trigger_calendar_refresh(&rc);
+            }
+        });
 }
 
 fn wire_calendar_callbacks(state: &SharedCalendar) {

@@ -76,9 +76,8 @@ pub(crate) fn load_shgetfileinfo_icon(path: &Path, size_px: u32) -> Result<RgbaI
     if ok == 0 || info.hIcon.is_invalid() {
         let is_dir_like = path.extension().is_none() || path.is_dir();
         let attrs = FILE_FLAGS_AND_ATTRIBUTES(if is_dir_like { 0x0010 } else { 0x0080 });
-        let flags = SHGFI_ICON
-            | SHGFI_LARGEICON
-            | windows::Win32::UI::Shell::SHGFI_FLAGS(0x0000_0010);
+        let flags =
+            SHGFI_ICON | SHGFI_LARGEICON | windows::Win32::UI::Shell::SHGFI_FLAGS(0x0000_0010);
         // SAFETY: `wide` is NUL-terminated; fallback uses SHGFI_USEFILEATTRIBUTES.
         ok = unsafe {
             SHGetFileInfoW(

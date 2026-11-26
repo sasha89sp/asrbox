@@ -6,7 +6,9 @@ use asrbox_mod_dock::{DockAlignment, DockConfig, DockEdge, DockItem, DockLabelMo
 use asrbox_platform_api::{DockMenuVisibility, PixelRect};
 use slint::{ModelRc, SharedString, VecModel};
 
-use crate::dock_icons::{is_folder_target, resolve_dock_target, scan_folder_entries, DockIconCache};
+use crate::dock_icons::{
+    is_folder_target, resolve_dock_target, scan_folder_entries, DockIconCache,
+};
 use crate::generated::ui::{DockWindow, SlintDockIconRow};
 use crate::win_os::{idx_to_layer, layer_to_idx, resolve_exe_name};
 
@@ -302,12 +304,7 @@ pub fn set_custom_icon_config(
     true
 }
 
-pub fn open_folder_popup_ui(
-    win: &DockWindow,
-    label: &str,
-    dir: &Path,
-    icons: &mut DockIconCache,
-) {
+pub fn open_folder_popup_ui(win: &DockWindow, label: &str, dir: &Path, icons: &mut DockIconCache) {
     let entries = scan_folder_entries(dir, icons);
     win.set_folder_title(SharedString::from(label));
     win.set_folder_path(SharedString::from(dir.to_string_lossy().as_ref()));

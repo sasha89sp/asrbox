@@ -72,7 +72,10 @@ pub fn run_dock_host(
     if configs.is_empty() {
         configs.push(DockConfig::new(1, "Док 1"));
     }
-    let base_dir = paths.data_dir.parent().map_or_else(|| paths.data_dir.clone(), PathBuf::from);
+    let base_dir = paths
+        .data_dir
+        .parent()
+        .map_or_else(|| paths.data_dir.clone(), PathBuf::from);
     let state = DockHostState {
         paths,
         app_version: app_version.to_owned(),
@@ -91,7 +94,11 @@ pub fn run_dock_host(
     emit_worker_log("INFO", "dock", "Slint-воркер док-панелей запущен");
     spawn_stdin_listener();
     let poll = Timer::default();
-    poll.start(TimerMode::Repeated, Duration::from_millis(2500), refresh_running_dots);
+    poll.start(
+        TimerMode::Repeated,
+        Duration::from_millis(2500),
+        refresh_running_dots,
+    );
     let wd = Timer::default();
     if parent_pid > 0 {
         wd.start(TimerMode::Repeated, Duration::from_secs(2), move || {
@@ -291,7 +298,11 @@ fn handle_file_dropped(dock_id: DockId, path: PathBuf) {
             return false;
         };
         if cfg.lock_items {
-            emit_worker_log("INFO", "dock", "Защита значков активна: добавление заблокировано");
+            emit_worker_log(
+                "INFO",
+                "dock",
+                "Защита значков активна: добавление заблокировано",
+            );
             return false;
         }
         let next_id = cfg.next_item_id();
@@ -307,7 +318,10 @@ fn handle_launch_item(dock_id: DockId, item_id: u64) {
         let mut g = slot.borrow_mut();
         let s = g.as_mut()?;
         let cfg = s.configs.iter().find(|c| c.id == dock_id)?;
-        let it = cfg.items.iter().find(|i| i.id == item_id && !i.is_separator())?;
+        let it = cfg
+            .items
+            .iter()
+            .find(|i| i.id == item_id && !i.is_separator())?;
         let path = resolve_dock_target(&it.target, s.icons.base_dir());
         if is_folder_target(&path) {
             let label = it.label.clone();
@@ -328,7 +342,9 @@ fn handle_launch_item(dock_id: DockId, item_id: u64) {
 fn handle_launch_folder_entry(dock_id: DockId, path_str: &str) {
     let focus = DOCK_HOST.with(|slot| {
         let g = slot.borrow();
-        let cfg = g.as_ref().and_then(|s| s.configs.iter().find(|c| c.id == dock_id));
+        let cfg = g
+            .as_ref()
+            .and_then(|s| s.configs.iter().find(|c| c.id == dock_id));
         cfg.is_none_or(|c| c.focus_running_window)
     });
     let path = PathBuf::from(path_str);

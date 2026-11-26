@@ -16,9 +16,9 @@ use slint::ComponentHandle;
 use crate::generated::ui::SysMonitorWindow;
 use crate::settings_state::apply_theme_to_window;
 use crate::vibrancy::{
-    apply_acrylic_vibrancy, apply_window_opacity, configure_desktop_window,
-    install_bounds_tracker, resize_window_to, set_window_layer, set_window_visible,
-    start_window_drag, start_window_resize, DesktopWindowSpec,
+    apply_acrylic_vibrancy, apply_window_opacity, configure_desktop_window, install_bounds_tracker,
+    resize_window_to, set_window_layer, set_window_visible, start_window_drag, start_window_resize,
+    DesktopWindowSpec,
 };
 use crate::widgets_sysmon_view::sync_sysmon_ui;
 use crate::win_os::{

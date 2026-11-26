@@ -15,9 +15,9 @@ use slint::{ComponentHandle, Timer, TimerMode};
 use crate::generated::ui::WeatherWindow;
 use crate::settings_state::apply_theme_to_window;
 use crate::vibrancy::{
-    apply_acrylic_vibrancy, apply_window_opacity, configure_desktop_window,
-    install_bounds_tracker, resize_window_to, set_window_layer, set_window_visible,
-    start_window_drag, start_window_resize, DesktopWindowSpec,
+    apply_acrylic_vibrancy, apply_window_opacity, configure_desktop_window, install_bounds_tracker,
+    resize_window_to, set_window_layer, set_window_visible, start_window_drag, start_window_resize,
+    DesktopWindowSpec,
 };
 use crate::widgets_weather_data::{fetch_weather_blocking, sync_weather_ui, WeatherFetchPayload};
 use crate::win_os::{
