@@ -109,16 +109,25 @@ fn sync_gpu_section(ui: &SysMonitorWindow, d: &SysTelemetry) {
         "VRAM: —".to_owned()
     };
     ui.set_gpu_vram_text(SharedString::from(vlbl));
-    let ts = gpu.temp_c.map_or_else(|| "—".to_owned(), |t| format!("{t}°C"));
-    let fs = gpu.fan_pct.map_or_else(|| "—".to_owned(), |f| format!("{f}%"));
+    let ts = gpu
+        .temp_c
+        .map_or_else(|| "—".to_owned(), |t| format!("{t}°C"));
+    let fs = gpu
+        .fan_pct
+        .map_or_else(|| "—".to_owned(), |f| format!("{f}%"));
     let gthr = if gpu.throttled { "Да" } else { "Нет" };
-    ui.set_gpu_temp_text(SharedString::from(format!("Темп/Fan: {ts} | {fs} | [THR: {gthr}]")));
+    ui.set_gpu_temp_text(SharedString::from(format!(
+        "Темп/Fan: {ts} | {fs} | [THR: {gthr}]"
+    )));
 }
 
 fn sync_ram_and_drives(ui: &SysMonitorWindow, d: &SysTelemetry) {
     let ram = &d.ram;
     ui.set_ram_pct(i32::from(ram.usage_pct));
-    let (ug, tg) = (f64::from(ram.used_mb) / 1024.0, f64::from(ram.total_mb) / 1024.0);
+    let (ug, tg) = (
+        f64::from(ram.used_mb) / 1024.0,
+        f64::from(ram.total_mb) / 1024.0,
+    );
     let (cg, pg) = (
         f64::from(ram.cache_mb) / 1024.0,
         f64::from(ram.pagefile_used_mb) / 1024.0,
@@ -179,7 +188,9 @@ fn sync_net_and_procs(ui: &SysMonitorWindow, d: &SysTelemetry) {
         "▲ {:.1} Мбит/с",
         f64::from(net.tx_kbps) / 1000.0
     )));
-    let gw = net.gw_ping_ms.map_or_else(|| "—".to_owned(), |m| format!("{m} мс"));
+    let gw = net
+        .gw_ping_ms
+        .map_or_else(|| "—".to_owned(), |m| format!("{m} мс"));
     let inet = net.inet_ping_ms.map_or_else(
         || "—".to_owned(),
         |m| format!("{m} мс ({}% J:{})", net.inet_loss_pct, net.inet_jitter_ms),

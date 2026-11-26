@@ -69,7 +69,13 @@ pub fn encode_tray_show(p: &TrayShowPayload) -> String {
         .iter()
         .map(|d| format!("{}~{}~{}", d.dock_id, b(d.enabled), escape_sub(&d.title)))
         .collect();
-    format!("SHOW|{}|{}|{}|{}", p.x, p.y, bits, escape_field(&docks.join(";")))
+    format!(
+        "SHOW|{}|{}|{}|{}",
+        p.x,
+        p.y,
+        bits,
+        escape_field(&docks.join(";"))
+    )
 }
 
 pub fn decode_tray_show(line: &str) -> Option<TrayShowPayload> {

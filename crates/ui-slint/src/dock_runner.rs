@@ -88,7 +88,11 @@ pub fn run_dock_host(
 
     spawn_stdin_listener();
     let poll_timer = Timer::default();
-    poll_timer.start(TimerMode::Repeated, Duration::from_millis(2500), refresh_running_dots);
+    poll_timer.start(
+        TimerMode::Repeated,
+        Duration::from_millis(2500),
+        refresh_running_dots,
+    );
 
     let watchdog = Timer::default();
     if parent_pid > 0 {
@@ -266,7 +270,11 @@ fn handle_file_dropped(dock_id: DockId, path: PathBuf) {
             return false;
         };
         if cfg.lock_items {
-            emit_worker_log("INFO", "dock", "Защита значков активна: добавление заблокировано");
+            emit_worker_log(
+                "INFO",
+                "dock",
+                "Защита значков активна: добавление заблокировано",
+            );
             return false;
         }
         let next_id = cfg.next_item_id();
@@ -282,7 +290,10 @@ fn handle_launch_item(dock_id: DockId, item_id: u64) {
     let target = DOCK_HOST.with(|slot| {
         let g = slot.borrow();
         let cfg = g.as_ref()?.configs.iter().find(|c| c.id == dock_id)?;
-        let it = cfg.items.iter().find(|i| i.id == item_id && !i.is_separator())?;
+        let it = cfg
+            .items
+            .iter()
+            .find(|i| i.id == item_id && !i.is_separator())?;
         Some((it.target.clone(), cfg.focus_running_window))
     });
     if let Some((path, focus)) = target {
@@ -312,7 +323,10 @@ fn open_dock_item_folder(dock_id: DockId, item_id: u64) {
     let target = DOCK_HOST.with(|slot| {
         let g = slot.borrow();
         let cfg = g.as_ref()?.configs.iter().find(|c| c.id == dock_id)?;
-        cfg.items.iter().find(|i| i.id == item_id).map(|i| i.target.clone())
+        cfg.items
+            .iter()
+            .find(|i| i.id == item_id)
+            .map(|i| i.target.clone())
     });
     if let Some(p) = target {
         let _ = open_item_location(&p);

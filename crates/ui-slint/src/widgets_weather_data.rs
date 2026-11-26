@@ -194,7 +194,12 @@ fn sync_weather_metrics_and_lists(s: &WeatherSlintState) {
     let take_n = usize::from(normalize_forecast_days(s.cfg.forecast_days));
     let slice = &s.data.daily[..s.data.daily.len().min(take_n)];
     let g_min = slice.iter().map(|d| d.min_c).min().unwrap_or(-5);
-    let g_max = slice.iter().map(|d| d.max_c).max().unwrap_or(10).max(g_min + 1);
+    let g_max = slice
+        .iter()
+        .map(|d| d.max_c)
+        .max()
+        .unwrap_or(10)
+        .max(g_min + 1);
     let span = f32::from((g_max - g_min).max(1) as i16);
     let d_rows: Vec<SlintWeatherDayRow> = slice
         .iter()
@@ -218,7 +223,11 @@ fn sync_weather_metrics_and_lists(s: &WeatherSlintState) {
     let footer = if s.is_hybrid {
         format!("Яндекс + Open-Meteo (3–7д) · обн. {}", s.data.updated_label)
     } else if s.data.has_live_data {
-        format!("{} · обн. {}", s.cfg.provider.display_name(), s.data.updated_label)
+        format!(
+            "{} · обн. {}",
+            s.cfg.provider.display_name(),
+            s.data.updated_label
+        )
     } else {
         "Ожидание данных…".to_owned()
     };

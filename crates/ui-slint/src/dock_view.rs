@@ -2,8 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use asrbox_mod_dock::{
-    icon_request_for_item, DockAlignment, DockConfig, DockEdge, DockItem, DockLabelMode,
-    IconSource,
+    icon_request_for_item, DockAlignment, DockConfig, DockEdge, DockItem, DockLabelMode, IconSource,
 };
 use asrbox_platform_api::{DockMenuVisibility, PixelRect};
 use slint::{Image, ModelRc, Rgba8Pixel, SharedPixelBuffer, SharedString, VecModel};
@@ -189,8 +188,7 @@ fn build_dock_icon_rows(
             let img = icons.get_or_load(it, cfg.icon_size_px);
             let is_running = !it.is_separator()
                 && cfg.show_running_indicator
-                && resolve_exe_name(&it.target)
-                    .is_some_and(|exe| running_exes.contains(&exe));
+                && resolve_exe_name(&it.target).is_some_and(|exe| running_exes.contains(&exe));
             SlintDockIconRow {
                 id: it.id as i32,
                 label: SharedString::from(it.label.as_str()),

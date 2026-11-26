@@ -9,9 +9,7 @@ use std::thread;
 
 use asrbox_platform_api::{PixelPoint, TrayMenuEntry, TrayModuleFlags};
 use asrbox_platform_windows::{wake_host_window, JobObject};
-use asrbox_ui_slint::{
-    encode_runtime_status, encode_tray_show, TrayShowPayload, UiRuntimeStatus,
-};
+use asrbox_ui_slint::{encode_runtime_status, encode_tray_show, TrayShowPayload, UiRuntimeStatus};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum UiProcKind {

@@ -23,8 +23,8 @@ use crate::vibrancy::{
     set_window_layer, set_window_visible, start_resize_se, start_window_drag,
 };
 use crate::win_os::{
-    emit_config_changed, emit_open_settings, emit_worker_log, http_get, idx_to_layer,
-    layer_to_idx, local_time_now, open_text_file, open_url,
+    emit_config_changed, emit_open_settings, emit_worker_log, http_get, idx_to_layer, layer_to_idx,
+    local_time_now, open_text_file, open_url,
 };
 
 thread_local! {
@@ -122,7 +122,11 @@ pub fn trigger_calendar_refresh(state: &SharedCalendar) {
         }
         s.loading = true;
         s.ui.set_loading(true);
-        (s.cfg.sources.clone(), s.cfg.lookahead_days, s.cache_dir.clone())
+        (
+            s.cfg.sources.clone(),
+            s.cfg.lookahead_days,
+            s.cache_dir.clone(),
+        )
     };
     thread::spawn(move || {
         let (per_source, error) = fetch_sources_blocking(&sources, lookahead, &cache_dir);
@@ -286,7 +290,9 @@ fn wire_calendar_filter_and_menu(state: &SharedCalendar) {
     });
     let st = Rc::clone(state);
     ui.on_set_opacity(move |pct| {
-        update_cal_cfg(&st, true, |s| s.cfg.opacity_percent = pct.clamp(20, 100) as u8);
+        update_cal_cfg(&st, true, |s| {
+            s.cfg.opacity_percent = pct.clamp(20, 100) as u8
+        });
     });
     let st = Rc::clone(state);
     ui.on_set_sync_interval(move |sec| {

@@ -36,11 +36,7 @@ pub fn run_worker(module: ModuleId, parent_pid: u32, safe_mode: bool) -> Result<
     }
 }
 
-pub fn run_legacy_worker(
-    module: ModuleId,
-    parent_pid: u32,
-    safe_mode: bool,
-) -> Result<(), String> {
+pub fn run_legacy_worker(module: ModuleId, parent_pid: u32, safe_mode: bool) -> Result<(), String> {
     let mut host = WindowsDockHost::new_worker()?;
     let hwnd_raw = host.host_hwnd_raw();
     let cmd_queue = spawn_stdin_reader(hwnd_raw);
