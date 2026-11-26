@@ -28,6 +28,14 @@ mod settings_weather_notes;
 #[cfg(windows)]
 mod settings_widgets;
 #[cfg(windows)]
+mod slint_dispatch;
+#[cfg(windows)]
+mod slint_dispatch_dock;
+#[cfg(windows)]
+mod slint_dispatch_tabs;
+#[cfg(windows)]
+mod slint_ui;
+#[cfg(windows)]
 mod supervisor;
 #[cfg(windows)]
 mod sync_ctl;
@@ -60,10 +68,7 @@ use asrbox_mod_overlay::GameOverlay;
 #[cfg(windows)]
 use asrbox_mod_settings::{SettingsSnapshot, SettingsTab, SettingsUiState, WidgetSubTab};
 #[cfg(windows)]
-use asrbox_mod_widgets::{
-    CalendarWidget, NotesWidget, SysMonitorWidget, WeatherWidget, CALENDAR_WIDGET_ID,
-    SYS_WIDGET_ID, WEATHER_WIDGET_ID,
-};
+use asrbox_mod_widgets::{load_notes_config, CalendarWidget, SysMonitorWidget, WeatherWidget};
 #[cfg(windows)]
 use asrbox_platform_api::{
     load_appearance_config, load_menu_config, AppearanceConfig, ContextMenuConfig, DockPlatform,
@@ -74,6 +79,8 @@ use asrbox_platform_api::{
 use crate::backup_ctl::BackupController;
 #[cfg(windows)]
 use crate::docks::DockManager;
+#[cfg(windows)]
+use crate::slint_ui::SlintUiBridge;
 #[cfg(windows)]
 use crate::supervisor::ModuleSupervisor;
 #[cfg(windows)]
@@ -96,6 +103,12 @@ fn main() -> ExitCode {
 
     let safe_mode = args.iter().any(|arg| arg == "--safe-mode");
     let force_inproc = args.iter().any(|arg| arg == "--inproc");
+    if args.iter().any(|arg| arg == "--ui-settings") || args.iter().any(|arg| arg == "--ui-notes") {
+        return match run_ui_process_mode(&args) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(_) => ExitCode::FAILURE,
+        };
+    }
     if let Some(worker_mod) = parse_arg_value(&args, "--worker") {
         let parent_pid = parse_arg_value(&args, "--parent-pid")
             .and_then(|v| v.parse::<u32>().ok())
@@ -114,6 +127,27 @@ fn main() -> ExitCode {
 
 fn parse_arg_value(args: &[String], flag: &str) -> Option<String> {
     args.windows(2).find(|w| w[0] == flag).map(|w| w[1].clone())
+}
+
+#[cfg(not(windows))]
+fn run_ui_process_mode(_args: &[String]) -> Result<(), String> {
+    Err("asrbox UI runs on Windows only".to_owned())
+}
+
+#[cfg(windows)]
+fn run_ui_process_mode(args: &[String]) -> Result<(), String> {
+    let paths = resolve_app_paths();
+    install_crash_log_hook(&paths.logs_dir);
+    if args.iter().any(|a| a == "--ui-notes") {
+        return asrbox_ui_slint::run_notes_window(paths, APP_VERSION);
+    }
+    let tab = parse_arg_value(args, "--tab")
+        .and_then(|v| v.parse::<i32>().ok())
+        .unwrap_or(0);
+    let sub = parse_arg_value(args, "--subtab")
+        .and_then(|v| v.parse::<i32>().ok())
+        .unwrap_or(0);
+    asrbox_ui_slint::run_settings_window(paths, APP_VERSION, tab, sub)
 }
 
 #[cfg(not(windows))]
@@ -169,8 +203,17 @@ fn run_app(safe_mode: bool, force_inproc: bool) -> Result<(), String> {
         safe_mode,
     );
     ctrl.sync_runtime_modules(&mut host);
+    if !safe_mode
+        && ctrl.modules_cfg.widgets_enabled
+        && load_notes_config(&ctrl.paths.notes_cfg)
+            .map(|c| c.visible)
+            .unwrap_or(false)
+    {
+        let _ = ctrl.slint_ui.open_notes();
+    }
 
     host.run_event_loop(|platform, event| ctrl.handle_event(platform, event));
+    ctrl.slint_ui.stop_all();
     ctrl.supervisor.stop_all();
     Ok(())
 }
@@ -184,11 +227,12 @@ pub(crate) struct AppController<I: IconProvider> {
     pub(crate) appearance: AppearanceConfig,
     pub(crate) menus_cfg: ContextMenuConfig,
     pub(crate) supervisor: ModuleSupervisor,
+    pub(crate) slint_ui: SlintUiBridge,
+    pub(crate) last_ui_status_msg: String,
     pub(crate) docks: Option<DockManager<I>>,
     pub(crate) calendar: Option<CalendarWidget>,
     pub(crate) sysmon: Option<SysMonitorWidget>,
     pub(crate) weather: Option<WeatherWidget>,
-    pub(crate) notes: Option<NotesWidget>,
     pub(crate) overlay: Option<GameOverlay>,
     pub(crate) overlay_setup_mode: bool,
     pub(crate) backup: BackupController,
@@ -216,6 +260,7 @@ impl<I: IconProvider> AppController<I> {
     ) -> Self {
         let debug = DebugHub::new(paths.logs_dir.clone());
         let supervisor = ModuleSupervisor::new(host_hwnd_raw, safe_mode);
+        let slint_ui = SlintUiBridge::new(host_hwnd_raw);
         let menus_cfg = load_menu_config(&paths.menus_cfg);
         let mut settings_ui = SettingsUiState::default();
         settings_ui.bind_ui_state_path(paths.settings_ui_cfg.clone());
@@ -228,11 +273,12 @@ impl<I: IconProvider> AppController<I> {
             appearance,
             menus_cfg,
             supervisor,
+            slint_ui,
+            last_ui_status_msg: String::new(),
             docks: None,
             calendar: None,
             sysmon: None,
             weather: None,
-            notes: None,
             overlay: None,
             overlay_setup_mode: false,
             backup,
@@ -250,7 +296,6 @@ impl<I: IconProvider> AppController<I> {
         &mut self,
         host: &mut H,
     ) {
-        let now = host.local_time_now();
         for msg in self.supervisor.sync_with_config(&self.modules_cfg) {
             self.log_tagged(host, "app", msg);
         }
@@ -275,56 +320,7 @@ impl<I: IconProvider> AppController<I> {
                 dm.destroy_all_windows(host);
             }
         }
-
-        let want_inproc_w =
-            self.modules_cfg.isolation == IsolationMode::InProc && self.modules_cfg.widgets_enabled;
-        let wvis = self.menus_cfg.widget;
-        if want_inproc_w && self.calendar.is_none() {
-            let mut cal =
-                CalendarWidget::load(self.paths.widgets_cfg.clone(), self.paths.cache_dir.clone());
-            cal.set_menu_visibility(wvis);
-            cal.set_palette(host, pal);
-            let _ = cal.sync_window(host, self.safe_mode);
-            self.debug.log(
-                now,
-                LogLevel::Info,
-                "widgets",
-                format!("Календарь (inproc): {}", cal.status_summary()),
-            );
-            self.calendar = Some(cal);
-        } else if !want_inproc_w && self.calendar.take().is_some() {
-            let _ = host.destroy_widget_window(CALENDAR_WIDGET_ID);
-        }
-        if want_inproc_w && self.sysmon.is_none() {
-            let mut sys = SysMonitorWidget::load(self.paths.sysmon_cfg.clone());
-            sys.set_menu_visibility(wvis);
-            sys.set_palette(host, pal);
-            let _ = sys.sync_window(host, self.safe_mode);
-            self.sysmon = Some(sys);
-        } else if !want_inproc_w && self.sysmon.take().is_some() {
-            let _ = host.destroy_widget_window(SYS_WIDGET_ID);
-        }
-        if want_inproc_w && self.weather.is_none() {
-            let mut weather = WeatherWidget::load(self.paths.weather_cfg.clone());
-            weather.set_menu_visibility(wvis);
-            weather.set_palette(host, pal);
-            let _ = weather.sync_window(host, self.safe_mode);
-            self.weather = Some(weather);
-        } else if !want_inproc_w && self.weather.take().is_some() {
-            let _ = host.destroy_widget_window(WEATHER_WIDGET_ID);
-        }
-        if want_inproc_w && self.notes.is_none() {
-            let mut notes = NotesWidget::load(
-                self.paths.notes_cfg.clone(),
-                self.paths.notes_dir.join("notes_db.cfg"),
-            );
-            notes.set_menu_visibility(wvis);
-            notes.set_palette(host, pal);
-            let _ = notes.sync_window(host, self.safe_mode);
-            self.notes = Some(notes);
-        } else if !want_inproc_w && self.notes.take().is_some() {
-            host.close_notes_window();
-        }
+        self.sync_inproc_widgets(host, pal);
         self.sync_inproc_overlay(host);
     }
 

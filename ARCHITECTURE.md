@@ -1,12 +1,12 @@
 # ARCHITECTURE.md — Архитектура `asrbox`
 
-Версия: `0.0.10` (рабочие модули `mod-dock` [Concentric Fluent Glass + веерный попап папок], `mod-widgets` [Календарь, Системный монитор, Погода Open-Meteo / гибридная Яндекс.Погода 1/3/7д, Заметки], `mod-overlay`, `mod-settings`, `mod-backup` [AES-256 + GitHub], `mod-webdav`, `mod-debug`, `mod-about` + мультипроцессный супервизор в `crates/app`, дизайн-система «Стеклянный блок ASR» / `Win11Classic`, `WH_MOUSE_LL`-сброс Fluent-меню, `menus.cfg`, встроенная PE-иконка `16–256 px` и `Segoe UI Variable` / GDI ClearType + DirectWrite).
+Версия: `0.1.0` (Этапы 1+2 миграции UI на декларативный Slint `~1.18` + Windows 11 Mica/Acrylic `window-vibrancy 0.8.1` в `crates/ui-slint`: безрамочные окна Настроек `--ui-settings` и 3-колоночных Заметок `--ui-notes`; сохранены на 100% бэкенд-модули `mod-dock`, `mod-widgets`, `mod-overlay`, `mod-backup` [AES-256 + GitHub], `mod-webdav`, `mod-debug`, `mod-about` и мультипроцессный супервизор `crates/app`).
 
 ## 1. Правило зависимостей (строго вниз)
 
 - `crates/mod-*` и `crates/platform-windows` зависят **только** от `crates/core` и `crates/platform-api`.
 - Прикладные модули не вызывают друг друга напрямую — только сообщения через `crates/core` и супервизор `crates/app`.
-- Весь `unsafe` и прямые вызовы WinAPI (`windows = "0.61"`) изолированы исключительно в `crates/platform-windows`; в остальных крейтах действует `unsafe_code = "forbid"`.
+- Весь `unsafe` и прямые вызовы WinAPI (`windows = "0.61"`) изолированы исключительно в `crates/platform-windows`; в остальных крейтах действует `unsafe_code = "forbid"` (в `crates/ui-slint` разрешён только сгенерированный макрос `slint::include_modules!()` в изолированном `src/generated.rs`).
 - Во всём workspace действуют `unwrap_used = "deny"` и `expect_used = "deny"`.
 
 ```text
@@ -36,19 +36,20 @@
 
 - **Единый контракт**: каждый модуль реализует трейт `Module` из `crates/core` (`start`, `stop`, `health`).
 - **Управление в настройках (`data/config/modules.cfg`)**: каждый модуль (`dock`, `widgets`, `overlay`) включается и отключается независимо (выключенный не запускается, 0% CPU и 0 МБ RAM, `NF-007`), а режим изоляции (`process` по умолчанию или `inproc`) переключается на лету в окне «Настройки asrbox».
-- **Один исполняемый файл**: `asrbox.exe` выступает супервизором (кастомное Fluent ПКМ-меню трея, `mod-settings` с браузерными вкладками, `mod-backup`, `mod-webdav`, `mod-debug`, `mod-about`) и запускает каждый активный прикладной модуль как изолированный дочерний процесс `asrbox.exe --worker <dock|widgets|overlay> --parent-pid <PID>`.
-- **Гарантия очистки (`JobObject`)**: все воркеры привязаны к Win32 `JobObject` (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK`) + проверяют живость родительского PID: при выходе супервизора воркеры гарантированно завершаются без «сирот», а сторонние программы пользователя, запущенные через док-панель, отвязываются от Job и продолжают работать (`BUG-006`).
+- **Один исполняемый файл**: `asrbox.exe` выступает супервизором (кастомное Fluent ПКМ-меню трея, `mod-backup`, `mod-webdav`, `mod-debug`, `mod-about`), запускает прикладные воркеры `asrbox.exe --worker <dock|widgets|overlay> --parent-pid <PID>` и безрамочные Slint-окна по требованию `asrbox.exe --ui-settings` / `asrbox.exe --ui-notes` (`SlintUiBridge` с `JobObject` и построчным `UI_CMD`/`STATUS` IPC, 0.0% CPU при закрытом окне).
+- **Гарантия очистки (`JobObject`)**: все воркеры и Slint-окна привязаны к Win32 `JobObject` (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK`) + проверяют живость родительского PID: при выходе супервизора дочерние процессы гарантированно завершаются без «сирот», а сторонние программы пользователя, запущенные через док-панель, отвязываются от Job и продолжают работать (`BUG-006`).
 - **Политика перезапуска (`NF-006`, `NF-008`)**: при аварийном завершении воркера остальные модули и супервизор продолжают работать; супервизор автоматически перезапускает упавший модуль (до 3 попыток за 60 секунд, затем останавливает с записью в лог диагностики).
-- **IPC (`crates/core/src/ipc.rs`)**: построчный текстовый протокол (`SupervisorCmd` по stdin воркера, включая `SetTheme`, -> `WorkerMsg` по stdout воркера), пробуждающий цикл сообщений через `WM_IPC_WAKE` без поллинга.
+- **IPC (`crates/core/src/ipc.rs`, `crates/ui-slint/src/ipc_proto.rs`)**: построчный текстовый протокол (`SupervisorCmd`/`WorkerMsg` для воркеров и `UI_CMD`/`STATUS`/`REFRESH`/`TAB`/`SHUTDOWN` для Slint-окон), пробуждающий цикл сообщений через `WM_IPC_WAKE` без поллинга.
 
 ### Режимы исполнения модулей
 
 | Модуль | Режим по умолчанию | Причина изоляции |
 | --- | --- | --- |
+| `ui-slint` | Дочерние окна (`--ui-settings`, `--ui-notes`) | Декларативный UI на Slint (`~1.18`, `backend-winit`, `renderer-software`) + Windows 11 Mica/Acrylic (`window-vibrancy 0.8.1`), безрамочная 36 px шапка, Концентрическое Fluent-стекло (Настройки `860×560` и 3-колоночные Заметки `780×520`); 0% CPU в простое и 0 МБ RAM при закрытии. |
 | `mod-dock` | Отдельный процесс (`--worker dock`) | Все док-панели в одном процессе (`AsrGlass` / `Win11Classic`, Light/Dark); слой, независимая блокировка значков `lock_items`, свободное перемещение без автопримагничивания, настраиваемое ПКМ-меню (`menus.cfg`) и Shell API изолированы от супервизора (`NF-006`). |
-| `mod-widgets` | Отдельный процесс (`--worker widgets`) | Размещает 4 виджета рабочего стола (Google Календарь, интерактивный Системный монитор, Погода Open-Meteo / Яндекс.Погода `1/3/7д`, 3-колоночные Заметки и задачи) с ресайзом и `menus.cfg`; WinHTTP, парсер `.ics`/Погоды и телеметрия не влияют на трей и доки (`NF-007`). |
+| `mod-widgets` | Отдельный процесс (`--worker widgets`) | Виджеты рабочего стола (Google Календарь, Системный монитор, Погода Open-Meteo / гибридная Яндекс.Погода `1/3/7д`) + модель данных `NotesDb`/`NotesWidgetConfig` для Slint-окна Заметок (`NF-007`). |
 | `mod-overlay` | Отдельный процесс (`--worker overlay`) | Игровой HUD-оверлей (FPS/1% low, GPU/VRAM, CPU, RAM, NET/PL) с автозапуском только в играх, FSO/Topmost и 100% click-through без инъекции DLL (`OV-001..OV-009`). |
-| `mod-settings` | Окно по открытию (`on-open`) | Единое изменяемое окно настроек (`AsrGlass` / `Win11Classic`) с аккордеонами (`settings_ui.cfg`), глобальным поиском, Fluent-комбобоксами, безопасным сбросом, 4 подвкладками виджетов и браузерными вкладками («Диагностика», «История версий», «Обзор WebDAV»); 0% CPU при закрытом окне. |
+| `mod-settings` | Библиотека состояния/действий | Контракт `SettingsAction`, хранение состояния аккордеонов (`settings_ui.cfg`) и кроссплатформенные тесты. |
 | `mod-backup` | По запросу (`on-demand`) | Портативные `.zip`-бэкапы настроек и программы (`data/backups/`, STORE ZIP + опциональное шифрование WinZip AE-2 AES-256 через `BCryptGenRandom`) и бэкап исходников GitHub (`github_backup.cfg`, PAT в Credential Manager) без внешних крейтов; 0% CPU в простое. |
 | `mod-webdav` | По запросу (`on-demand`) | Неограниченное число серверов WebDAV (`Яндекс.Диск` / `Mail.ru` / `Свой HTTPS`), обзор/создание папок (`PROPFIND`/`MKCOL`) и синхронизация файлов/папок Windows (`sync.cfg`) с паролями только в Credential Manager. |
 | `mod-debug` | Окно/вкладка по открытию (`on-open`) | Живые логи супервизора и всех воркеров (`app`, `dock`, `widgets`, `overlay`, `http`, `platform`), переключаемый 1 Гц монитор RAM/CPU/GDI/USER и экспорт отчёта. |

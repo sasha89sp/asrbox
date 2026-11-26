@@ -206,4 +206,62 @@ impl BackupController {
         self.set_server_status(server_id, format!("Путь: {norm}"));
         Ok(format!("WebDAV [{server_id}] путь хранения -> {norm}"))
     }
+
+    pub(crate) fn add_server_direct(
+        &mut self,
+        host: &dyn ToolsPlatform,
+        provider_idx: i32,
+        custom_url: &str,
+        user: &str,
+        pass: &str,
+        remote_dir: &str,
+    ) -> Result<String, String> {
+        let provider = match provider_idx {
+            1 => WebDavProvider::MailRu,
+            2 => WebDavProvider::Custom,
+            _ => WebDavProvider::Yandex,
+        };
+        let user_t = user.trim();
+        let pass_t = pass.trim();
+        let url_t = if provider == WebDavProvider::Custom {
+            custom_url.trim().to_owned()
+        } else {
+            String::new()
+        };
+        let dir = if remote_dir.trim().is_empty() {
+            "/asrbox-backups".to_owned()
+        } else {
+            normalize_remote_dir(remote_dir)
+        };
+        let id = self.webdav_store.next_server_id();
+        let name = if user_t.is_empty() {
+            provider.label_ru().to_owned()
+        } else {
+            format!("{} ({user_t})", provider.label_ru())
+        };
+        let srv = WebDavServer {
+            id: id.clone(),
+            name,
+            provider,
+            custom_url: url_t,
+            username: user_t.to_owned(),
+            remote_dir: dir,
+            legacy_cred_target: None,
+        };
+        validate_https_url(&srv.effective_url())?;
+        if user_t.is_empty() {
+            return Err("укажите логин/email WebDAV".to_owned());
+        }
+        if !pass_t.is_empty() {
+            host.cred_save(&srv.cred_target(), user_t, pass_t)?;
+        }
+        self.webdav_store.servers.push(srv);
+        save_webdav_store(&self.webdav_cfg_path, &self.webdav_store)?;
+        if self.backup_cfg.target_server_ids.is_empty() {
+            self.backup_cfg.target_server_ids.push(id.clone());
+            let _ = save_backup_config(&self.backup_cfg_path, &self.backup_cfg);
+        }
+        self.refresh_all_password_flags(host);
+        Ok(format!("Добавлен WebDAV сервер [{id}]"))
+    }
 }

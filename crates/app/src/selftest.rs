@@ -43,6 +43,7 @@ pub fn run_selftest(app_version: &str) -> Result<(), String> {
     selftest_settings(app_version)?;
     selftest_backup_and_webdav()?;
     selftest_debug_and_about(app_version)?;
+    asrbox_ui_slint::selftest_slint_ipc()?;
     Ok(())
 }
 

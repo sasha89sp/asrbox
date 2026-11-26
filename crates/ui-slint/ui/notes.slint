@@ -1,0 +1,598 @@
+import { ScrollView } from "std-widgets.slint";
+import {
+    Theme,
+    SlintFolderRow,
+    SlintNoteCardRow,
+    SlintTaskRow,
+} from "theme.slint";
+import { AsrGlassLogo } from "components/asr_logo.slint";
+import { FramelessTitleBar } from "components/window_chrome.slint";
+import { GlassButton, GlassInput } from "components/controls.slint";
+
+export component NotesWindow inherits Window {
+    title: "Заметки — asrbox";
+    preferred-width: 780px;
+    preferred-height: 520px;
+    min-width: 340px;
+    min-height: 320px;
+    no-frame: true;
+    background: transparent;
+    default-font-family: "Segoe UI";
+
+    in property <string> app-version: "0.1.0";
+    in property <bool> show-folders: true;
+    in property <bool> show-list: true;
+    in property <bool> show-editor: true;
+
+    in property <[SlintFolderRow]> folders: [];
+    in property <[SlintNoteCardRow]> notes: [];
+    in property <[SlintTaskRow]> tasks: [];
+
+    in property <bool> has-active-note: false;
+    in-out property <string> active-note-title: "";
+    in property <string> active-note-updated: "";
+    in-out property <string> active-note-body: "";
+    in-out property <string> search-query: "";
+
+    in-out property <bool> adding-folder: false;
+    in-out property <string> new-folder-name: "";
+    in-out property <bool> adding-task: false;
+    in-out property <string> new-task-text: "";
+
+    callback drag-window();
+    callback minimize-window();
+    callback maximize-window();
+    callback close-window();
+
+    callback toggle-pane(int);
+    callback select-folder(int);
+    callback toggle-folder-expand(int);
+    callback create-folder(string);
+    callback delete-folder(int);
+
+    callback select-note(int);
+    callback create-note();
+    callback delete-note(int);
+    callback toggle-note-pin(int);
+
+    callback search-changed(string);
+    callback title-edited(string);
+    callback body-edited(string);
+    callback add-task(string);
+    callback toggle-task(int);
+    callback delete-task(int);
+
+    // Keyboard shortcuts: Ctrl+1 / Ctrl+2 / Ctrl+3 toggle columns
+    FocusScope {
+        width: 100%;
+        height: 100%;
+
+        key-pressed(ev) => {
+            if (ev.modifiers.control && ev.text == "1") {
+                root.toggle-pane(0);
+                return EventResult.accept;
+            }
+            if (ev.modifiers.control && ev.text == "2") {
+                root.toggle-pane(1);
+                return EventResult.accept;
+            }
+            if (ev.modifiers.control && ev.text == "3") {
+                root.toggle-pane(2);
+                return EventResult.accept;
+            }
+            EventResult.reject
+        }
+
+        Rectangle {
+            width: 100%;
+            height: 100%;
+            border-radius: 12px;
+            background: Theme.window-bg;
+            border-width: 1px;
+            border-color: Theme.border-color;
+            clip: true;
+
+            VerticalLayout {
+                spacing: 0px;
+
+                FramelessTitleBar {
+                    title: (Theme.is-ru ? "Заметки — asrbox v" : "Notes — asrbox v") + root.app-version;
+                    drag-window => { root.drag-window(); }
+                    minimize-clicked => { root.minimize-window(); }
+                    maximize-clicked => { root.maximize-window(); }
+                    close-clicked => { root.close-window(); }
+
+                    GlassButton {
+                        label: Theme.is-ru ? "Папки" : "Folders";
+                        active: root.show-folders;
+                        compact: true;
+                        clicked => { root.toggle-pane(0); }
+                    }
+                    GlassButton {
+                        label: Theme.is-ru ? "Список" : "List";
+                        active: root.show-list;
+                        compact: true;
+                        clicked => { root.toggle-pane(1); }
+                    }
+                    GlassButton {
+                        label: Theme.is-ru ? "Редактор" : "Editor";
+                        active: root.show-editor;
+                        compact: true;
+                        clicked => { root.toggle-pane(2); }
+                    }
+                }
+
+                HorizontalLayout {
+                    vertical-stretch: 1;
+                    spacing: 0px;
+
+                    // Column 1: Папки (Folders tree)
+                    if (root.show-folders) : Rectangle {
+                        width: 184px;
+                        background: Theme.sidebar-bg;
+
+                        VerticalLayout {
+                            padding: 12px;
+                            spacing: 10px;
+
+                            // Mini brand row matching screenshot
+                            HorizontalLayout {
+                                spacing: 10px;
+                                alignment: start;
+
+                                AsrGlassLogo { size: 32px; show-glow: false; }
+
+                                VerticalLayout {
+                                    alignment: center;
+                                    spacing: 1px;
+                                    Text {
+                                        text: "asrbox";
+                                        color: Theme.text-primary;
+                                        font-size: 13px;
+                                        font-weight: 600;
+                                    }
+                                    Text {
+                                        text: "v" + root.app-version;
+                                        color: Theme.text-muted;
+                                        font-size: 10.5px;
+                                    }
+                                }
+                            }
+
+                            GlassButton {
+                                label: Theme.is-ru ? "+ Папка" : "+ Folder";
+                                clicked => { root.adding-folder = !root.adding-folder; }
+                            }
+
+                            if (root.adding-folder) : HorizontalLayout {
+                                spacing: 4px;
+                                GlassInput {
+                                    horizontal-stretch: 1;
+                                    text <=> root.new-folder-name;
+                                    placeholder: Theme.is-ru ? "Имя папки..." : "Folder...";
+                                    accepted(v) => {
+                                        root.create-folder(v);
+                                        root.new-folder-name = "";
+                                        root.adding-folder = false;
+                                    }
+                                }
+                                GlassButton {
+                                    label: "✓";
+                                    variant: "primary";
+                                    compact: true;
+                                    clicked => {
+                                        root.create-folder(root.new-folder-name);
+                                        root.new-folder-name = "";
+                                        root.adding-folder = false;
+                                    }
+                                }
+                            }
+
+                            ScrollView {
+                                vertical-stretch: 1;
+
+                                VerticalLayout {
+                                    spacing: 3px;
+
+                                    for f in root.folders : Rectangle {
+                                        height: 30px;
+                                        border-radius: 7px;
+                                        background: f.active
+                                            ? Theme.accent-tint
+                                            : (f-ta.has-hover ? Theme.hover-bg : transparent);
+                                        border-width: f.active ? 1px : 0px;
+                                        border-color: f.active ? Theme.accent : transparent;
+
+                                        f-ta := TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => {
+                                                if (f.is-note-child) {
+                                                    root.select-note(f.note-id);
+                                                } else {
+                                                    root.select-folder(f.id);
+                                                }
+                                            }
+                                        }
+
+                                        HorizontalLayout {
+                                            padding-left: f.is-note-child ? 22px : (f.depth > 0 ? 18px : 8px);
+                                            padding-right: 6px;
+                                            spacing: 6px;
+                                            alignment: stretch;
+
+                                            if (!f.is-note-child) : Rectangle {
+                                                width: 14px;
+                                                background: transparent;
+                                                Text {
+                                                    width: 100%;
+                                                    height: 100%;
+                                                    text: f.expanded ? "⌄" : "›";
+                                                    color: Theme.text-muted;
+                                                    font-size: 12px;
+                                                    horizontal-alignment: center;
+                                                    vertical-alignment: center;
+                                                }
+                                                TouchArea {
+                                                    mouse-cursor: pointer;
+                                                    clicked => { root.toggle-folder-expand(f.id); }
+                                                }
+                                            }
+
+                                            Text {
+                                                text: f.is-note-child ? "📄" : "📁";
+                                                color: f.active ? Theme.accent : Theme.text-secondary;
+                                                font-size: 11.5px;
+                                                vertical-alignment: center;
+                                            }
+
+                                            Text {
+                                                horizontal-stretch: 1;
+                                                text: f.name;
+                                                color: f.active ? Theme.text-primary : Theme.text-secondary;
+                                                font-size: 12px;
+                                                font-weight: f.active ? 600 : 400;
+                                                vertical-alignment: center;
+                                                overflow: elide;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            x: parent.width - 1px;
+                            width: 1px;
+                            height: 100%;
+                            background: Theme.divider-color;
+                        }
+                    }
+
+                    // Column 2: Список заметок (Notes list)
+                    if (root.show-list) : Rectangle {
+                        width: 236px;
+                        background: transparent;
+
+                        VerticalLayout {
+                            padding: 12px;
+                            spacing: 10px;
+
+                            Text {
+                                text: Theme.is-ru ? "Заметки" : "Notes";
+                                color: Theme.text-primary;
+                                font-size: 18px;
+                                font-weight: 600;
+                            }
+
+                            HorizontalLayout {
+                                spacing: 6px;
+                                GlassButton {
+                                    horizontal-stretch: 1;
+                                    label: Theme.is-ru ? "+ Заметка" : "+ Note";
+                                    compact: true;
+                                    clicked => { root.create-note(); }
+                                }
+                                GlassButton {
+                                    horizontal-stretch: 1;
+                                    label: Theme.is-ru ? "+ Задача" : "+ Task";
+                                    compact: true;
+                                    clicked => { root.adding-task = true; }
+                                }
+                            }
+
+                            ScrollView {
+                                vertical-stretch: 1;
+
+                                VerticalLayout {
+                                    spacing: 8px;
+
+                                    for n in root.notes : Rectangle {
+                                        min-height: 62px;
+                                        border-radius: 8px;
+                                        background: n.active
+                                            ? Theme.accent-tint
+                                            : (n-ta.has-hover ? Theme.hover-bg : Theme.card-bg);
+                                        border-width: n.active ? 1.5px : 1px;
+                                        border-color: n.active ? Theme.accent : Theme.border-color;
+
+                                        n-ta := TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => { root.select-note(n.id); }
+                                        }
+
+                                        VerticalLayout {
+                                            padding: 10px;
+                                            spacing: 5px;
+
+                                            HorizontalLayout {
+                                                spacing: 6px;
+                                                Text {
+                                                    horizontal-stretch: 1;
+                                                    text: n.title;
+                                                    color: Theme.text-primary;
+                                                    font-size: 13px;
+                                                    font-weight: 600;
+                                                    overflow: elide;
+                                                }
+                                                if (n.active) : GlassButton {
+                                                    label: "✕";
+                                                    variant: "danger";
+                                                    compact: true;
+                                                    clicked => { root.delete-note(n.id); }
+                                                }
+                                            }
+
+                                            HorizontalLayout {
+                                                spacing: 8px;
+                                                Text {
+                                                    horizontal-stretch: 1;
+                                                    text: n.updated-at;
+                                                    color: Theme.text-muted;
+                                                    font-size: 11px;
+                                                    vertical-alignment: center;
+                                                }
+                                                if (n.has-tasks) : Text {
+                                                    text: "☑ " + n.task-badge;
+                                                    color: Theme.accent;
+                                                    font-size: 11px;
+                                                    font-weight: 600;
+                                                    vertical-alignment: center;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            x: parent.width - 1px;
+                            width: 1px;
+                            height: 100%;
+                            background: Theme.divider-color;
+                        }
+                    }
+
+                    // Column 3: Редактор (Editor + Tasks checklist)
+                    if (root.show-editor) : Rectangle {
+                        horizontal-stretch: 1;
+                        background: transparent;
+
+                        VerticalLayout {
+                            padding: 14px;
+                            spacing: 10px;
+
+                            // Top search bar matching screenshot
+                            GlassInput {
+                                text <=> root.search-query;
+                                placeholder: Theme.is-ru ? "Поиск" : "Search";
+                                trailing-icon: "🔍";
+                                edited(q) => { root.search-changed(q); }
+                            }
+
+                            if (!root.has-active-note) : VerticalLayout {
+                                vertical-stretch: 1;
+                                alignment: center;
+                                Text {
+                                    text: Theme.is-ru
+                                        ? "Выберите заметку или нажмите «+ Заметка»"
+                                        : "Select a note or click «+ Note»";
+                                    color: Theme.text-muted;
+                                    font-size: 13px;
+                                    horizontal-alignment: center;
+                                }
+                            }
+
+                            if (root.has-active-note) : VerticalLayout {
+                                vertical-stretch: 1;
+                                spacing: 8px;
+
+                                // Editable Note Title
+                                Rectangle {
+                                    height: 30px;
+                                    background: transparent;
+                                    clip: true;
+
+                                    TextInput {
+                                        width: 100%;
+                                        height: 100%;
+                                        text <=> root.active-note-title;
+                                        color: Theme.text-primary;
+                                        font-size: 19px;
+                                        font-weight: 600;
+                                        single-line: true;
+                                        selection-background-color: Theme.accent;
+                                        selection-foreground-color: #FFFFFF;
+                                        vertical-alignment: center;
+                                        edited => { root.title-edited(self.text); }
+                                    }
+                                }
+
+                                Text {
+                                    text: root.active-note-updated;
+                                    color: Theme.text-muted;
+                                    font-size: 11px;
+                                }
+
+                                // Tasks section header + inline add
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    Text {
+                                        horizontal-stretch: 1;
+                                        text: Theme.is-ru ? "Задачи:" : "Tasks:";
+                                        color: Theme.text-primary;
+                                        font-size: 13px;
+                                        font-weight: 600;
+                                        vertical-alignment: center;
+                                    }
+                                    GlassButton {
+                                        label: "+";
+                                        compact: true;
+                                        clicked => { root.adding-task = !root.adding-task; }
+                                    }
+                                }
+
+                                if (root.adding-task) : HorizontalLayout {
+                                    spacing: 6px;
+                                    GlassInput {
+                                        horizontal-stretch: 1;
+                                        text <=> root.new-task-text;
+                                        placeholder: Theme.is-ru ? "Текст новой задачи..." : "New task...";
+                                        accepted(v) => {
+                                            root.add-task(v);
+                                            root.new-task-text = "";
+                                            root.adding-task = false;
+                                        }
+                                    }
+                                    GlassButton {
+                                        label: "✓";
+                                        variant: "primary";
+                                        compact: true;
+                                        clicked => {
+                                            root.add-task(root.new-task-text);
+                                            root.new-task-text = "";
+                                            root.adding-task = false;
+                                        }
+                                    }
+                                }
+
+                                // Checklist rows (16x16 accent checkboxes + strikethrough)
+                                VerticalLayout {
+                                    spacing: 6px;
+
+                                    for t in root.tasks : HorizontalLayout {
+                                        spacing: 8px;
+                                        alignment: stretch;
+
+                                        Rectangle {
+                                            width: 17px;
+                                            height: 17px;
+                                            border-radius: 4px;
+                                            background: t.done ? Theme.accent : transparent;
+                                            border-width: 1.5px;
+                                            border-color: t.done ? Theme.accent : Theme.text-muted;
+
+                                            if (t.done) : Text {
+                                                width: 100%;
+                                                height: 100%;
+                                                text: "✓";
+                                                color: #FFFFFF;
+                                                font-size: 11px;
+                                                font-weight: 700;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                            }
+
+                                            TouchArea {
+                                                mouse-cursor: pointer;
+                                                clicked => { root.toggle-task(t.id); }
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            horizontal-stretch: 1;
+                                            height: 20px;
+                                            background: transparent;
+
+                                            Text {
+                                                width: 100%;
+                                                height: 100%;
+                                                text: t.text;
+                                                color: t.done ? Theme.text-muted : Theme.text-primary;
+                                                font-size: 12.5px;
+                                                vertical-alignment: center;
+                                                overflow: elide;
+                                            }
+
+                                            if (t.done) : Rectangle {
+                                                y: parent.height / 2;
+                                                width: parent.width;
+                                                height: 1px;
+                                                background: Theme.text-muted;
+                                            }
+
+                                            TouchArea {
+                                                mouse-cursor: pointer;
+                                                clicked => { root.toggle-task(t.id); }
+                                            }
+                                        }
+
+                                        GlassButton {
+                                            label: "✕";
+                                            variant: "danger";
+                                            compact: true;
+                                            clicked => { root.delete-task(t.id); }
+                                        }
+                                    }
+                                }
+
+                                // 1px divider
+                                Rectangle {
+                                    height: 1px;
+                                    background: Theme.divider-color;
+                                }
+
+                                Text {
+                                    text: Theme.is-ru ? "Описание:" : "Description:";
+                                    color: Theme.text-primary;
+                                    font-size: 13px;
+                                    font-weight: 600;
+                                }
+
+                                // Multiline description editor (transparent TextInput inside ScrollView)
+                                Rectangle {
+                                    vertical-stretch: 1;
+                                    border-radius: 8px;
+                                    background: Theme.input-bg;
+                                    border-width: 1px;
+                                    border-color: body-ti.has-focus ? Theme.accent : Theme.border-color;
+
+                                    ScrollView {
+                                        width: 100%;
+                                        height: 100%;
+
+                                        VerticalLayout {
+                                            padding: 10px;
+
+                                            body-ti := TextInput {
+                                                min-height: 140px;
+                                                text <=> root.active-note-body;
+                                                color: Theme.text-primary;
+                                                font-size: 12.5px;
+                                                single-line: false;
+                                                wrap: word-wrap;
+                                                selection-background-color: Theme.accent;
+                                                selection-foreground-color: #FFFFFF;
+                                                edited => { root.body-edited(self.text); }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

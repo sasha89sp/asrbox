@@ -1,0 +1,60 @@
+import { Theme } from "../theme.slint";
+
+export component AsrGlassLogo inherits Rectangle {
+    in property <length> size: 52px;
+    in property <bool> show-glow: false;
+
+    width: size;
+    height: size;
+    background: transparent;
+
+    // Optional radial accent backlight glow (brand block in sidebar)
+    if (root.show-glow) : Rectangle {
+        x: -root.size * 0.35;
+        y: -root.size * 0.35;
+        width: root.size * 1.7;
+        height: root.size * 1.7;
+        border-radius: root.size * 0.85;
+        background: @radial-gradient(circle, Theme.accent-glow 0%, rgba(0, 0, 0, 0.0) 68%);
+    }
+
+    // Rear gradient squircle (135deg #0284C7 -> #38BDF8, shifted top-left)
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        width: root.size * 0.84;
+        height: root.size * 0.84;
+        border-radius: root.size * 0.21;
+        background: @linear-gradient(135deg, rgba(2, 132, 199, 0.90) 0%, rgba(56, 189, 248, 0.85) 100%);
+        border-width: 1px;
+        border-color: rgba(125, 211, 252, 0.38);
+    }
+
+    // Front frosted glass squircle (offset +12%, crisp 1px specular border)
+    Rectangle {
+        x: root.size * 0.14;
+        y: root.size * 0.14;
+        width: root.size * 0.84;
+        height: root.size * 0.84;
+        border-radius: root.size * 0.21;
+        background: Theme.dark-mode
+            ? @linear-gradient(145deg, rgba(210, 236, 255, 0.44) 0%, rgba(56, 189, 248, 0.30) 55%, rgba(14, 165, 233, 0.42) 100%)
+            : @linear-gradient(145deg, rgba(255, 255, 255, 0.78) 0%, rgba(186, 230, 253, 0.64) 55%, rgba(56, 189, 248, 0.56) 100%);
+        border-width: 1px;
+        border-color: rgba(255, 255, 255, 0.48);
+        drop-shadow-blur: root.size > 28px ? 10px : 3px;
+        drop-shadow-color: rgba(0, 0, 0, 0.28);
+        drop-shadow-offset-y: 2px;
+
+        Text {
+            width: 100%;
+            height: 100%;
+            text: "ASR";
+            color: Theme.dark-mode ? #F8FAFC : #0F172A;
+            font-size: root.size >= 44px ? 15px : (root.size >= 28px ? 9.5px : 6.5px);
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+}

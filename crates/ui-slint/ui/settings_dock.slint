@@ -1,0 +1,513 @@
+import { Theme, SlintDockItemRow } from "theme.slint";
+import {
+    AccordionCard,
+    SettingRow,
+    GlassSwitch,
+    GlassSlider,
+    GlassButton,
+    GlassInput,
+    CustomComboBox,
+} from "components/controls.slint";
+
+export component SettingsDockView inherits VerticalLayout {
+    in property <[string]> dock-names: ["Док 1"];
+    in property <int> selected-dock-index: 0;
+    in property <string> selected-dock-name: "Док 1";
+    in property <bool> can-remove-dock: false;
+
+    in property <bool> exp-appearance: true;
+    in property <bool> exp-behavior: false;
+    in property <bool> exp-items: true;
+    in property <bool> exp-menu: false;
+    in property <bool> hi-appearance: false;
+    in property <bool> hi-behavior: false;
+    in property <bool> hi-items: false;
+    in property <bool> hi-menu: false;
+
+    // Active dock properties
+    in property <int> edge-index: 0;
+    in property <int> layer-index: 0;
+    in property <int> label-mode-index: 0;
+    in property <int> icon-size-px: 48;
+    in property <int> opacity-percent: 88;
+    in property <int> edge-margin-px: 12;
+    in property <int> corner-radius-px: 16;
+    in property <bool> blur-enabled: true;
+
+    in property <bool> locked: true;
+    in property <bool> lock-items: false;
+    in property <bool> show-running: true;
+    in property <bool> focus-running: true;
+    in property <bool> launch-anim: true;
+
+    in property <[SlintDockItemRow]> items: [];
+    in-out property <string> rename-input: "";
+    in property <int> selected-item-id: -1;
+
+    // Dock context menu visibility toggles
+    in property <bool> menu-open-folder: true;
+    in property <bool> menu-launch: true;
+    in property <bool> menu-remove: true;
+    in property <bool> menu-add-dock: true;
+
+    callback toggle-section(string);
+    callback select-dock(int);
+    callback add-dock();
+    callback remove-current-dock();
+    callback open-docks-config();
+
+    callback set-edge(int);
+    callback set-layer(int);
+    callback set-label-mode(int);
+    callback set-icon-size(int);
+    callback set-opacity(int);
+    callback set-edge-margin(int);
+    callback set-corner-radius(int);
+    callback set-blur(bool);
+
+    callback set-locked(bool);
+    callback set-lock-items(bool);
+    callback set-show-running(bool);
+    callback set-focus-running(bool);
+    callback set-launch-anim(bool);
+
+    callback add-dock-files();
+    callback add-dock-folder();
+    callback add-dock-separator();
+    callback select-dock-item(int, string);
+    callback rename-dock-item(int, string);
+    callback reset-dock-item-label(int);
+    callback move-dock-item(int, int);
+    callback open-dock-item-folder(int);
+    callback remove-dock-item(int);
+
+    callback toggle-dock-menu-vis(int, bool);
+
+    spacing: 12px;
+
+    // Dock selector header bar: [ Док N v ]  [ + Новый док ]
+    HorizontalLayout {
+        spacing: 8px;
+        alignment: stretch;
+
+        CustomComboBox {
+            model: root.dock-names;
+            current-index: root.selected-dock-index;
+            current-value: root.selected-dock-name;
+            selected(idx) => { root.select-dock(idx); }
+        }
+
+        GlassButton {
+            label: Theme.is-ru ? "+ Новый док" : "+ New Dock";
+            variant: "primary";
+            compact: true;
+            clicked => { root.add-dock(); }
+        }
+
+        if (root.can-remove-dock) : GlassButton {
+            label: Theme.is-ru ? "Удалить" : "Delete";
+            variant: "danger";
+            compact: true;
+            clicked => { root.remove-current-dock(); }
+        }
+
+        Rectangle { horizontal-stretch: 1; background: transparent; }
+
+        GlassButton {
+            label: "docks.cfg";
+            compact: true;
+            clicked => { root.open-docks-config(); }
+        }
+    }
+
+    // 1. Геометрия и внешний вид
+    AccordionCard {
+        title: Theme.is-ru ? "Геометрия и внешний вид" : "Geometry & Appearance";
+        summary: "\(root.icon-size-px) px · \(root.opacity-percent)%";
+        expanded: root.exp-appearance;
+        highlighted: root.hi-appearance;
+        toggled => { root.toggle-section("dock_appearance"); }
+
+        SettingRow {
+            title: Theme.is-ru ? "Край экрана" : "Screen Edge";
+            subtitle: Theme.is-ru
+                ? "При свободном перетаскивании док не примагничивается сам"
+                : "Free drag does not auto-snap to edges";
+            CustomComboBox {
+                model: Theme.is-ru
+                    ? ["Снизу", "Сверху", "Слева", "Справа"]
+                    : ["Bottom", "Top", "Left", "Right"];
+                current-index: root.edge-index;
+                current-value:
+                    root.edge-index == 1 ? (Theme.is-ru ? "Сверху" : "Top") :
+                    root.edge-index == 2 ? (Theme.is-ru ? "Слева" : "Left") :
+                    root.edge-index == 3 ? (Theme.is-ru ? "Справа" : "Right") :
+                    (Theme.is-ru ? "Снизу" : "Bottom");
+                selected(idx) => { root.set-edge(idx); }
+            }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Слой окна" : "Window Layer";
+            CustomComboBox {
+                model: Theme.is-ru
+                    ? ["Над обоями", "Обычный", "Поверх окон"]
+                    : ["Wallpaper", "Normal", "Always on Top"];
+                current-index: root.layer-index;
+                current-value:
+                    root.layer-index == 1 ? (Theme.is-ru ? "Обычный" : "Normal") :
+                    root.layer-index == 2 ? (Theme.is-ru ? "Поверх окон" : "Always on Top") :
+                    (Theme.is-ru ? "Над обоями" : "Wallpaper");
+                selected(idx) => { root.set-layer(idx); }
+            }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Отображение имён ярлыков" : "Shortcut Labels";
+            CustomComboBox {
+                model: Theme.is-ru
+                    ? ["Только значки", "Подсказка при наведении", "Значки + подписи", "Только названия"]
+                    : ["Icons Only", "Hover Tooltip", "Icons + Labels", "Labels Only"];
+                current-index: root.label-mode-index;
+                current-value:
+                    root.label-mode-index == 1 ? (Theme.is-ru ? "Подсказка при наведении" : "Hover Tooltip") :
+                    root.label-mode-index == 2 ? (Theme.is-ru ? "Значки + подписи" : "Icons + Labels") :
+                    root.label-mode-index == 3 ? (Theme.is-ru ? "Только названия" : "Labels Only") :
+                    (Theme.is-ru ? "Только значки" : "Icons Only");
+                selected(idx) => { root.set-label-mode(idx); }
+            }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Размер иконок" : "Icon Size";
+            GlassSlider {
+                min-val: 24;
+                max-val: 128;
+                value: root.icon-size-px;
+                unit: " px";
+                changed(v) => { root.set-icon-size(v); }
+            }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Прозрачность капсулы" : "Capsule Opacity";
+            GlassSlider {
+                min-val: 20;
+                max-val: 100;
+                value: root.opacity-percent;
+                unit: "%";
+                changed(v) => { root.set-opacity(v); }
+            }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Отступ от края экрана" : "Edge Margin";
+            GlassSlider {
+                min-val: 0;
+                max-val: 64;
+                value: root.edge-margin-px;
+                unit: " px";
+                changed(v) => { root.set-edge-margin(v); }
+            }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Скругление углов" : "Corner Radius";
+            GlassSlider {
+                min-val: 0;
+                max-val: 28;
+                value: root.corner-radius-px;
+                unit: " px";
+                changed(v) => { root.set-corner-radius(v); }
+            }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Размытие стекла (Acrylic / Glass)" : "Glass Blur Effect";
+            GlassSwitch {
+                checked: root.blur-enabled;
+                toggled(v) => { root.set-blur(v); }
+            }
+        }
+    }
+
+    // 2. Поведение и защита значков
+    AccordionCard {
+        title: Theme.is-ru ? "Поведение и защита значков" : "Behavior & Item Protection";
+        summary: root.lock-items
+            ? (Theme.is-ru ? "Значки закреплены" : "Items locked")
+            : (Theme.is-ru ? "Свободно" : "Unlocked");
+        expanded: root.exp-behavior;
+        highlighted: root.hi-behavior;
+        toggled => { root.toggle-section("dock_behavior"); }
+
+        SettingRow {
+            title: Theme.is-ru ? "Закрепить позицию панели" : "Lock Dock Position";
+            GlassSwitch {
+                checked: root.locked;
+                toggled(v) => { root.set-locked(v); }
+            }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Закрепить значки" : "Lock Icons";
+            subtitle: Theme.is-ru
+                ? "Запрещает случайное перетаскивание и удаление ярлыков"
+                : "Prevents accidental drag or removal of shortcuts";
+            GlassSwitch {
+                checked: root.lock-items;
+                toggled(v) => { root.set-lock-items(v); }
+            }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Индикатор запущенных приложений" : "Running App Indicator";
+            GlassSwitch {
+                checked: root.show-running;
+                toggled(v) => { root.set-show-running(v); }
+            }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Фокусировать запущенное окно" : "Focus Running Window";
+            GlassSwitch {
+                checked: root.focus-running;
+                toggled(v) => { root.set-focus-running(v); }
+            }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Анимация запуска ярлыка" : "Launch Bounce Animation";
+            GlassSwitch {
+                checked: root.launch-anim;
+                toggled(v) => { root.set-launch-anim(v); }
+            }
+        }
+    }
+
+    // 3. Элементы док-панели (46px rows, exact Concentric Fluent Glass spec)
+    AccordionCard {
+        title: Theme.is-ru ? "Ярлыки и папки дока" : "Dock Shortcuts & Folders";
+        summary: "\(root.items.length)";
+        expanded: root.exp-items;
+        highlighted: root.hi-items;
+        toggled => { root.toggle-section("dock_items"); }
+
+        HorizontalLayout {
+            padding-left: 16px;
+            padding-right: 16px;
+            padding-top: 8px;
+            padding-bottom: 8px;
+            spacing: 8px;
+
+            GlassButton {
+                label: Theme.is-ru ? "+ Добавить программу" : "+ Add App";
+                variant: "primary";
+                compact: true;
+                clicked => { root.add-dock-files(); }
+            }
+            GlassButton {
+                label: Theme.is-ru ? "+ Добавить папку" : "+ Add Folder";
+                compact: true;
+                clicked => { root.add-dock-folder(); }
+            }
+            GlassButton {
+                label: Theme.is-ru ? "+ Разделитель" : "+ Separator";
+                compact: true;
+                clicked => { root.add-dock-separator(); }
+            }
+        }
+
+        if (root.selected-item-id >= 0) : HorizontalLayout {
+            padding-left: 16px;
+            padding-right: 16px;
+            padding-bottom: 8px;
+            spacing: 8px;
+
+            GlassInput {
+                horizontal-stretch: 1;
+                text <=> root.rename-input;
+                placeholder: Theme.is-ru ? "Новое имя ярлыка..." : "New label...";
+            }
+            GlassButton {
+                label: Theme.is-ru ? "Переименовать" : "Rename";
+                compact: true;
+                clicked => { root.rename-dock-item(root.selected-item-id, root.rename-input); }
+            }
+            GlassButton {
+                label: Theme.is-ru ? "Сброс имени" : "Reset";
+                compact: true;
+                clicked => { root.reset-dock-item-label(root.selected-item-id); }
+            }
+        }
+
+        for item in root.items : Rectangle {
+            height: 46px;
+            background: item.selected
+                ? Theme.accent-tint
+                : (row-ta.has-hover ? Theme.hover-bg : transparent);
+
+            Rectangle {
+                y: 0px;
+                width: 100%;
+                height: 1px;
+                background: Theme.divider-color;
+            }
+
+            row-ta := TouchArea {
+                clicked => {
+                    if (!item.is-separator) {
+                        root.rename-input = item.label;
+                        root.select-dock-item(item.id, item.label);
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                padding-left: 14px;
+                padding-right: 12px;
+                spacing: 10px;
+                alignment: stretch;
+
+                Text {
+                    text: "⋮⋮";
+                    color: Theme.text-muted;
+                    font-size: 12px;
+                    vertical-alignment: center;
+                }
+
+                // 32x32 squircle icon badge
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 30px;
+                        height: 30px;
+                        border-radius: 7px;
+                        background: item.is-separator
+                            ? Theme.input-bg
+                            : (item.is-folder ? rgba(245, 158, 11, 0.22) : Theme.accent-tint);
+                        border-width: 1px;
+                        border-color: Theme.border-color;
+
+                        Text {
+                            width: 100%;
+                            height: 100%;
+                            text: item.is-separator ? "│" : (item.is-folder ? "📁" : "▪");
+                            color: item.is-folder ? #F59E0B : Theme.accent;
+                            font-size: 13px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    alignment: center;
+                    spacing: 1px;
+
+                    Text {
+                        text: item.label;
+                        color: Theme.text-primary;
+                        font-size: 12.5px;
+                        font-weight: 500;
+                        overflow: elide;
+                    }
+                    if (!item.is-separator) : Text {
+                        text: item.target-path;
+                        color: Theme.text-muted;
+                        font-size: 10.5px;
+                        overflow: elide;
+                    }
+                }
+
+                // Type pill
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        height: 20px;
+                        border-radius: 5px;
+                        background: Theme.input-bg;
+                        border-width: 1px;
+                        border-color: Theme.border-color;
+
+                        HorizontalLayout {
+                            padding-left: 7px;
+                            padding-right: 7px;
+                            Text {
+                                text: item.kind-label;
+                                color: Theme.text-secondary;
+                                font-size: 10.5px;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 4px;
+                    alignment: center;
+
+                    GlassButton {
+                        label: "↑";
+                        compact: true;
+                        clicked => { root.move-dock-item(item.id, -1); }
+                    }
+                    GlassButton {
+                        label: "↓";
+                        compact: true;
+                        clicked => { root.move-dock-item(item.id, 1); }
+                    }
+                    if (!item.is-separator) : GlassButton {
+                        label: "↗";
+                        compact: true;
+                        clicked => { root.open-dock-item-folder(item.id); }
+                    }
+                    GlassButton {
+                        label: "✕";
+                        variant: "danger";
+                        compact: true;
+                        clicked => { root.remove-dock-item(item.id); }
+                    }
+                }
+            }
+        }
+    }
+
+    // 4. Меню ПКМ дока (menus.cfg)
+    AccordionCard {
+        title: Theme.is-ru ? "Пункты ПКМ-меню дока" : "Dock Context Menu Items";
+        expanded: root.exp-menu;
+        highlighted: root.hi-menu;
+        toggled => { root.toggle-section("dock_menu"); }
+
+        SettingRow {
+            title: Theme.is-ru ? "Действия с ярлыком (запуск, папка, удаление)" : "Item Actions (Launch, Folder, Remove)";
+            GlassSwitch {
+                checked: root.menu-open-folder;
+                toggled(v) => { root.toggle-dock-menu-vis(0, v); }
+            }
+        }
+        SettingRow {
+            title: Theme.is-ru ? "Пункт «Добавить разделитель»" : "Show Add Separator";
+            GlassSwitch {
+                checked: root.menu-launch;
+                toggled(v) => { root.toggle-dock-menu-vis(1, v); }
+            }
+        }
+        SettingRow {
+            title: Theme.is-ru ? "Край экрана и слой окна" : "Screen Edge & Window Layer";
+            GlassSwitch {
+                checked: root.menu-remove;
+                toggled(v) => { root.toggle-dock-menu-vis(2, v); }
+            }
+        }
+        SettingRow {
+            title: Theme.is-ru ? "Управление док-панелями (добавить/удалить)" : "Dock Management (Add / Remove)";
+            GlassSwitch {
+                checked: root.menu-add-dock;
+                toggled(v) => { root.toggle-dock-menu-vis(3, v); }
+            }
+        }
+    }
+}

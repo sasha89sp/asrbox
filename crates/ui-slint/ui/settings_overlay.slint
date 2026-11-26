@@ -1,0 +1,125 @@
+import { Theme } from "theme.slint";
+import {
+    AccordionCard,
+    SettingRow,
+    GlassSwitch,
+    GlassSlider,
+    GlassButton,
+    CustomComboBox,
+} from "components/controls.slint";
+
+export component SettingsOverlayView inherits VerticalLayout {
+    in property <bool> exp-mode: true;
+    in property <bool> exp-layout: true;
+    in property <bool> hi-mode: false;
+    in property <bool> hi-layout: false;
+
+    in property <bool> module-enabled: true;
+    in property <bool> auto-games-only: true;
+    in property <bool> force-topmost: true;
+    in property <bool> setup-mode: false;
+    in property <int> anchor-index: 0;
+    in property <int> opacity-percent: 82;
+    in property <int> width-px: 340;
+    in property <int> height-px: 196;
+    in property <int> refresh-ms: 500;
+
+    callback toggle-section(string);
+    callback set-module-enabled(bool);
+    callback set-auto-games-only(bool);
+    callback set-force-topmost(bool);
+    callback set-setup-mode(bool);
+    callback set-anchor(int);
+    callback set-opacity(int);
+    callback set-width(int);
+    callback set-height(int);
+    callback set-refresh-ms(int);
+    callback apply-size-preset(int, int);
+    callback open-overlay-cfg();
+
+    spacing: 12px;
+
+    AccordionCard {
+        title: Theme.is-ru ? "Режим и отображение (без DLL-инъекции)" : "Overlay Mode (Zero DLL Injection)";
+        summary: root.module-enabled ? (root.setup-mode ? "Настройка" : "Активен") : "Выкл";
+        expanded: root.exp-mode;
+        highlighted: root.hi-mode;
+        toggled => { root.toggle-section("overlay_mode"); }
+
+        SettingRow {
+            title: Theme.is-ru ? "Модуль игрового оверлея" : "Game Overlay Module";
+            subtitle: Theme.is-ru
+                ? "Безопасен для античитов · 100% click-through в игре"
+                : "Anti-cheat safe · 100% click-through in games";
+            GlassButton { label: "overlay.cfg"; compact: true; clicked => { root.open-overlay-cfg(); } }
+            GlassSwitch { checked: root.module-enabled; toggled(v) => { root.set-module-enabled(v); } }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Показывать только во время игр" : "Show Only During Games";
+            GlassSwitch { checked: root.auto-games-only; toggled(v) => { root.set-auto-games-only(v); } }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "FSO / Topmost поверх полноэкранных игр" : "FSO / Topmost Over Fullscreen";
+            GlassSwitch { checked: root.force-topmost; toggled(v) => { root.set-force-topmost(v); } }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Режим настройки (перемещение и ресайз)" : "Setup Mode (Drag & Resize)";
+            subtitle: Theme.is-ru
+                ? "Автоматически выключается при закрытии Настроек или старте игры"
+                : "Auto-disables when Settings close or game starts";
+            GlassSwitch { checked: root.setup-mode; toggled(v) => { root.set-setup-mode(v); } }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Позиция на экране" : "Screen Corner";
+            CustomComboBox {
+                model: ["Верх-лево", "Верх-право", "Низ-лево", "Низ-право", "Своя позиция"];
+                current-index: root.anchor-index;
+                current-value:
+                    root.anchor-index == 1 ? "Верх-право" :
+                    root.anchor-index == 2 ? "Низ-лево" :
+                    root.anchor-index == 3 ? "Низ-право" :
+                    root.anchor-index == 4 ? "Своя позиция" : "Верх-лево";
+                selected(idx) => { root.set-anchor(idx); }
+            }
+        }
+    }
+
+    AccordionCard {
+        title: Theme.is-ru ? "Размеры и частота обновления" : "Size & Refresh Rate";
+        summary: "\(root.width-px)×\(root.height-px) · \(root.refresh-ms) мс";
+        expanded: root.exp-layout;
+        highlighted: root.hi-layout;
+        toggled => { root.toggle-section("overlay_layout"); }
+
+        SettingRow {
+            title: Theme.is-ru ? "Быстрые пресеты размера" : "Quick Size Presets";
+            GlassButton { label: "Компакт"; compact: true; clicked => { root.apply-size-preset(280, 160); } }
+            GlassButton { label: "Стандарт"; compact: true; clicked => { root.apply-size-preset(340, 196); } }
+            GlassButton { label: "Широкий"; compact: true; clicked => { root.apply-size-preset(420, 224); } }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Прозрачность" : "Opacity";
+            GlassSlider { min-val: 20; max-val: 100; value: root.opacity-percent; unit: "%"; changed(v) => { root.set-opacity(v); } }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Ширина HUD" : "HUD Width";
+            GlassSlider { min-val: 220; max-val: 640; value: root.width-px; unit: " px"; changed(v) => { root.set-width(v); } }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Высота HUD" : "HUD Height";
+            GlassSlider { min-val: 120; max-val: 420; value: root.height-px; unit: " px"; changed(v) => { root.set-height(v); } }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Частота опроса" : "Refresh Interval";
+            GlassSlider { min-val: 250; max-val: 2000; value: root.refresh-ms; unit: " мс"; changed(v) => { root.set-refresh-ms(v); } }
+        }
+    }
+}

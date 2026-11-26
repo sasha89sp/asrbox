@@ -35,12 +35,21 @@ impl BackupController {
         host: &dyn ToolsPlatform,
     ) -> Result<String, String> {
         let pwd = host.settings_input_text(5);
+        let msg = self.save_zip_password_value(host, &pwd)?;
+        host.set_settings_input_text(5, "");
+        Ok(msg)
+    }
+
+    pub(crate) fn save_zip_password_value(
+        &mut self,
+        host: &dyn ToolsPlatform,
+        pwd: &str,
+    ) -> Result<String, String> {
         let trimmed = pwd.trim();
         if trimmed.len() < 4 {
             return Err("Пароль архива должен содержать минимум 4 символа".to_owned());
         }
         host.cred_save(BACKUP_ZIP_CRED_TARGET, "zip", trimmed)?;
-        host.set_settings_input_text(5, "");
         self.has_zip_password = true;
         Ok("Пароль AES-256 сохранён в Windows Credential Manager".to_owned())
     }
@@ -69,16 +78,29 @@ impl BackupController {
         let repo_raw = host.settings_input_text(6);
         let branch_raw = host.settings_input_text(7);
         let token_raw = host.settings_input_text(8);
+        let msg = self.save_github_settings_values(host, &repo_raw, &branch_raw, &token_raw)?;
+        if !token_raw.trim().is_empty() {
+            host.set_settings_input_text(8, "");
+        }
+        Ok(msg)
+    }
 
+    pub(crate) fn save_github_settings_values(
+        &mut self,
+        host: &dyn ToolsPlatform,
+        repo_raw: &str,
+        branch_raw: &str,
+        token_raw: &str,
+    ) -> Result<String, String> {
         let repo = if repo_raw.trim().is_empty() {
             String::new()
         } else {
-            validate_github_repo(&repo_raw)?
+            validate_github_repo(repo_raw)?
         };
         let branch = if branch_raw.trim().is_empty() {
             "main".to_owned()
         } else {
-            validate_github_branch(&branch_raw)?
+            validate_github_branch(branch_raw)?
         };
         self.github_cfg.repo = repo;
         self.github_cfg.branch = branch;
@@ -86,7 +108,6 @@ impl BackupController {
         let tok = token_raw.trim();
         if !tok.is_empty() {
             host.cred_save(GITHUB_TOKEN_CRED_TARGET, "github", tok)?;
-            host.set_settings_input_text(8, "");
             self.has_github_token = true;
         }
         self.github_cfg.last_status = "Настройки GitHub сохранены".to_owned();

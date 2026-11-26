@@ -1,0 +1,137 @@
+export struct SlintModuleRow {
+    id: string,
+    label: string,
+    enabled: bool,
+    running: bool,
+    status-text: string,
+}
+
+export struct SlintDockItemRow {
+    id: int,
+    label: string,
+    target-path: string,
+    kind-label: string,
+    is-folder: bool,
+    is-separator: bool,
+    selected: bool,
+}
+
+export struct SlintCalendarSourceRow {
+    index: int,
+    id: string,
+    url: string,
+}
+
+export struct SlintWebDavServerRow {
+    id: string,
+    name: string,
+    provider-label: string,
+    remote-dir: string,
+    status-text: string,
+    has-password: bool,
+    is-backup-target: bool,
+    is-sync-target: bool,
+}
+
+export struct SlintSyncItemRow {
+    id: string,
+    local-path: string,
+    kind-label: string,
+}
+
+export struct SlintFolderRow {
+    id: int,
+    name: string,
+    depth: int,
+    expanded: bool,
+    has-children: bool,
+    active: bool,
+    note-count: int,
+    is-note-child: bool,
+    note-id: int,
+}
+
+export struct SlintNoteCardRow {
+    id: int,
+    title: string,
+    updated-at: string,
+    task-badge: string,
+    has-tasks: bool,
+    pinned: bool,
+    active: bool,
+}
+
+export struct SlintTaskRow {
+    id: int,
+    text: string,
+    done: bool,
+}
+
+export global Theme {
+    in-out property <bool> dark-mode: true;
+    in-out property <int> accent-index: 0;
+    in-out property <bool> glass-mode: true;
+    in-out property <bool> is-ru: true;
+
+    // Concentric Fluent Glass surfaces (exact spec tokens)
+    out property <color> window-bg: dark-mode ? rgba(24, 27, 32, 0.88) : rgba(243, 245, 248, 0.92);
+    out property <color> sidebar-bg: dark-mode ? rgba(18, 20, 24, 0.92) : rgba(232, 236, 242, 0.95);
+    out property <color> card-bg: dark-mode ? rgba(34, 38, 46, 0.76) : rgba(255, 255, 255, 0.86);
+    out property <color> input-bg: dark-mode ? rgba(22, 25, 30, 0.90) : #FFFFFF;
+    out property <color> popup-bg: dark-mode ? rgba(26, 30, 38, 0.96) : rgba(255, 255, 255, 0.97);
+    out property <color> hover-bg: dark-mode ? rgba(48, 54, 66, 0.85) : rgba(226, 232, 240, 0.90);
+    out property <color> press-bg: dark-mode ? rgba(62, 70, 84, 0.92) : rgba(203, 213, 225, 0.95);
+
+    // Borders & hairline dividers
+    out property <color> border-color: dark-mode ? rgba(255, 255, 255, 0.08) : rgba(15, 23, 42, 0.08);
+    out property <color> border-strong: dark-mode ? rgba(255, 255, 255, 0.14) : rgba(15, 23, 42, 0.14);
+    out property <color> divider-color: dark-mode ? rgba(255, 255, 255, 0.06) : rgba(15, 23, 42, 0.06);
+    out property <color> top-shine: dark-mode ? rgba(255, 255, 255, 0.12) : rgba(255, 255, 255, 0.75);
+
+    // Typography
+    out property <color> text-primary: dark-mode ? #F1F5F9 : #0F172A;
+    out property <color> text-secondary: dark-mode ? #94A3B8 : #475569;
+    out property <color> text-muted: dark-mode ? #64748B : #94A3B8;
+
+    // 5 primary glossy accent presets (+ Coral/Slate compat)
+    out property <color> accent:
+        accent-index == 1 ? (dark-mode ? #06B6D4 : #0891B2) :
+        accent-index == 2 ? (dark-mode ? #10B981 : #059669) :
+        accent-index == 3 ? (dark-mode ? #F59E0B : #D97706) :
+        accent-index == 4 ? (dark-mode ? #8B5CF6 : #7C3AED) :
+        accent-index == 5 ? (dark-mode ? #F9735C : #D64830) :
+        accent-index == 6 ? (dark-mode ? #94A3B8 : #475569) :
+        (dark-mode ? #2B90FF : #0067C0);
+
+    out property <color> accent-hover:
+        accent-index == 1 ? (dark-mode ? #22D3EE : #0E7490) :
+        accent-index == 2 ? (dark-mode ? #34D399 : #047857) :
+        accent-index == 3 ? (dark-mode ? #FBBF24 : #B45309) :
+        accent-index == 4 ? (dark-mode ? #A78BFA : #6D28D9) :
+        accent-index == 5 ? (dark-mode ? #FD927E : #BE3A24) :
+        accent-index == 6 ? (dark-mode ? #B0BED0 : #334155) :
+        (dark-mode ? #4CA2FF : #0058A8);
+
+    out property <color> accent-tint:
+        accent-index == 1 ? (dark-mode ? rgba(6, 182, 212, 0.18) : rgba(8, 145, 178, 0.14)) :
+        accent-index == 2 ? (dark-mode ? rgba(16, 185, 129, 0.18) : rgba(5, 150, 105, 0.14)) :
+        accent-index == 3 ? (dark-mode ? rgba(245, 158, 11, 0.18) : rgba(217, 119, 6, 0.14)) :
+        accent-index == 4 ? (dark-mode ? rgba(139, 92, 246, 0.18) : rgba(124, 58, 237, 0.14)) :
+        accent-index == 5 ? (dark-mode ? rgba(249, 115, 92, 0.18) : rgba(214, 72, 48, 0.14)) :
+        accent-index == 6 ? (dark-mode ? rgba(148, 163, 184, 0.18) : rgba(71, 85, 105, 0.14)) :
+        (dark-mode ? rgba(43, 144, 255, 0.18) : rgba(0, 103, 192, 0.14));
+
+    out property <color> accent-glow:
+        accent-index == 1 ? rgba(6, 182, 212, 0.38) :
+        accent-index == 2 ? rgba(16, 185, 129, 0.38) :
+        accent-index == 3 ? rgba(245, 158, 11, 0.38) :
+        accent-index == 4 ? rgba(139, 92, 246, 0.38) :
+        accent-index == 5 ? rgba(249, 115, 92, 0.38) :
+        accent-index == 6 ? rgba(148, 163, 184, 0.32) :
+        rgba(43, 144, 255, 0.40);
+
+    out property <color> accent-fg: #FFFFFF;
+    out property <color> danger: #E81123;
+    out property <color> success: #10B981;
+    out property <color> warning: #F59E0B;
+}

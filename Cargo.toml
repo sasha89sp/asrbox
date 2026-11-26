@@ -18,11 +18,12 @@ members = [
     "crates/mod-about",
     "crates/mod-settings",
     "crates/mod-backup",
+    "crates/ui-slint",
     "crates/app",
 ]
 
 [workspace.package]
-version = "0.0.10"
+version = "0.1.0"
 edition = "2021"
 publish = false
 

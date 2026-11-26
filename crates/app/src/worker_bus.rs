@@ -17,6 +17,7 @@ impl<I: IconProvider> AppController<I> {
         &mut self,
         host: &mut H,
     ) {
+        self.poll_slint_ui(host);
         let events = self.supervisor.poll(&self.modules_cfg);
         let now = host.local_time_now();
         let mut settings_dirty = false;
@@ -173,10 +174,6 @@ impl<I: IconProvider> AppController<I> {
                     w.set_menu_visibility(wvis);
                     let _ = w.reload_config(host, self.safe_mode);
                 }
-                if let Some(n) = self.notes.as_mut() {
-                    n.set_menu_visibility(wvis);
-                    let _ = n.reload_config(host, self.safe_mode);
-                }
             }
             SupervisorCmd::ToggleCalendar => {
                 if let Some(c) = self.calendar.as_mut() {
@@ -208,11 +205,7 @@ impl<I: IconProvider> AppController<I> {
                     w.on_refresh_tick(host);
                 }
             }
-            SupervisorCmd::ToggleNotes => {
-                if let Some(n) = self.notes.as_mut() {
-                    n.toggle_visible(host, false);
-                }
-            }
+            SupervisorCmd::ToggleNotes => self.toggle_slint_notes(host),
             _ => {}
         }
     }

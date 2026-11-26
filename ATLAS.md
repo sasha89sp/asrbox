@@ -22,8 +22,9 @@
 | `crates/mod-overlay` | `asrbox-mod-overlay` | process | Игровой HUD-оверлей (FPS/1% low, GPU/VRAM, CPU, RAM, NET/PL): автозапуск в играх, FSO/Topmost, Fluent-палитра, авто-выход из setup, 100% click-through, углы/своя точка, прозрачность и ресайз. | `crates/mod-overlay/MAP.md` |
 | `crates/mod-debug` | `asrbox-mod-debug` | on-open | Отладочный модуль: живые логи по модулям, переключатель TRACE/файл, метрики RAM/CPU/GDI и диагностический отчёт (вкладка «Диагностика»). | `crates/mod-debug/MAP.md` |
 | `crates/mod-about` | `asrbox-mod-about` | on-open | Модуль истории версий и путей: портативный статус, текущие пути на диске и встроенная история версий (`CHANGELOG.md`). | `crates/mod-about/MAP.md` |
-| `crates/mod-settings` | `asrbox-mod-settings` | on-open | Единое окно настроек (Concentric Fluent Glass `AsrGlass` / `Win11Classic`, аккордеоны `settings_ui.cfg`, глобальный поиск, ComboBox, вертикальный список элементов дока `46 px`, безопасный сброс; 4 раздела + браузерные вкладки). | `crates/mod-settings/MAP.md` |
-| `crates/app` | `asrbox` | supervisor | Точка входа `asrbox.exe`, PE-иконка ASR Glass (`build.rs`), супервизор с `JobObject` (`--worker dock|widgets|overlay`), ярлыки `data/shortcuts/`, плавная тема, бэкап AES-256 + GitHub + WebDAV/sync, Fluent-трей с `menus.cfg`. | `crates/app/MAP.md` |
+| `crates/mod-settings` | `asrbox-mod-settings` | on-open | Модель/действия настроек и хранение состояния аккордеонов (`settings_ui.cfg`). | `crates/mod-settings/MAP.md` |
+| `crates/ui-slint` | `asrbox-ui-slint` | on-open | Декларативный UI на Slint (`~1.18`) + Windows 11 Mica/Acrylic (`window-vibrancy 0.8.1`): безрамочное окно Настроек (`860×560`, Concentric Fluent Glass, `AsrGlass`) и 3-колоночные Заметки (`780×520`, `Ctrl+1/2/3`, 450 мс автосохранение). | `crates/ui-slint/MAP.md` |
+| `crates/app` | `asrbox` | supervisor | Точка входа `asrbox.exe`, PE-иконка ASR Glass (`build.rs`), супервизор с `JobObject` (`--worker dock|widgets|overlay`, `--ui-settings`, `--ui-notes`), ярлыки `data/shortcuts/`, бэкап AES-256 + GitHub + WebDAV/sync, Fluent-трей с `menus.cfg`. | `crates/app/MAP.md` |
 
 ## 2. Куда смотреть
 

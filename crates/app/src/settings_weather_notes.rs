@@ -150,7 +150,14 @@ impl<I: IconProvider> AppController<I> {
             _ => return false,
         };
         if changed && save_notes_config(&self.paths.notes_cfg, &cfg).is_ok() {
-            self.reload_module_config(host, ModuleId::Widgets);
+            if matches!(action, SettingsAction::SetNotesVisible(_)) {
+                if let Err(err) = self.slint_ui.set_notes_visible(cfg.visible) {
+                    self.debug
+                        .log(host.local_time_now(), LogLevel::Error, "widgets", err);
+                }
+            } else {
+                self.slint_ui.notify_notes_refresh();
+            }
         }
         true
     }

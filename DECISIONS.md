@@ -224,4 +224,21 @@
   3. Довести док-панель, раздел «Док-панели» Настроек и трей-меню до визуальной спецификации **Concentric Fluent Glass**: `menu_bg` `0.94`/`0.96`, ползунки с кольцом `#FFFFFF` и капсульными бейджами `48×26 px`, встроенная шапка `[ Док N ⌄ ]` + `+ Новый док`, настройка `edge_margin_px`/`corner_radius_px`/`blur_enabled`, вертикальный список ярлыков/папок `46 px` (`↑`/`↓`/`✎`/`✕` с красным hover `#E81123`) и кнопкой `+ Добавить папку / ярлык`, верхний `1 px` стеклянный блик дока, стеклянный капсульный тултип `radius: 6 px` и веерный попап папок (`AsrboxFolderPopupWindow`, сетка до 4 колонок + `↗ Проводник`). Новых внешних крейтов не добавлено (`docs/LICENSES.md` без изменений).
 - **Причина**: Полное исключение «залипания» всплывающих меню на Windows 10/11, полноценный 3- и 7-дневный прогноз даже на бесплатном тарифе Яндекс.Погоды и цельный визуальный язык Concentric Fluent Glass с 0% CPU в простое.
 
+---
+
+## ADR-021: Полная миграция UI на Slint (`crates/ui-slint`) + Windows 11 Mica (`window-vibrancy`), этапы 1+2 (`v0.1.0`)
+
+- **Статус**: Принято (v0.1.0, согласовано владельцем)
+- **Решение**:
+  1. Выполнить полную миграцию слоя отрисовки интерфейса на декларативный Rust-фреймворк **Slint** в два пакета: Этап 1+2 (`v0.1.0` — единая дизайн-система `ui/theme.slint`, `ui/components/`, безрамочные окна `SettingsWindow` `860×560` и `NotesWindow` `780×520` с нативным Windows 11 Mica) и Этап 3+4 (виджеты рабочего стола, док-панель и трей-меню). Вся существующая Rust бизнес-логика (`mod-dock`, `mod-widgets`, `mod-overlay`, `mod-backup`, `mod-webdav`, `mod-debug`, `mod-about`, Credential Manager, WinHTTP, AES-256, GitHub) сохраняется на 100%.
+  2. Выделить UI-слой в изолированный крейт `crates/ui-slint` (`asrbox-ui-slint`) с подключением внешних крейтов:
+     - `slint = "1.18.1"` (`default-features = false`, фичи `["compat-1-2", "std", "backend-winit", "renderer-software", "unstable-winit-030"]`) — лицензия `GPL-3.0-only OR LicenseRef-Slint-Royalty-free-2.0`.
+     - `slint-build = "1.18.1"` (`[build-dependencies]`) — лицензия `GPL-3.0-only OR LicenseRef-Slint-Royalty-free-2.0`.
+     - `window-vibrancy = "0.8.1"` (под `[target.'cfg(windows)'.dependencies]`) — лицензия `MIT OR Apache-2.0`.
+  3. Выбрать программный рендерер `renderer-software` (без тяжёлых Skia/FemtoVG/OpenGL), чтобы сохранить лимит `.exe < 25 МБ` (`NF-005`), исключить конфликты прозрачности с Windows 11 Mica/Acrylic и гарантировать `0.0% CPU` в простое (реактивная перерисовка только по событиям).
+  4. Сгенерированный код `slint::include_modules!()` изолировать в `crates/ui-slint/src/generated.rs` (поэтому `crates/ui-slint` не наследует `unsafe_code = "forbid"`, сохраняя `unwrap_used = "deny"` и `expect_used = "deny"` во всём рукописном коде без единого `unsafe`).
+  5. Запускать Slint-окна `SettingsWindow` и `NotesWindow` как on-demand дочерние процессы единого `asrbox.exe` (`--ui-settings`, `--ui-notes`, под `JobObject` супервизора с IPC через stdin/stdout), что исключает конфликт циклов событий Win32 `GetMessageW` и `winit` и обеспечивает `0 МБ RAM` / `0% CPU` при закрытых окнах.
+- **Причина**: Точное соответствие эталонному дизайну Concentric Fluent Glass с настоящим Windows 11 Mica, безрамочной кастомной шапкой, плавной прокруткой, полноценным многострочным редактором Заметок и нулевой деградацией существующей бизнес-логики и ресурсных бюджетов.
+
+
 

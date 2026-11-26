@@ -1,0 +1,130 @@
+import { Theme } from "../theme.slint";
+import { AsrGlassLogo } from "asr_logo.slint";
+
+component WindowControlButton inherits Rectangle {
+    in property <string> glyph;
+    in property <bool> is-close: false;
+    callback clicked();
+
+    width: 42px;
+    height: 32px;
+    border-radius: 6px;
+    background: ta.pressed
+        ? (root.is-close ? #C42B1C : Theme.press-bg)
+        : (ta.has-hover ? (root.is-close ? Theme.danger : Theme.hover-bg) : transparent);
+
+    animate background { duration: 120ms; easing: ease-out; }
+
+    Text {
+        width: 100%;
+        height: 100%;
+        text: root.glyph;
+        color: (root.is-close && (ta.has-hover || ta.pressed)) ? #FFFFFF : Theme.text-secondary;
+        font-size: root.is-close ? 12px : 13px;
+        font-weight: 500;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component FramelessTitleBar inherits Rectangle {
+    in property <string> title: "asrbox";
+    callback drag-window();
+    callback minimize-clicked();
+    callback maximize-clicked();
+    callback close-clicked();
+
+    height: 36px;
+    background: transparent;
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 4px;
+        spacing: 8px;
+        alignment: stretch;
+
+        // Draggable left header region
+        Rectangle {
+            horizontal-stretch: 1;
+            background: transparent;
+
+            TouchArea {
+                pointer-event(ev) => {
+                    if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
+                        root.drag-window();
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: start;
+
+                VerticalLayout {
+                    alignment: center;
+                    AsrGlassLogo { size: 18px; show-glow: false; }
+                }
+
+                Text {
+                    text: root.title;
+                    color: Theme.text-secondary;
+                    font-size: 12px;
+                    font-weight: 500;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
+
+        // Optional middle slot (e.g., Notes pane toggle pills)
+        HorizontalLayout {
+            spacing: 4px;
+            alignment: center;
+            @children
+        }
+
+        // Right window controls (-, [], X)
+        HorizontalLayout {
+            spacing: 2px;
+            alignment: end;
+
+            VerticalLayout {
+                alignment: center;
+                WindowControlButton {
+                    glyph: "—";
+                    clicked => { root.minimize-clicked(); }
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                WindowControlButton {
+                    glyph: "□";
+                    clicked => { root.maximize-clicked(); }
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                WindowControlButton {
+                    glyph: "✕";
+                    is-close: true;
+                    clicked => { root.close-clicked(); }
+                }
+            }
+        }
+    }
+
+    // Bottom 1px hairline
+    Rectangle {
+        y: parent.height - 1px;
+        width: 100%;
+        height: 1px;
+        background: Theme.divider-color;
+    }
+}

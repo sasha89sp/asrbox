@@ -1,13 +1,17 @@
 # MAP.md — `crates/app`
 
-Исполняемый бинарник `asrbox.exe`. Работает как мастер-супервизор (Fluent-трей, Настройки с браузерными вкладками и аккордеонами, бэкап/AES-256/GitHub/WebDAV/синхронизация) с изолированными дочерними процессами модулей (`--worker dock|widgets|overlay`) и резервным `inproc`-режимом (`--inproc`).
+Исполняемый бинарник `asrbox.exe`. Работает как мастер-супервизор (Fluent-трей, бэкап/AES-256/GitHub/WebDAV/синхронизация) с изолированными дочерними процессами модулей (`--worker dock|widgets|overlay`), Slint-окнами (`--ui-settings`, `--ui-notes`) и резервным `inproc`-режимом (`--inproc`).
 
 ## Файлы
 - `build.rs` — zero-dependency генератор Win32-ресурса `.res` (`RT_GROUP_ICON` + 7 размеров 16..256 px) для встраивания фирменной иконки «Стеклянный блок ASR» в `asrbox.exe`.
-- `src/main.rs` — точка входа, CLI (`--version`, `--selftest`, `--safe-mode`, `--inproc`, `--worker`, `--parent-pid`) и `AppController` (включая `ContextMenuConfig` и плавную анимацию темы).
+- `src/main.rs` — точка входа, CLI (`--version`, `--selftest`, `--safe-mode`, `--inproc`, `--worker`, `--ui-settings`, `--ui-notes`, `--parent-pid`) и `AppController`.
 - `src/supervisor.rs` — `ModuleSupervisor`: запуск/остановка процессов модулей в Win32 `JobObject`, stdin/stdout IPC и автоперезапуск при сбое.
+- `src/slint_ui.rs` — `SlintUiBridge`: запуск/остановка и stdin/stdout IPC дочерних Slint-окон (`--ui-settings`, `--ui-notes`) в `JobObject` с пробуждением через `wake_host_window`.
+- `src/slint_dispatch.rs` — синхронизация `UiRuntimeStatus` и маршрутизация команд общих настроек, бэкапа, WebDAV, GitHub, синхронизации и диагностики из Slint.
+- `src/slint_dispatch_dock.rs` — маршрутизация команд Slint для вкладки «Док-панели» (выбор, параметры, ярлыки/папки, меню ПКМ).
+- `src/slint_dispatch_tabs.rs` — маршрутизация команд Slint для вкладок «Виджеты» (Календарь/Монитор/Погода/Заметки) и «Игровой оверлей».
 - `src/worker.rs` — изолированный цикл воркера док-панелей (`--worker dock`), чтение `SupervisorCmd`, `menus.cfg`, watchdog PID и отправка логов/метрик.
-- `src/worker_widgets.rs` — изолированный цикл воркера виджетов (`--worker widgets`): Google Календарь, Системный монитор, Погода и Заметки.
+- `src/worker_widgets.rs` — изолированный цикл воркера виджетов (`--worker widgets`): Google Календарь, Системный монитор и Погода (Заметки перенесены в `--ui-notes`).
 - `src/worker_overlay.rs` — изолированный цикл воркера игрового оверлея (`--worker overlay`) и интеграция настроек/режима настройки с `AppController`.
 - `src/docks.rs` — `DockManager`: жизненный цикл док-панелей, обновление окон на месте, видимость пунктов ПКМ (`DockMenuVisibility`), индикатор запущенных приложений и `docks.cfg`.
 - `src/dock_events.rs` — диспетчер событий док-панелей для `inproc`-режима (`handle_dock_event`).

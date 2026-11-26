@@ -1,0 +1,707 @@
+import {
+    Theme,
+    SlintModuleRow,
+    SlintWebDavServerRow,
+    SlintSyncItemRow,
+} from "theme.slint";
+import {
+    AccordionCard,
+    SettingRow,
+    GlassSwitch,
+    GlassButton,
+    GlassInput,
+    CustomComboBox,
+    ThemePreviewCard,
+    AccentSwatch,
+} from "components/controls.slint";
+
+export component SettingsGeneralView inherits VerticalLayout {
+    // Section visibility / search highlight / expanded flags
+    in property <bool> show-appearance: true;
+    in property <bool> show-system: true;
+    in property <bool> show-backup: true;
+    in property <bool> show-sync: true;
+    in property <bool> show-tools: true;
+
+    in property <bool> hi-appearance: false;
+    in property <bool> hi-system: false;
+    in property <bool> hi-backup: false;
+    in property <bool> hi-sync: false;
+    in property <bool> hi-tools: false;
+
+    in property <bool> exp-appearance: true;
+    in property <bool> exp-system: true;
+    in property <bool> exp-backup: false;
+    in property <bool> exp-sync: false;
+    in property <bool> exp-tools: false;
+
+    // Appearance state
+    in property <int> design-theme-index: 0;
+    in property <int> language-index: 0;
+    in property <int> font-renderer-index: 0;
+
+    // System state
+    in property <bool> autostart-enabled: false;
+    in property <int> isolation-index: 0;
+    in property <[SlintModuleRow]> modules: [];
+    in-out property <bool> confirming-reset: false;
+
+    // Backup & WebDAV & GitHub state
+    in property <string> backup-summary: "";
+    in property <string> cloud-status: "";
+    in property <bool> backup-auto-upload: false;
+    in property <bool> backup-encrypt-zip: false;
+    in property <bool> backup-has-zip-pw: false;
+    in property <bool> backup-busy: false;
+    in property <[SlintWebDavServerRow]> webdav-servers: [];
+    in-out property <bool> show-add-webdav: false;
+    in-out property <int> draft-provider-index: 0;
+    in-out property <string> draft-url: "";
+    in-out property <string> draft-user: "";
+    in-out property <string> draft-pass: "";
+    in-out property <string> draft-dir: "/asrbox-backups";
+    in-out property <string> zip-pw-input: "";
+
+    in-out property <string> gh-repo: "";
+    in-out property <string> gh-branch: "main";
+    in-out property <string> gh-token-input: "";
+    in property <bool> gh-include-in-backup: false;
+    in property <bool> gh-has-token: false;
+    in property <string> gh-status: "";
+
+    // File Sync state
+    in property <int> sync-interval-index: 2;
+    in property <string> sync-status: "";
+    in property <[SlintSyncItemRow]> sync-items: [];
+
+    // Diagnostics & About state
+    in property <string> app-version: "0.1.0";
+    in property <string> diag-summary: "";
+    in property <bool> diag-verbose: false;
+    in property <bool> diag-file-log: false;
+    in property <string> data-dir-text: "";
+
+    // Callbacks
+    callback toggle-section(string);
+    callback set-dark-mode(bool);
+    callback set-accent(int);
+    callback set-design-theme(int);
+    callback set-language(int);
+    callback set-font-renderer(int);
+
+    callback set-autostart(bool);
+    callback set-isolation(int);
+    callback set-module-enabled(string, bool);
+    callback restart-module(string);
+    callback restart-all-modules();
+    callback confirm-reset-all();
+
+    callback backup-full-now();
+    callback backup-settings-now();
+    callback upload-latest-backup();
+    callback open-backups-folder();
+    callback set-auto-upload(bool);
+    callback set-encrypt-zip(bool);
+    callback save-zip-password(string);
+    callback clear-zip-password();
+
+    callback save-webdav-server(int, string, string, string, string);
+    callback test-webdav-server(string);
+    callback delete-webdav-server(string);
+    callback toggle-backup-target(string);
+    callback toggle-sync-target(string);
+
+    callback set-gh-include(bool);
+    callback save-gh-settings(string, string, string);
+    callback clear-gh-token();
+    callback download-gh-now();
+
+    callback set-sync-interval(int);
+    callback pick-sync-files();
+    callback pick-sync-folder();
+    callback remove-sync-item(string);
+    callback sync-files-now();
+
+    callback set-diag-verbose(bool);
+    callback set-diag-file-log(bool);
+    callback copy-diag-report();
+    callback save-diag-report();
+    callback open-data-folder();
+    callback copy-paths();
+
+    spacing: 12px;
+
+    // 1. Оформление и тема (exact mockup layout!)
+    if (root.show-appearance) : AccordionCard {
+        title: Theme.is-ru ? "Оформление и тема" : "Appearance & Theme";
+        summary: Theme.dark-mode
+            ? (Theme.is-ru ? "Тёмная" : "Dark")
+            : (Theme.is-ru ? "Светлая" : "Light");
+        expanded: root.exp-appearance;
+        highlighted: root.hi-appearance;
+        toggled => { root.toggle-section("appearance"); }
+
+        // Theme Selection miniature preview cards
+        VerticalLayout {
+            padding-left: 16px;
+            padding-right: 16px;
+            padding-top: 8px;
+            padding-bottom: 12px;
+            spacing: 10px;
+
+            Text {
+                text: Theme.is-ru ? "Выбор темы" : "Theme Selection";
+                color: Theme.text-secondary;
+                font-size: 12px;
+                font-weight: 500;
+            }
+
+            HorizontalLayout {
+                spacing: 14px;
+
+                ThemePreviewCard {
+                    label: Theme.is-ru ? "Тёмная" : "Dark";
+                    is-dark-card: true;
+                    selected: Theme.dark-mode;
+                    clicked => { root.set-dark-mode(true); }
+                }
+
+                ThemePreviewCard {
+                    label: Theme.is-ru ? "Светлая" : "Light";
+                    is-dark-card: false;
+                    selected: !Theme.dark-mode;
+                    clicked => { root.set-dark-mode(false); }
+                }
+            }
+        }
+
+        // Accent color 5 glossy pills
+        SettingRow {
+            title: Theme.is-ru ? "Акцентный цвет" : "Accent Color";
+            show-divider: true;
+
+            HorizontalLayout {
+                width: 344px;
+                spacing: 8px;
+
+                AccentSwatch {
+                    base-color: #2B90FF;
+                    light-color: #60A5FA;
+                    selected: Theme.accent-index == 0;
+                    clicked => { root.set-accent(0); }
+                }
+                AccentSwatch {
+                    base-color: #06B6D4;
+                    light-color: #22D3EE;
+                    selected: Theme.accent-index == 1;
+                    clicked => { root.set-accent(1); }
+                }
+                AccentSwatch {
+                    base-color: #10B981;
+                    light-color: #34D399;
+                    selected: Theme.accent-index == 2;
+                    clicked => { root.set-accent(2); }
+                }
+                AccentSwatch {
+                    base-color: #F59E0B;
+                    light-color: #FBBF24;
+                    selected: Theme.accent-index == 3;
+                    clicked => { root.set-accent(3); }
+                }
+                AccentSwatch {
+                    base-color: #8B5CF6;
+                    light-color: #C084FC;
+                    selected: Theme.accent-index == 4;
+                    clicked => { root.set-accent(4); }
+                }
+            }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Стиль оформления" : "Design Style";
+            subtitle: Theme.is-ru ? "Стеклянный блок ASR или классический Windows 11" : "ASR Glass Stack or Windows 11 Classic";
+            CustomComboBox {
+                model: Theme.is-ru
+                    ? ["Стеклянный блок ASR", "Windows 11 Classic"]
+                    : ["ASR Glass Stack", "Windows 11 Classic"];
+                current-index: root.design-theme-index;
+                current-value: root.design-theme-index == 1
+                    ? "Windows 11 Classic"
+                    : (Theme.is-ru ? "Стеклянный блок ASR" : "ASR Glass Stack");
+                selected(idx) => { root.set-design-theme(idx); }
+            }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Язык интерфейса" : "Interface Language";
+            CustomComboBox {
+                model: ["Русский", "English"];
+                current-index: root.language-index;
+                current-value: root.language-index == 1 ? "English" : "Русский";
+                selected(idx) => { root.set-language(idx); }
+            }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Рендер шрифтов виджетов" : "Widget Font Renderer";
+            subtitle: "Segoe UI Variable · GDI ClearType / DirectWrite";
+            CustomComboBox {
+                model: ["GDI ClearType", "DirectWrite"];
+                current-index: root.font-renderer-index;
+                current-value: root.font-renderer-index == 1 ? "DirectWrite" : "GDI ClearType";
+                selected(idx) => { root.set-font-renderer(idx); }
+            }
+        }
+    }
+
+    // 2. Система и автозагрузка
+    if (root.show-system) : AccordionCard {
+        title: Theme.is-ru ? "Система и автозагрузка" : "System & Startup";
+        summary: root.isolation-index == 0
+            ? (Theme.is-ru ? "Отдельные процессы" : "Isolated processes")
+            : (Theme.is-ru ? "Один процесс" : "Single process");
+        expanded: root.exp-system;
+        highlighted: root.hi-system;
+        toggled => { root.toggle-section("system"); }
+
+        SettingRow {
+            badge-icon: "✓";
+            badge-bg: Theme.success;
+            title: Theme.is-ru ? "Автозагрузка с Windows" : "Launch with Windows";
+            subtitle: "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+            GlassSwitch {
+                checked: root.autostart-enabled;
+                toggled(v) => { root.set-autostart(v); }
+            }
+        }
+
+        SettingRow {
+            badge-icon: "❖";
+            badge-bg: Theme.accent;
+            title: Theme.is-ru ? "Изоляция модулей" : "Module Isolation";
+            subtitle: Theme.is-ru
+                ? "Падение модуля не закрывает asrbox и другие модули"
+                : "Module crash never stops asrbox or other modules";
+            CustomComboBox {
+                model: Theme.is-ru
+                    ? ["Отдельные процессы", "Один процесс (inproc)"]
+                    : ["Isolated processes", "Single process (inproc)"];
+                current-index: root.isolation-index;
+                current-value: root.isolation-index == 1
+                    ? (Theme.is-ru ? "Один процесс (inproc)" : "Single process (inproc)")
+                    : (Theme.is-ru ? "Отдельные процессы" : "Isolated processes");
+                selected(idx) => { root.set-isolation(idx); }
+            }
+        }
+
+        for m in root.modules : SettingRow {
+            badge-icon: m.running ? "●" : "○";
+            badge-bg: m.running ? Theme.success : Theme.text-muted;
+            title: m.label;
+            subtitle: m.status-text;
+
+            GlassButton {
+                label: Theme.is-ru ? "Перезапуск" : "Restart";
+                compact: true;
+                clicked => { root.restart-module(m.id); }
+            }
+
+            GlassSwitch {
+                checked: m.enabled;
+                toggled(v) => { root.set-module-enabled(m.id, v); }
+            }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Управление процессами и сброс" : "Process Control & Reset";
+            subtitle: Theme.is-ru
+                ? "Бэкапы, заметки и пароли в Credential Manager не удаляются"
+                : "Backups, notes and Credential Manager secrets are preserved";
+
+            GlassButton {
+                label: Theme.is-ru ? "Перезапустить все" : "Restart All";
+                compact: true;
+                clicked => { root.restart-all-modules(); }
+            }
+
+            if (!root.confirming-reset) : GlassButton {
+                label: Theme.is-ru ? "Сбросить настройки" : "Reset Settings";
+                variant: "danger";
+                compact: true;
+                clicked => { root.confirming-reset = true; }
+            }
+
+            if (root.confirming-reset) : HorizontalLayout {
+                spacing: 6px;
+                GlassButton {
+                    label: Theme.is-ru ? "Подтвердить сброс" : "Confirm Reset";
+                    variant: "danger";
+                    compact: true;
+                    clicked => {
+                        root.confirming-reset = false;
+                        root.confirm-reset-all();
+                    }
+                }
+                GlassButton {
+                    label: Theme.is-ru ? "Отмена" : "Cancel";
+                    compact: true;
+                    clicked => { root.confirming-reset = false; }
+                }
+            }
+        }
+    }
+
+    // 3. Бэкап, шифрование AES-256, WebDAV и GitHub
+    if (root.show-backup) : AccordionCard {
+        title: Theme.is-ru ? "Бэкап, шифрование и WebDAV" : "Backup, Encryption & WebDAV";
+        summary: root.backup-summary;
+        expanded: root.exp-backup;
+        highlighted: root.hi-backup;
+        toggled => { root.toggle-section("backup"); }
+
+        SettingRow {
+            badge-icon: "●";
+            badge-bg: root.backup-busy ? Theme.warning : Theme.success;
+            title: Theme.is-ru ? "Локальный и облачный бэкап" : "Local & Cloud Backup";
+            subtitle: root.cloud-status != "" ? root.cloud-status : root.backup-summary;
+
+            GlassButton {
+                label: Theme.is-ru ? "Полный бэкап" : "Full Backup";
+                variant: "primary";
+                compact: true;
+                clicked => { root.backup-full-now(); }
+            }
+            GlassButton {
+                label: Theme.is-ru ? "Настройки" : "Config Only";
+                compact: true;
+                clicked => { root.backup-settings-now(); }
+            }
+            GlassButton {
+                label: Theme.is-ru ? "В облако" : "Upload";
+                compact: true;
+                clicked => { root.upload-latest-backup(); }
+            }
+            GlassButton {
+                label: Theme.is-ru ? "Папка" : "Folder";
+                compact: true;
+                clicked => { root.open-backups-folder(); }
+            }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Автовыгрузка бэкапа в WebDAV" : "Auto-upload Backup to WebDAV";
+            GlassSwitch {
+                checked: root.backup-auto-upload;
+                toggled(v) => { root.set-auto-upload(v); }
+            }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Шифрование ZIP (WinZip AES-256)" : "Encrypt ZIP (WinZip AES-256)";
+            subtitle: root.backup-has-zip-pw
+                ? (Theme.is-ru ? "Пароль сохранён в Windows Credential Manager" : "Password saved in Windows Credential Manager")
+                : (Theme.is-ru ? "Пароль не задан (минимум 4 символа)" : "No password saved (min 4 chars)");
+            GlassSwitch {
+                checked: root.backup-encrypt-zip;
+                toggled(v) => { root.set-encrypt-zip(v); }
+            }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Пароль архива AES-256" : "AES-256 Archive Password";
+            show-divider: false;
+            GlassInput {
+                width: 180px;
+                text <=> root.zip-pw-input;
+                placeholder: Theme.is-ru ? "Новый пароль..." : "New password...";
+                is-password: true;
+            }
+            GlassButton {
+                label: Theme.is-ru ? "Сохранить" : "Save";
+                compact: true;
+                clicked => {
+                    root.save-zip-password(root.zip-pw-input);
+                    root.zip-pw-input = "";
+                }
+            }
+            if (root.backup-has-zip-pw) : GlassButton {
+                label: "✕";
+                variant: "danger";
+                compact: true;
+                clicked => { root.clear-zip-password(); }
+            }
+        }
+
+        // WebDAV servers list
+        for srv in root.webdav-servers : SettingRow {
+            badge-icon: "☁";
+            badge-bg: srv.has-password ? Theme.accent : Theme.text-muted;
+            title: "\(srv.name) · \(srv.provider-label)";
+            subtitle: srv.status-text != "" ? "\(srv.remote-dir) · \(srv.status-text)" : srv.remote-dir;
+
+            GlassButton {
+                label: srv.is-backup-target ? "✓ Бэкап" : "Бэкап";
+                active: srv.is-backup-target;
+                compact: true;
+                clicked => { root.toggle-backup-target(srv.id); }
+            }
+            GlassButton {
+                label: Theme.is-ru ? "Тест" : "Test";
+                compact: true;
+                clicked => { root.test-webdav-server(srv.id); }
+            }
+            GlassButton {
+                label: "✕";
+                variant: "danger";
+                compact: true;
+                clicked => { root.delete-webdav-server(srv.id); }
+            }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Подключить сервер WebDAV" : "Add WebDAV Server";
+            subtitle: Theme.is-ru ? "Яндекс.Диск, Облако Mail.ru или свой HTTPS" : "Yandex.Disk, Mail.ru Cloud or custom HTTPS";
+            GlassButton {
+                label: root.show-add-webdav
+                    ? (Theme.is-ru ? "Скрыть форму" : "Hide Form")
+                    : (Theme.is-ru ? "+ Добавить WebDAV" : "+ Add WebDAV");
+                compact: true;
+                clicked => { root.show-add-webdav = !root.show-add-webdav; }
+            }
+        }
+
+        if (root.show-add-webdav) : VerticalLayout {
+            padding-left: 16px;
+            padding-right: 16px;
+            padding-top: 6px;
+            padding-bottom: 10px;
+            spacing: 8px;
+
+            HorizontalLayout {
+                spacing: 8px;
+                CustomComboBox {
+                    model: ["Яндекс.Диск", "Облако Mail.ru", "Свой HTTPS"];
+                    current-index: root.draft-provider-index;
+                    current-value: root.draft-provider-index == 0
+                        ? "Яндекс.Диск"
+                        : (root.draft-provider-index == 1 ? "Облако Mail.ru" : "Свой HTTPS");
+                    selected(idx) => { root.draft-provider-index = idx; }
+                }
+                if (root.draft-provider-index == 2) : GlassInput {
+                    horizontal-stretch: 1;
+                    text <=> root.draft-url;
+                    placeholder: "https://webdav.example.com";
+                }
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                GlassInput {
+                    horizontal-stretch: 1;
+                    text <=> root.draft-user;
+                    placeholder: Theme.is-ru ? "Логин / Email" : "Username / Email";
+                }
+                GlassInput {
+                    horizontal-stretch: 1;
+                    text <=> root.draft-pass;
+                    placeholder: Theme.is-ru ? "Пароль приложения" : "App password";
+                    is-password: true;
+                }
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                GlassInput {
+                    horizontal-stretch: 1;
+                    text <=> root.draft-dir;
+                    placeholder: "/asrbox-backups";
+                }
+                GlassButton {
+                    label: Theme.is-ru ? "Сохранить сервер" : "Save Server";
+                    variant: "primary";
+                    compact: true;
+                    clicked => {
+                        root.save-webdav-server(
+                            root.draft-provider-index,
+                            root.draft-url,
+                            root.draft-user,
+                            root.draft-pass,
+                            root.draft-dir
+                        );
+                        root.draft-pass = "";
+                        root.show-add-webdav = false;
+                    }
+                }
+            }
+        }
+
+        // Developer GitHub Source Backup
+        SettingRow {
+            badge-icon: "</>";
+            badge-bg: #6366F1;
+            title: Theme.is-ru ? "Для разработчика · Исходный код GitHub" : "Developer · GitHub Source Backup";
+            subtitle: root.gh-status != "" ? root.gh-status : (root.gh-has-token ? "PAT токен сохранён в Credential Manager" : "Вложить zipball ветки в бэкап без Git");
+            GlassSwitch {
+                checked: root.gh-include-in-backup;
+                toggled(v) => { root.set-gh-include(v); }
+            }
+        }
+
+        VerticalLayout {
+            padding-left: 16px;
+            padding-right: 16px;
+            padding-bottom: 10px;
+            spacing: 8px;
+
+            HorizontalLayout {
+                spacing: 8px;
+                GlassInput {
+                    horizontal-stretch: 1;
+                    text <=> root.gh-repo;
+                    placeholder: "owner/repo";
+                }
+                GlassInput {
+                    width: 110px;
+                    text <=> root.gh-branch;
+                    placeholder: "main";
+                }
+                GlassInput {
+                    width: 150px;
+                    text <=> root.gh-token-input;
+                    placeholder: "GitHub PAT";
+                    is-password: true;
+                }
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: end;
+                GlassButton {
+                    label: Theme.is-ru ? "Сохранить GitHub" : "Save GitHub";
+                    compact: true;
+                    clicked => {
+                        root.save-gh-settings(root.gh-repo, root.gh-branch, root.gh-token-input);
+                        root.gh-token-input = "";
+                    }
+                }
+                GlassButton {
+                    label: Theme.is-ru ? "Скачать сейчас" : "Download Now";
+                    compact: true;
+                    clicked => { root.download-gh-now(); }
+                }
+                if (root.gh-has-token) : GlassButton {
+                    label: Theme.is-ru ? "Удалить токен" : "Clear Token";
+                    variant: "danger";
+                    compact: true;
+                    clicked => { root.clear-gh-token(); }
+                }
+            }
+        }
+    }
+
+    // 4. Синхронизация файлов и папок
+    if (root.show-sync) : AccordionCard {
+        title: Theme.is-ru ? "Синхронизация файлов и папок" : "Files & Folders Sync";
+        summary: root.sync-status;
+        expanded: root.exp-sync;
+        highlighted: root.hi-sync;
+        toggled => { root.toggle-section("sync"); }
+
+        SettingRow {
+            title: Theme.is-ru ? "Интервал автосинхронизации" : "Auto-sync Interval";
+            CustomComboBox {
+                model: ["Вручную", "15 мин", "30 мин", "1 час", "6 часов", "24 часа"];
+                current-index: root.sync-interval-index;
+                current-value:
+                    root.sync-interval-index == 0 ? "Вручную" :
+                    root.sync-interval-index == 1 ? "15 мин" :
+                    root.sync-interval-index == 2 ? "30 мин" :
+                    root.sync-interval-index == 3 ? "1 час" :
+                    root.sync-interval-index == 4 ? "6 часов" : "24 часа";
+                selected(idx) => { root.set-sync-interval(idx); }
+            }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Добавить элементы для синхронизации" : "Add Sync Items";
+            GlassButton {
+                label: Theme.is-ru ? "+ Файлы" : "+ Files";
+                compact: true;
+                clicked => { root.pick-sync-files(); }
+            }
+            GlassButton {
+                label: Theme.is-ru ? "+ Папка" : "+ Folder";
+                compact: true;
+                clicked => { root.pick-sync-folder(); }
+            }
+            GlassButton {
+                label: Theme.is-ru ? "Синхронизировать" : "Sync Now";
+                variant: "primary";
+                compact: true;
+                clicked => { root.sync-files-now(); }
+            }
+        }
+
+        for item in root.sync-items : SettingRow {
+            title: item.local-path;
+            subtitle: item.kind-label;
+            GlassButton {
+                label: "✕";
+                variant: "danger";
+                compact: true;
+                clicked => { root.remove-sync-item(item.id); }
+            }
+        }
+    }
+
+    // 5. Диагностика и О программе
+    if (root.show-tools) : AccordionCard {
+        title: Theme.is-ru ? "Диагностика и О программе" : "Diagnostics & About";
+        summary: "v\(root.app-version)";
+        expanded: root.exp-tools;
+        highlighted: root.hi-tools;
+        toggled => { root.toggle-section("tools"); }
+
+        SettingRow {
+            title: "asrbox v\(root.app-version) · Portable";
+            subtitle: root.diag-summary != "" ? root.diag-summary : root.data-dir-text;
+            GlassButton {
+                label: Theme.is-ru ? "Папка data" : "Data Folder";
+                compact: true;
+                clicked => { root.open-data-folder(); }
+            }
+            GlassButton {
+                label: Theme.is-ru ? "Пути" : "Copy Paths";
+                compact: true;
+                clicked => { root.copy-paths(); }
+            }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Подробное логирование (TRACE)" : "Verbose Logging (TRACE)";
+            GlassSwitch {
+                checked: root.diag-verbose;
+                toggled(v) => { root.set-diag-verbose(v); }
+            }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Запись логов в файл (data/logs)" : "Write Logs to File (data/logs)";
+            GlassSwitch {
+                checked: root.diag-file-log;
+                toggled(v) => { root.set-diag-file-log(v); }
+            }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Диагностический отчёт" : "Diagnostics Report";
+            GlassButton {
+                label: Theme.is-ru ? "Копировать отчёт" : "Copy Report";
+                compact: true;
+                clicked => { root.copy-diag-report(); }
+            }
+            GlassButton {
+                label: Theme.is-ru ? "Сохранить отчёт" : "Save Report";
+                compact: true;
+                clicked => { root.save-diag-report(); }
+            }
+        }
+    }
+}

@@ -8,9 +8,7 @@ use asrbox_mod_about::{build_paths_clipboard, AppPaths};
 use asrbox_mod_debug::LogLevel;
 use asrbox_mod_dock::load_docks_from_file;
 use asrbox_mod_settings::{BrowserTab, SettingsTab};
-use asrbox_mod_widgets::{
-    load_notes_config, load_sysmon_config, load_weather_config, load_widget_config,
-};
+use asrbox_mod_widgets::{load_sysmon_config, load_weather_config, load_widget_config};
 use asrbox_platform_api::{
     AboutUiCommand, DebugUiCommand, DockPlatform, IconProvider, PixelPoint, ToolsPlatform,
     TrayAction, TrayMenuEntry, TrayModuleFlags, WidgetPlatform,
@@ -62,15 +60,7 @@ impl<I: IconProvider> AppController<I> {
                     .map(|c| c.visible)
                     .unwrap_or(true)
             });
-        let notes_vis = self
-            .notes
-            .as_ref()
-            .map(|n| n.is_visible())
-            .unwrap_or_else(|| {
-                load_notes_config(&self.paths.notes_cfg)
-                    .map(|c| c.visible)
-                    .unwrap_or(false)
-            });
+        let notes_vis = self.slint_ui.is_notes_open();
         let flags = TrayModuleFlags {
             dock_module_enabled: self.modules_cfg.dock_enabled,
             widgets_module_enabled: self.modules_cfg.widgets_enabled,
@@ -190,7 +180,7 @@ impl<I: IconProvider> AppController<I> {
             }
             TrayAction::ToggleNotesWidget => {
                 self.safe_mode = false;
-                self.send_or_run_widgets_cmd(host, SupervisorCmd::ToggleNotes);
+                self.toggle_slint_notes(host);
             }
             TrayAction::ToggleOverlayModule => {
                 self.modules_cfg.overlay_enabled = !self.modules_cfg.overlay_enabled;
@@ -236,6 +226,7 @@ impl<I: IconProvider> AppController<I> {
                 self.open_browser_tab(host, BrowserTab::VersionHistory);
             }
             TrayAction::Exit => {
+                self.slint_ui.stop_all();
                 self.supervisor.stop_all();
                 if let Some(docks) = &self.docks {
                     docks.persist();

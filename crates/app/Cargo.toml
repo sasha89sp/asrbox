@@ -16,6 +16,7 @@ asrbox-mod-webdav = { path = "../mod-webdav" }
 asrbox-mod-widgets = { path = "../mod-widgets" }
 asrbox-platform-api = { path = "../platform-api" }
 asrbox-platform-windows = { path = "../platform-windows" }
+asrbox-ui-slint = { path = "../ui-slint" }
 
 [lints]
 workspace = true

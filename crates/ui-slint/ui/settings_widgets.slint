@@ -1,0 +1,410 @@
+import { Theme, SlintCalendarSourceRow } from "theme.slint";
+import {
+    AccordionCard,
+    SettingRow,
+    GlassSwitch,
+    GlassSlider,
+    GlassButton,
+    GlassInput,
+    CustomComboBox,
+} from "components/controls.slint";
+
+export component SettingsWidgetsView inherits VerticalLayout {
+    in-out property <int> selected-widget: 0; // 0=Cal, 1=SysMon, 2=Weather, 3=Notes
+
+    in property <bool> exp-cal: true;
+    in property <bool> exp-sys: true;
+    in property <bool> exp-weather: true;
+    in property <bool> exp-notes: true;
+
+    // Calendar state
+    in property <bool> cal-visible: true;
+    in property <int> cal-layer: 0;
+    in property <int> cal-period: 2;
+    in property <int> cal-sync-idx: 2;
+    in property <int> cal-opacity: 88;
+    in property <int> cal-width: 336;
+    in property <int> cal-rows: 8;
+    in property <bool> cal-commented-hint: false;
+    in property <[SlintCalendarSourceRow]> cal-sources: [];
+    in-out property <string> cal-url-input: "";
+
+    // SysMonitor state
+    in property <bool> sys-visible: true;
+    in property <int> sys-layer: 0;
+    in property <int> sys-refresh-idx: 1;
+    in property <int> sys-opacity: 88;
+    in property <int> sys-width: 348;
+    in property <int> sys-height: 410;
+
+    // Weather state
+    in property <bool> weather-visible: true;
+    in-out property <string> weather-city: "Москва";
+    in property <int> weather-provider-idx: 0; // 0=Open-Meteo, 1=Yandex Hybrid
+    in property <int> weather-days-idx: 1;     // 0=1d, 1=3d, 2=7d
+    in property <bool> weather-has-yandex-key: false;
+    in-out property <string> weather-yandex-key-input: "";
+    in property <int> weather-layer: 0;
+    in property <int> weather-opacity: 90;
+    in property <int> weather-refresh-min: 30;
+    in property <int> weather-width: 360;
+    in property <int> weather-height: 410;
+
+    // Notes state
+    in property <bool> notes-visible: false;
+    in property <int> notes-layer: 1;
+    in property <int> notes-opacity: 94;
+    in property <bool> notes-pane-folders: true;
+    in property <bool> notes-pane-list: true;
+    in property <bool> notes-pane-editor: true;
+
+    callback toggle-section(string);
+    callback select-widget(int);
+
+    // Calendar callbacks
+    callback set-cal-visible(bool);
+    callback set-cal-layer(int);
+    callback set-cal-period(int);
+    callback set-cal-sync(int);
+    callback set-cal-opacity(int);
+    callback set-cal-width(int);
+    callback set-cal-rows(int);
+    callback refresh-cal();
+    callback match-cal-to-sys();
+    callback add-cal-url(string);
+    callback remove-cal-source(int);
+    callback uncomment-cal();
+    callback open-cal-cfg();
+
+    // SysMon callbacks
+    callback set-sys-visible(bool);
+    callback set-sys-layer(int);
+    callback set-sys-refresh(int);
+    callback set-sys-opacity(int);
+    callback set-sys-width(int);
+    callback set-sys-height(int);
+    callback refresh-sys();
+    callback match-sys-to-cal();
+    callback open-sys-cfg();
+
+    // Weather callbacks
+    callback set-weather-visible(bool);
+    callback set-weather-provider(int);
+    callback set-weather-days(int);
+    callback apply-weather-city(string);
+    callback save-yandex-key(string);
+    callback clear-yandex-key();
+    callback set-weather-layer(int);
+    callback set-weather-opacity(int);
+    callback set-weather-refresh(int);
+    callback set-weather-width(int);
+    callback set-weather-height(int);
+    callback refresh-weather();
+    callback open-weather-cfg();
+
+    // Notes callbacks
+    callback set-notes-visible(bool);
+    callback set-notes-layer(int);
+    callback set-notes-opacity(int);
+    callback toggle-notes-pane(int);
+    callback open-notes-folder();
+
+    spacing: 12px;
+
+    // 4-widget segmented selector
+    HorizontalLayout {
+        spacing: 6px;
+        GlassButton {
+            horizontal-stretch: 1;
+            label: Theme.is-ru ? "Календарь" : "Calendar";
+            active: root.selected-widget == 0;
+            compact: true;
+            clicked => { root.selected-widget = 0; root.select-widget(0); }
+        }
+        GlassButton {
+            horizontal-stretch: 1;
+            label: Theme.is-ru ? "Монитор" : "SysMonitor";
+            active: root.selected-widget == 1;
+            compact: true;
+            clicked => { root.selected-widget = 1; root.select-widget(1); }
+        }
+        GlassButton {
+            horizontal-stretch: 1;
+            label: Theme.is-ru ? "Погода" : "Weather";
+            active: root.selected-widget == 2;
+            compact: true;
+            clicked => { root.selected-widget = 2; root.select-widget(2); }
+        }
+        GlassButton {
+            horizontal-stretch: 1;
+            label: Theme.is-ru ? "Заметки" : "Notes";
+            active: root.selected-widget == 3;
+            compact: true;
+            clicked => { root.selected-widget = 3; root.select-widget(3); }
+        }
+    }
+
+    // Subtab 0: Google Calendar
+    if (root.selected-widget == 0) : AccordionCard {
+        title: "Google Календарь (.ics)";
+        summary: root.cal-visible ? "\(root.cal-width) px · \(root.cal-rows) стр." : "Скрыт";
+        expanded: root.exp-cal;
+        toggled => { root.toggle-section("cal_main"); }
+
+        SettingRow {
+            title: Theme.is-ru ? "Показывать виджет календаря" : "Show Calendar Widget";
+            GlassButton { label: "↻"; compact: true; clicked => { root.refresh-cal(); } }
+            GlassButton { label: "widgets.cfg"; compact: true; clicked => { root.open-cal-cfg(); } }
+            GlassSwitch { checked: root.cal-visible; toggled(v) => { root.set-cal-visible(v); } }
+        }
+        SettingRow {
+            title: Theme.is-ru ? "Слой окна" : "Window Layer";
+            CustomComboBox {
+                model: ["Над обоями", "Обычный", "Поверх окон"];
+                current-index: root.cal-layer;
+                current-value: root.cal-layer == 1 ? "Обычный" : (root.cal-layer == 2 ? "Поверх окон" : "Над обоями");
+                selected(idx) => { root.set-cal-layer(idx); }
+            }
+        }
+        SettingRow {
+            title: Theme.is-ru ? "Период событий" : "Event Horizon";
+            CustomComboBox {
+                model: ["Сегодня", "7 дней", "30 дней", "Все"];
+                current-index: root.cal-period;
+                current-value: root.cal-period == 0 ? "Сегодня" : (root.cal-period == 1 ? "7 дней" : (root.cal-period == 3 ? "Все" : "30 дней"));
+                selected(idx) => { root.set-cal-period(idx); }
+            }
+        }
+        SettingRow {
+            title: Theme.is-ru ? "Частота обновления .ics" : "Sync Interval";
+            CustomComboBox {
+                model: ["5 мин", "15 мин", "30 мин", "1 час", "3 часа"];
+                current-index: root.cal-sync-idx;
+                current-value: root.cal-sync-idx == 0 ? "5 мин" : (root.cal-sync-idx == 1 ? "15 мин" : (root.cal-sync-idx == 3 ? "1 час" : (root.cal-sync-idx == 4 ? "3 часа" : "30 мин")));
+                selected(idx) => { root.set-cal-sync(idx); }
+            }
+        }
+        SettingRow {
+            title: Theme.is-ru ? "Прозрачность" : "Opacity";
+            GlassSlider { min-val: 20; max-val: 100; value: root.cal-opacity; unit: "%"; changed(v) => { root.set-cal-opacity(v); } }
+        }
+        SettingRow {
+            title: Theme.is-ru ? "Ширина / число строк" : "Width / Visible Rows";
+            GlassButton { label: Theme.is-ru ? "= Монитор" : "= SysMon"; compact: true; clicked => { root.match-cal-to-sys(); } }
+            GlassSlider { min-val: 280; max-val: 860; value: root.cal-width; unit: " px"; changed(v) => { root.set-cal-width(v); } }
+        }
+        SettingRow {
+            title: Theme.is-ru ? "Видимых строк" : "Visible Rows";
+            GlassSlider { min-val: 3; max-val: 16; value: root.cal-rows; unit: ""; changed(v) => { root.set-cal-rows(v); } }
+        }
+        SettingRow {
+            title: Theme.is-ru ? "Добавить календарь (.ics URL)" : "Add Calendar (.ics URL)";
+            GlassInput {
+                width: 220px;
+                text <=> root.cal-url-input;
+                placeholder: "https://.../basic.ics";
+            }
+            GlassButton {
+                label: "+";
+                variant: "primary";
+                compact: true;
+                clicked => {
+                    root.add-cal-url(root.cal-url-input);
+                    root.cal-url-input = "";
+                }
+            }
+        }
+        if (root.cal-commented-hint) : SettingRow {
+            title: Theme.is-ru ? "В widgets.cfg есть закомментированные календари (#)" : "Commented calendars found in widgets.cfg";
+            GlassButton { label: Theme.is-ru ? "Включить" : "Enable"; variant: "primary"; compact: true; clicked => { root.uncomment-cal(); } }
+        }
+        for src in root.cal-sources : SettingRow {
+            title: src.id;
+            subtitle: src.url;
+            GlassButton { label: "✕"; variant: "danger"; compact: true; clicked => { root.remove-cal-source(src.index); } }
+        }
+    }
+
+    // Subtab 1: SysMonitor
+    if (root.selected-widget == 1) : AccordionCard {
+        title: Theme.is-ru ? "Системный монитор (CPU / GPU / RAM / Сеть)" : "System Monitor";
+        summary: root.sys-visible ? "\(root.sys-width)×\(root.sys-height)" : "Скрыт";
+        expanded: root.exp-sys;
+        toggled => { root.toggle-section("sys_main"); }
+
+        SettingRow {
+            title: Theme.is-ru ? "Показывать Системный монитор" : "Show System Monitor";
+            GlassButton { label: "↻"; compact: true; clicked => { root.refresh-sys(); } }
+            GlassButton { label: "sysmon.cfg"; compact: true; clicked => { root.open-sys-cfg(); } }
+            GlassSwitch { checked: root.sys-visible; toggled(v) => { root.set-sys-visible(v); } }
+        }
+        SettingRow {
+            title: Theme.is-ru ? "Слой окна" : "Window Layer";
+            CustomComboBox {
+                model: ["Над обоями", "Обычный", "Поверх окон"];
+                current-index: root.sys-layer;
+                current-value: root.sys-layer == 1 ? "Обычный" : (root.sys-layer == 2 ? "Поверх окон" : "Над обоями");
+                selected(idx) => { root.set-sys-layer(idx); }
+            }
+        }
+        SettingRow {
+            title: Theme.is-ru ? "Интервал опроса" : "Refresh Interval";
+            CustomComboBox {
+                model: ["1 сек", "2 сек", "3 сек", "5 сек", "10 сек"];
+                current-index: root.sys-refresh-idx;
+                current-value: root.sys-refresh-idx == 0 ? "1 сек" : (root.sys-refresh-idx == 2 ? "3 сек" : (root.sys-refresh-idx == 3 ? "5 сек" : (root.sys-refresh-idx == 4 ? "10 сек" : "2 сек")));
+                selected(idx) => { root.set-sys-refresh(idx); }
+            }
+        }
+        SettingRow {
+            title: Theme.is-ru ? "Прозрачность" : "Opacity";
+            GlassSlider { min-val: 20; max-val: 100; value: root.sys-opacity; unit: "%"; changed(v) => { root.set-sys-opacity(v); } }
+        }
+        SettingRow {
+            title: Theme.is-ru ? "Ширина виджета" : "Widget Width";
+            GlassButton { label: Theme.is-ru ? "= Календарь" : "= Calendar"; compact: true; clicked => { root.match-sys-to-cal(); } }
+            GlassSlider { min-val: 280; max-val: 820; value: root.sys-width; unit: " px"; changed(v) => { root.set-sys-width(v); } }
+        }
+        SettingRow {
+            title: Theme.is-ru ? "Высота виджета" : "Widget Height";
+            GlassSlider { min-val: 280; max-val: 760; value: root.sys-height; unit: " px"; changed(v) => { root.set-sys-height(v); } }
+        }
+    }
+
+    // Subtab 2: Weather (Open-Meteo + Yandex Hybrid 3-7d!)
+    if (root.selected-widget == 2) : AccordionCard {
+        title: Theme.is-ru ? "Погода (Open-Meteo / Яндекс.Погода)" : "Weather Widget";
+        summary: root.weather-city;
+        expanded: root.exp-weather;
+        toggled => { root.toggle-section("weather_main"); }
+
+        SettingRow {
+            title: Theme.is-ru ? "Показывать виджет погоды" : "Show Weather Widget";
+            GlassButton { label: "↻"; compact: true; clicked => { root.refresh-weather(); } }
+            GlassButton { label: "weather.cfg"; compact: true; clicked => { root.open-weather-cfg(); } }
+            GlassSwitch { checked: root.weather-visible; toggled(v) => { root.set-weather-visible(v); } }
+        }
+        SettingRow {
+            title: Theme.is-ru ? "Город" : "City";
+            subtitle: Theme.is-ru ? "Геокодируется автоматически (например, Москва, Казань)" : "Auto-geocoded city name";
+            GlassInput {
+                width: 170px;
+                text <=> root.weather-city;
+                placeholder: "Москва";
+                accepted(val) => { root.apply-weather-city(val); }
+            }
+            GlassButton {
+                label: Theme.is-ru ? "Применить" : "Apply";
+                variant: "primary";
+                compact: true;
+                clicked => { root.apply-weather-city(root.weather-city); }
+            }
+        }
+        SettingRow {
+            title: Theme.is-ru ? "Источник прогноза" : "Forecast Provider";
+            subtitle: root.weather-provider-idx == 1
+                ? "Гибридный режим: факт, часы и 1–2д — Яндекс.Погода; дни 3–7 автоматически добираются из Open-Meteo без ключа."
+                : "Open-Meteo — бесплатный прогноз до 7 дней без API-ключа";
+            CustomComboBox {
+                model: ["Open-Meteo (без ключа)", "Яндекс.Погода (гибридный)"];
+                current-index: root.weather-provider-idx;
+                current-value: root.weather-provider-idx == 1 ? "Яндекс.Погода (гибридный)" : "Open-Meteo (без ключа)";
+                selected(idx) => { root.set-weather-provider(idx); }
+            }
+        }
+        SettingRow {
+            title: Theme.is-ru ? "Горизонт прогноза" : "Forecast Days";
+            CustomComboBox {
+                model: ["1 день", "3 дня", "7 дней"];
+                current-index: root.weather-days-idx;
+                current-value: root.weather-days-idx == 0 ? "1 день" : (root.weather-days-idx == 2 ? "7 дней" : "3 дня");
+                selected(idx) => { root.set-weather-days(idx); }
+            }
+        }
+        if (root.weather-provider-idx == 1) : SettingRow {
+            title: "X-Yandex-Weather-Key";
+            subtitle: root.weather-has-yandex-key ? "Ключ сохранён в Windows Credential Manager" : "Введите API-ключ Яндекс.Погоды";
+            GlassInput {
+                width: 160px;
+                text <=> root.weather-yandex-key-input;
+                placeholder: "API Key";
+                is-password: true;
+            }
+            GlassButton {
+                label: Theme.is-ru ? "Сохранить" : "Save";
+                compact: true;
+                clicked => {
+                    root.save-yandex-key(root.weather-yandex-key-input);
+                    root.weather-yandex-key-input = "";
+                }
+            }
+            if (root.weather-has-yandex-key) : GlassButton {
+                label: "✕";
+                variant: "danger";
+                compact: true;
+                clicked => { root.clear-yandex-key(); }
+            }
+        }
+        SettingRow {
+            title: Theme.is-ru ? "Слой окна" : "Window Layer";
+            CustomComboBox {
+                model: ["Над обоями", "Обычный", "Поверх окон"];
+                current-index: root.weather-layer;
+                current-value: root.weather-layer == 1 ? "Обычный" : (root.weather-layer == 2 ? "Поверх окон" : "Над обоями");
+                selected(idx) => { root.set-weather-layer(idx); }
+            }
+        }
+        SettingRow {
+            title: Theme.is-ru ? "Прозрачность" : "Opacity";
+            GlassSlider { min-val: 20; max-val: 100; value: root.weather-opacity; unit: "%"; changed(v) => { root.set-weather-opacity(v); } }
+        }
+        SettingRow {
+            title: Theme.is-ru ? "Интервал обновления" : "Refresh Interval";
+            GlassSlider { min-val: 5; max-val: 180; value: root.weather-refresh-min; unit: " м"; changed(v) => { root.set-weather-refresh(v); } }
+        }
+        SettingRow {
+            title: Theme.is-ru ? "Ширина / Высота" : "Width / Height";
+            GlassSlider { min-val: 300; max-val: 760; value: root.weather-width; unit: " px"; changed(v) => { root.set-weather-width(v); } }
+        }
+        SettingRow {
+            title: Theme.is-ru ? "Высота виджета" : "Widget Height";
+            GlassSlider { min-val: 300; max-val: 760; value: root.weather-height; unit: " px"; changed(v) => { root.set-weather-height(v); } }
+        }
+    }
+
+    // Subtab 3: Notes (Slint 3-column NotesWindow)
+    if (root.selected-widget == 3) : AccordionCard {
+        title: Theme.is-ru ? "Заметки и задачи (Slint · Mica)" : "Notes & Tasks (Slint · Mica)";
+        summary: root.notes-visible ? "Открыто" : "Скрыто";
+        expanded: root.exp-notes;
+        toggled => { root.toggle-section("notes_main"); }
+
+        SettingRow {
+            title: Theme.is-ru ? "Открыть окно Заметок" : "Show Notes Window";
+            subtitle: Theme.is-ru
+                ? "Ctrl+1 / Ctrl+2 / Ctrl+3 скрывают и открывают колонки"
+                : "Ctrl+1 / Ctrl+2 / Ctrl+3 toggle columns";
+            GlassButton { label: Theme.is-ru ? "Папка заметок" : "Notes Folder"; compact: true; clicked => { root.open-notes-folder(); } }
+            GlassSwitch { checked: root.notes-visible; toggled(v) => { root.set-notes-visible(v); } }
+        }
+        SettingRow {
+            title: Theme.is-ru ? "Слой окна" : "Window Layer";
+            CustomComboBox {
+                model: ["Над обоями", "Обычный", "Поверх окон"];
+                current-index: root.notes-layer;
+                current-value: root.notes-layer == 0 ? "Над обоями" : (root.notes-layer == 2 ? "Поверх окон" : "Обычный");
+                selected(idx) => { root.set-notes-layer(idx); }
+            }
+        }
+        SettingRow {
+            title: Theme.is-ru ? "Прозрачность" : "Opacity";
+            GlassSlider { min-val: 20; max-val: 100; value: root.notes-opacity; unit: "%"; changed(v) => { root.set-notes-opacity(v); } }
+        }
+        SettingRow {
+            title: Theme.is-ru ? "Видимые колонки (минимум 1)" : "Visible Panes (min 1)";
+            GlassButton { label: Theme.is-ru ? "Папки" : "Folders"; active: root.notes-pane-folders; compact: true; clicked => { root.toggle-notes-pane(0); } }
+            GlassButton { label: Theme.is-ru ? "Список" : "List"; active: root.notes-pane-list; compact: true; clicked => { root.toggle-notes-pane(1); } }
+            GlassButton { label: Theme.is-ru ? "Редактор" : "Editor"; active: root.notes-pane-editor; compact: true; clicked => { root.toggle-notes-pane(2); } }
+        }
+    }
+}

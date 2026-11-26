@@ -28,20 +28,8 @@ impl<I: IconProvider> AppController<I> {
     ) {
         self.settings_ui.active_tab = tab;
         self.settings_ui.active_browser_tab = BrowserTab::Main;
-        self.settings_ui.scroll_y = 0;
-        self.last_settings_tab = None;
-        self.last_widget_subtab = None;
-        let title = format!("Настройки — asrbox v{APP_VERSION}");
-        let w = self.settings_ui.width;
-        let h = self.settings_ui.height;
-        if let Err(err) = host.open_settings_window(&title, w, h) {
-            self.debug
-                .log(host.local_time_now(), LogLevel::Error, "settings", err);
-            return;
-        }
-        let pal = self.appearance.palette();
-        host.apply_settings_theme(pal);
-        self.render_settings_ui(host);
+        let sub = self.settings_ui.selected_widget;
+        self.open_slint_settings(host, tab, sub);
     }
 
     pub(crate) fn open_widgets_subtab<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
@@ -50,10 +38,11 @@ impl<I: IconProvider> AppController<I> {
         sub: WidgetSubTab,
     ) {
         self.settings_ui.selected_widget = sub;
-        self.open_settings_tab(host, SettingsTab::Widgets);
+        self.open_slint_settings(host, SettingsTab::Widgets, sub);
     }
 
     pub(crate) fn render_settings_ui<H: ToolsPlatform>(&mut self, host: &mut H) {
+        self.notify_slint_refresh(host, false);
         if !host.is_settings_window_open() {
             return;
         }

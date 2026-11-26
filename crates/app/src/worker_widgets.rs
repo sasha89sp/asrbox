@@ -7,8 +7,8 @@ use std::time::Instant;
 
 use asrbox_core::{SupervisorCmd, WorkerMsg};
 use asrbox_mod_widgets::{
-    CalendarWidget, NotesWidget, SysMonitorWidget, WeatherWidget, CALENDAR_WIDGET_ID,
-    SYS_WIDGET_ID, WEATHER_WIDGET_ID,
+    CalendarWidget, SysMonitorWidget, WeatherWidget, CALENDAR_WIDGET_ID, SYS_WIDGET_ID,
+    WEATHER_WIDGET_ID,
 };
 use asrbox_platform_api::{
     load_appearance_config, load_menu_config, DockPlatform, PlatformEvent, WidgetPlatform,
@@ -24,7 +24,6 @@ struct WorkerWidgets {
     cal: CalendarWidget,
     sys: SysMonitorWidget,
     weather: WeatherWidget,
-    notes: NotesWidget,
 }
 
 impl WorkerWidgets {
@@ -40,28 +39,19 @@ impl WorkerWidgets {
         let mut cal = CalendarWidget::load(paths.widgets_cfg, paths.cache_dir);
         let mut sys = SysMonitorWidget::load(paths.sysmon_cfg);
         let mut weather = WeatherWidget::load(paths.weather_cfg);
-        let mut notes = NotesWidget::load(paths.notes_cfg, paths.notes_dir.join("notes_db.cfg"));
 
         cal.set_menu_visibility(vis);
         sys.set_menu_visibility(vis);
         weather.set_menu_visibility(vis);
-        notes.set_menu_visibility(vis);
         cal.set_palette(host, pal);
         sys.set_palette(host, pal);
         weather.set_palette(host, pal);
-        notes.set_palette(host, pal);
 
         cal.sync_window(host, safe_mode)?;
         sys.sync_window(host, safe_mode)?;
         weather.sync_window(host, safe_mode)?;
-        notes.sync_window(host, safe_mode)?;
         Ok((
-            Self {
-                cal,
-                sys,
-                weather,
-                notes,
-            },
+            Self { cal, sys, weather },
             paths.appearance_cfg,
             paths.menus_cfg,
         ))
@@ -69,11 +59,10 @@ impl WorkerWidgets {
 
     fn summary(&self) -> String {
         format!(
-            "Календарь [{}], Монитор [{}], Погода [{}], Заметки [{}]",
+            "Календарь [{}], Монитор [{}], Погода [{}]",
             self.cal.status_summary(),
             self.sys.status_summary(),
             self.weather.status_summary(),
-            self.notes.status_summary(),
         )
     }
 }
@@ -132,16 +121,13 @@ fn handle_supervisor_cmd(
             w.cal.set_menu_visibility(vis);
             w.sys.set_menu_visibility(vis);
             w.weather.set_menu_visibility(vis);
-            w.notes.set_menu_visibility(vis);
             w.cal.set_palette(platform, pal);
             w.sys.set_palette(platform, pal);
             w.weather.set_palette(platform, pal);
-            w.notes.set_palette(platform, pal);
             let _ = w.cal.reload_config_and_refresh(platform);
             let _ = w.cal.sync_window(platform, *safe_mode);
             let _ = w.sys.reload_config(platform, *safe_mode);
             let _ = w.weather.reload_config(platform, *safe_mode);
-            let _ = w.notes.reload_config(platform, *safe_mode);
             emit_log(
                 "INFO",
                 "widgets",
@@ -175,11 +161,6 @@ fn handle_supervisor_cmd(
                 "http",
                 "Ручное обновление прогноза погоды".to_owned(),
             );
-        }
-        SupervisorCmd::ToggleNotes => {
-            *safe_mode = false;
-            w.notes.toggle_visible(platform, false);
-            emit_changed();
         }
         SupervisorCmd::Shutdown => platform.request_quit(),
         _ => {}
@@ -284,11 +265,6 @@ fn handle_widget_event(
             if let Some((is_err, msg)) = outcome {
                 emit_log(if is_err { "ERROR" } else { "INFO" }, "http", msg);
             }
-            stats.record_frame(t0);
-        }
-        PlatformEvent::NotesEvent(nev) => {
-            let msg = w.notes.handle_event(host, nev);
-            route_widget_msg(msg);
             stats.record_frame(t0);
         }
         _ => {}

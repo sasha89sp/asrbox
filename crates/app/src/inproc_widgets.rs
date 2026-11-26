@@ -2,11 +2,16 @@
 
 use std::time::Instant;
 
+use asrbox_core::IsolationMode;
 use asrbox_mod_debug::LogLevel;
 use asrbox_mod_settings::{SettingsTab, WidgetSubTab};
-use asrbox_mod_widgets::{CALENDAR_WIDGET_ID, SYS_WIDGET_ID, WEATHER_WIDGET_ID};
+use asrbox_mod_widgets::{
+    CalendarWidget, SysMonitorWidget, WeatherWidget, CALENDAR_WIDGET_ID, SYS_WIDGET_ID,
+    WEATHER_WIDGET_ID,
+};
 use asrbox_platform_api::{
-    DockPlatform, IconProvider, PixelPoint, PlatformEvent, ToolsPlatform, WidgetPlatform,
+    DockPlatform, IconProvider, PixelPoint, PlatformEvent, ThemePalette, ToolsPlatform,
+    WidgetPlatform,
 };
 
 use crate::worker_bus::level_for_msg;
@@ -76,13 +81,6 @@ impl<I: IconProvider> AppController<I> {
             PlatformEvent::WidgetWheel { widget_id, delta } if widget_id == CALENDAR_WIDGET_ID => {
                 if let Some(c) = self.calendar.as_mut() {
                     c.on_wheel(host, delta);
-                    self.record_frame("widgets", t0);
-                }
-            }
-            PlatformEvent::NotesEvent(nev) => {
-                if let Some(n) = self.notes.as_mut() {
-                    let m = n.handle_event(host, nev);
-                    classify_widget_reply(m, &mut open_tab, &mut msg_out);
                     self.record_frame("widgets", t0);
                 }
             }
@@ -243,6 +241,54 @@ impl<I: IconProvider> AppController<I> {
                 self.record_frame("widgets", t0);
             }
             _ => {}
+        }
+    }
+
+    pub(crate) fn sync_inproc_widgets<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
+        &mut self,
+        host: &mut H,
+        pal: ThemePalette,
+    ) {
+        let now = host.local_time_now();
+        let want_inproc_w =
+            self.modules_cfg.isolation == IsolationMode::InProc && self.modules_cfg.widgets_enabled;
+        let wvis = self.menus_cfg.widget;
+        if want_inproc_w && self.calendar.is_none() {
+            let mut cal =
+                CalendarWidget::load(self.paths.widgets_cfg.clone(), self.paths.cache_dir.clone());
+            cal.set_menu_visibility(wvis);
+            cal.set_palette(host, pal);
+            let _ = cal.sync_window(host, self.safe_mode);
+            self.debug.log(
+                now,
+                LogLevel::Info,
+                "widgets",
+                format!("Календарь (inproc): {}", cal.status_summary()),
+            );
+            self.calendar = Some(cal);
+        } else if !want_inproc_w && self.calendar.take().is_some() {
+            let _ = host.destroy_widget_window(CALENDAR_WIDGET_ID);
+        }
+        if want_inproc_w && self.sysmon.is_none() {
+            let mut sys = SysMonitorWidget::load(self.paths.sysmon_cfg.clone());
+            sys.set_menu_visibility(wvis);
+            sys.set_palette(host, pal);
+            let _ = sys.sync_window(host, self.safe_mode);
+            self.sysmon = Some(sys);
+        } else if !want_inproc_w && self.sysmon.take().is_some() {
+            let _ = host.destroy_widget_window(SYS_WIDGET_ID);
+        }
+        if want_inproc_w && self.weather.is_none() {
+            let mut weather = WeatherWidget::load(self.paths.weather_cfg.clone());
+            weather.set_menu_visibility(wvis);
+            weather.set_palette(host, pal);
+            let _ = weather.sync_window(host, self.safe_mode);
+            self.weather = Some(weather);
+        } else if !want_inproc_w && self.weather.take().is_some() {
+            let _ = host.destroy_widget_window(WEATHER_WIDGET_ID);
+        }
+        if !self.modules_cfg.widgets_enabled {
+            self.slint_ui.close_notes();
         }
     }
 }

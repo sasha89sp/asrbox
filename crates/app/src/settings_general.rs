@@ -26,19 +26,11 @@ impl<I: IconProvider> AppController<I> {
         tab: BrowserTab,
     ) {
         self.settings_ui.open_browser_tab(tab);
-        if !host.is_settings_window_open() {
-            let title = format!("Настройки — asrbox v{APP_VERSION}");
-            let w = self.settings_ui.width;
-            let h = self.settings_ui.height;
-            if let Err(err) = host.open_settings_window(&title, w, h) {
-                self.debug
-                    .log(host.local_time_now(), LogLevel::Error, "settings", err);
-                return;
-            }
-            let pal = self.appearance.palette();
-            host.apply_settings_theme(pal);
-        }
-        self.render_settings_ui(host);
+        self.open_slint_settings(
+            host,
+            asrbox_mod_settings::SettingsTab::General,
+            self.settings_ui.selected_widget,
+        );
     }
 
     pub(crate) fn apply_appearance_change<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
@@ -71,15 +63,13 @@ impl<I: IconProvider> AppController<I> {
         if let Some(weather) = self.weather.as_mut() {
             weather.set_palette(host, pal);
         }
-        if let Some(notes) = self.notes.as_mut() {
-            notes.set_palette(host, pal);
-        }
         if let Some(ov) = self.overlay.as_mut() {
             ov.set_palette(host, pal);
         }
         for id in ModuleId::ALL {
             self.reload_module_config(host, id);
         }
+        self.notify_slint_refresh(host, true);
     }
 
     pub(crate) fn apply_general_setting<H: DockPlatform + WidgetPlatform + ToolsPlatform>(

@@ -1,0 +1,33 @@
+[package]
+name = "asrbox-ui-slint"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+asrbox-core = { path = "../core" }
+asrbox-mod-about = { path = "../mod-about" }
+asrbox-mod-backup = { path = "../mod-backup" }
+asrbox-mod-dock = { path = "../mod-dock" }
+asrbox-mod-overlay = { path = "../mod-overlay" }
+asrbox-mod-settings = { path = "../mod-settings" }
+asrbox-mod-webdav = { path = "../mod-webdav" }
+asrbox-mod-widgets = { path = "../mod-widgets" }
+asrbox-platform-api = { path = "../platform-api" }
+slint = { version = "~1.18", default-features = false, features = [
+    "compat-1-2",
+    "std",
+    "backend-winit",
+    "renderer-software",
+    "unstable-winit-030",
+] }
+
+[target.'cfg(windows)'.dependencies]
+window-vibrancy = "0.8.1"
+
+[build-dependencies]
+slint-build = "~1.18"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"

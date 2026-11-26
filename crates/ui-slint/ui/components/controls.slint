@@ -1,0 +1,668 @@
+import { Theme } from "../theme.slint";
+
+export component GlassSwitch inherits Rectangle {
+    in-out property <bool> checked: false;
+    callback toggled(bool);
+
+    width: 40px;
+    height: 22px;
+    border-radius: 11px;
+    background: root.checked ? Theme.accent : (ta.has-hover ? Theme.hover-bg : Theme.input-bg);
+    border-width: 1px;
+    border-color: root.checked ? Theme.accent : Theme.border-strong;
+
+    animate background { duration: 150ms; easing: ease-out; }
+
+    Rectangle {
+        x: root.checked ? 20px : 3px;
+        y: 3px;
+        width: 16px;
+        height: 16px;
+        border-radius: 8px;
+        background: root.checked ? #FFFFFF : Theme.text-secondary;
+        drop-shadow-blur: 3px;
+        drop-shadow-color: rgba(0, 0, 0, 0.30);
+
+        animate x { duration: 150ms; easing: ease-out; }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.toggled(!root.checked);
+        }
+    }
+}
+
+export component GlassButton inherits Rectangle {
+    in property <string> label;
+    in property <string> variant: "neutral"; // "neutral" | "primary" | "danger" | "subtle"
+    in property <bool> active: false;
+    in property <bool> compact: false;
+    callback clicked();
+
+    min-height: root.compact ? 26px : 30px;
+    border-radius: 6px;
+    background:
+        root.variant == "primary" ? (ta.pressed ? Theme.accent : (ta.has-hover ? Theme.accent-hover : Theme.accent)) :
+        root.variant == "danger" ? (ta.pressed ? #C42B1C : (ta.has-hover ? Theme.danger : Theme.input-bg)) :
+        root.active ? Theme.accent-tint :
+        (ta.pressed ? Theme.press-bg : (ta.has-hover ? Theme.hover-bg : (root.variant == "subtle" ? transparent : Theme.input-bg)));
+    border-width: 1px;
+    border-color:
+        root.variant == "primary" ? Theme.accent :
+        (root.variant == "danger" && ta.has-hover) ? Theme.danger :
+        root.active ? Theme.accent :
+        (root.variant == "subtle" && !ta.has-hover ? transparent : Theme.border-color);
+
+    animate background { duration: 130ms; easing: ease-out; }
+
+    HorizontalLayout {
+        padding-left: root.compact ? 9px : 12px;
+        padding-right: root.compact ? 9px : 12px;
+        padding-top: root.compact ? 3px : 5px;
+        padding-bottom: root.compact ? 3px : 5px;
+        alignment: center;
+
+        Text {
+            text: root.label;
+            color:
+                root.variant == "primary" ? Theme.accent-fg :
+                (root.variant == "danger" && ta.has-hover) ? #FFFFFF :
+                Theme.text-primary;
+            font-size: root.compact ? 11.5px : 12px;
+            font-weight: root.variant == "primary" ? 600 : 500;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component GlassInput inherits Rectangle {
+    in-out property <string> text: "";
+    in property <string> placeholder: "";
+    in property <bool> is-password: false;
+    in property <string> trailing-icon: "";
+    callback edited(string);
+    callback accepted(string);
+
+    height: 30px;
+    border-radius: 6px;
+    background: Theme.input-bg;
+    border-width: 1px;
+    border-color: ti.has-focus ? Theme.accent : Theme.border-color;
+
+    animate border-color { duration: 120ms; }
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 8px;
+        spacing: 6px;
+        alignment: stretch;
+
+        Rectangle {
+            horizontal-stretch: 1;
+            background: transparent;
+            clip: true;
+
+            if (root.text == "") : Text {
+                width: 100%;
+                height: 100%;
+                text: root.placeholder;
+                color: Theme.text-muted;
+                font-size: 12px;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+
+            ti := TextInput {
+                width: 100%;
+                height: 100%;
+                text <=> root.text;
+                color: Theme.text-primary;
+                font-size: 12px;
+                single-line: true;
+                input-type: root.is-password ? InputType.password : InputType.text;
+                selection-background-color: Theme.accent;
+                selection-foreground-color: #FFFFFF;
+                vertical-alignment: center;
+                edited => { root.edited(self.text); }
+                accepted => { root.accepted(self.text); }
+            }
+        }
+
+        if (root.trailing-icon != "") : Text {
+            text: root.trailing-icon;
+            color: Theme.text-muted;
+            font-size: 12px;
+            vertical-alignment: center;
+        }
+    }
+}
+
+export component GlassSlider inherits HorizontalLayout {
+    in property <int> value: 50;
+    in property <int> min-val: 0;
+    in property <int> max-val: 100;
+    in property <string> unit: "%";
+    callback changed(int);
+
+    private property <bool> dragging: false;
+    private property <int> drag-value: 50;
+    private property <int> display-value: root.dragging ? root.drag-value : root.value;
+
+    pure function compute-value(mx: length, w: length) -> int {
+        return Math.clamp(
+            Math.round(
+                (root.min-val * 1.0)
+                    + Math.clamp(mx / Math.max(1px, w), 0.0, 1.0)
+                        * ((root.max-val - root.min-val) * 1.0)
+            ),
+            root.min-val,
+            root.max-val
+        );
+    }
+
+    spacing: 10px;
+    alignment: end;
+
+    track-box := Rectangle {
+        width: 150px;
+        height: 26px;
+        background: transparent;
+
+        property <float> ratio: Math.clamp(
+            ((root.display-value - root.min-val) * 1.0)
+                / Math.max(1.0, (root.max-val - root.min-val) * 1.0),
+            0.0,
+            1.0
+        );
+
+        // Background track
+        Rectangle {
+            y: 11px;
+            width: parent.width;
+            height: 4px;
+            border-radius: 2px;
+            background: Theme.input-bg;
+            border-width: 1px;
+            border-color: Theme.border-color;
+        }
+
+        // Active accent fill
+        Rectangle {
+            y: 11px;
+            width: parent.width * parent.ratio;
+            height: 4px;
+            border-radius: 2px;
+            background: Theme.accent;
+        }
+
+        // Thumb with white ring
+        Rectangle {
+            x: Math.clamp(parent.width * parent.ratio - 7px, 0px, parent.width - 14px);
+            y: 6px;
+            width: 14px;
+            height: 14px;
+            border-radius: 7px;
+            background: #FFFFFF;
+            border-width: 2px;
+            border-color: Theme.accent;
+            drop-shadow-blur: 4px;
+            drop-shadow-color: rgba(0, 0, 0, 0.35);
+        }
+
+        TouchArea {
+            mouse-cursor: pointer;
+
+            pointer-event(ev) => {
+                if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
+                    root.dragging = true;
+                    root.drag-value = root.compute-value(self.mouse-x, self.width);
+                } else if (ev.kind == PointerEventKind.up || ev.kind == PointerEventKind.cancel) {
+                    if (root.dragging) {
+                        root.drag-value = root.compute-value(self.mouse-x, self.width);
+                        root.dragging = false;
+                        root.changed(root.drag-value);
+                    }
+                }
+            }
+
+            moved => {
+                if (self.pressed && root.dragging) {
+                    root.drag-value = root.compute-value(self.mouse-x, self.width);
+                }
+            }
+        }
+    }
+
+    // Value pill badge (52x26px)
+    Rectangle {
+        width: 52px;
+        height: 26px;
+        border-radius: 6px;
+        background: Theme.input-bg;
+        border-width: 1px;
+        border-color: Theme.border-color;
+
+        Text {
+            width: 100%;
+            height: 100%;
+            text: "\(root.display-value)\(root.unit)";
+            color: Theme.text-primary;
+            font-size: 11.5px;
+            font-weight: 600;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+}
+
+export component CustomComboBox inherits Rectangle {
+    in property <[string]> model: [];
+    in property <int> current-index: 0;
+    in property <string> current-value: "";
+    callback selected(int);
+
+    min-width: 180px;
+    height: 30px;
+    border-radius: 6px;
+    background: ta.has-hover ? Theme.hover-bg : Theme.input-bg;
+    border-width: 1px;
+    border-color: ta.has-hover ? Theme.border-strong : Theme.border-color;
+
+    animate background { duration: 120ms; }
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 8px;
+        alignment: stretch;
+
+        Text {
+            horizontal-stretch: 1;
+            text: root.current-value;
+            color: Theme.text-primary;
+            font-size: 12px;
+            font-weight: 500;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        Text {
+            text: "⌄";
+            color: Theme.text-secondary;
+            font-size: 12px;
+            vertical-alignment: center;
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { popup.show(); }
+    }
+
+    popup := PopupWindow {
+        x: 0px;
+        y: root.height + 4px;
+        width: Math.max(root.width, 190px);
+        close-policy: PopupClosePolicy.close-on-click-outside;
+
+        Rectangle {
+            border-radius: 8px;
+            background: Theme.popup-bg;
+            border-width: 1px;
+            border-color: Theme.border-strong;
+            drop-shadow-blur: 16px;
+            drop-shadow-color: rgba(0, 0, 0, 0.42);
+            drop-shadow-offset-y: 4px;
+
+            VerticalLayout {
+                padding: 4px;
+                spacing: 2px;
+
+                for item[idx] in root.model : Rectangle {
+                    height: 30px;
+                    border-radius: 6px;
+                    background: idx == root.current-index
+                        ? Theme.accent-tint
+                        : (item-ta.has-hover ? Theme.hover-bg : transparent);
+
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        spacing: 6px;
+
+                        VerticalLayout {
+                            alignment: center;
+                            Rectangle {
+                                width: 3px;
+                                height: 14px;
+                                border-radius: 1.5px;
+                                background: idx == root.current-index ? Theme.accent : transparent;
+                            }
+                        }
+
+                        Text {
+                            horizontal-stretch: 1;
+                            text: item;
+                            color: Theme.text-primary;
+                            font-size: 12px;
+                            font-weight: idx == root.current-index ? 600 : 400;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                    }
+
+                    item-ta := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            root.selected(idx);
+                            popup.close();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component SettingRow inherits Rectangle {
+    in property <string> title;
+    in property <string> subtitle: "";
+    in property <string> badge-icon: "";
+    in property <color> badge-bg: transparent;
+    in property <bool> show-divider: true;
+
+    min-height: root.subtitle == "" ? 44px : 54px;
+    background: transparent;
+
+    if (root.show-divider) : Rectangle {
+        y: 0px;
+        width: 100%;
+        height: 1px;
+        background: Theme.divider-color;
+    }
+
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        padding-top: 8px;
+        padding-bottom: 8px;
+        spacing: 12px;
+        alignment: stretch;
+
+        if (root.badge-icon != "") : VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 24px;
+                height: 24px;
+                border-radius: 6px;
+                background: root.badge-bg;
+
+                Text {
+                    width: 100%;
+                    height: 100%;
+                    text: root.badge-icon;
+                    color: #FFFFFF;
+                    font-size: 12px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 2px;
+
+            Text {
+                text: root.title;
+                color: Theme.text-primary;
+                font-size: 13px;
+                font-weight: 500;
+                wrap: word-wrap;
+            }
+
+            if (root.subtitle != "") : Text {
+                text: root.subtitle;
+                color: Theme.text-secondary;
+                font-size: 11.5px;
+                wrap: word-wrap;
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: end;
+            @children
+        }
+    }
+}
+
+export component AccordionCard inherits Rectangle {
+    in property <string> title;
+    in property <string> summary: "";
+    in-out property <bool> expanded: true;
+    in property <bool> highlighted: false;
+    callback toggled();
+
+    border-radius: 10px;
+    background: Theme.card-bg;
+    border-width: root.highlighted ? 1.5px : 1px;
+    border-color: root.highlighted ? Theme.accent : Theme.border-color;
+    clip: true;
+
+    // Subtle top specular highlight
+    Rectangle {
+        y: 0px;
+        width: 100%;
+        height: 1px;
+        background: Theme.top-shine;
+    }
+
+    VerticalLayout {
+        spacing: 0px;
+
+        // 44px clickable card header
+        Rectangle {
+            height: 44px;
+            background: hdr-ta.has-hover ? Theme.hover-bg : transparent;
+            animate background { duration: 120ms; }
+
+            HorizontalLayout {
+                padding-left: 16px;
+                padding-right: 14px;
+                spacing: 10px;
+                alignment: stretch;
+
+                Text {
+                    horizontal-stretch: 1;
+                    text: root.title;
+                    color: Theme.text-primary;
+                    font-size: 14px;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+
+                if (root.summary != "") : Text {
+                    text: root.summary;
+                    color: Theme.text-secondary;
+                    font-size: 11.5px;
+                    vertical-alignment: center;
+                }
+
+                Text {
+                    text: root.expanded ? "⌃" : "⌄";
+                    color: Theme.text-secondary;
+                    font-size: 13px;
+                    vertical-alignment: center;
+                }
+            }
+
+            hdr-ta := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.toggled(); }
+            }
+        }
+
+        if (root.expanded) : VerticalLayout {
+            spacing: 0px;
+            padding-bottom: 6px;
+            @children
+        }
+    }
+}
+
+export component ThemePreviewCard inherits VerticalLayout {
+    in property <string> label;
+    in property <bool> is-dark-card: true;
+    in property <bool> selected: false;
+    callback clicked();
+
+    spacing: 8px;
+    horizontal-stretch: 1;
+
+    Rectangle {
+        height: 112px;
+        border-radius: 10px;
+        background: root.is-dark-card ? #181B20 : #F1F5F9;
+        border-width: root.selected ? 2px : 1px;
+        border-color: root.selected ? Theme.accent : Theme.border-strong;
+        drop-shadow-blur: root.selected ? 14px : 0px;
+        drop-shadow-color: root.selected ? Theme.accent-glow : transparent;
+        clip: true;
+
+        // Mini window mockup inside card (mirrors target screenshot)
+        VerticalLayout {
+            padding: 8px;
+            spacing: 6px;
+
+            // Mini titlebar
+            HorizontalLayout {
+                height: 12px;
+                spacing: 4px;
+                Rectangle {
+                    width: 12px;
+                    height: 12px;
+                    border-radius: 3px;
+                    background: @linear-gradient(135deg, #0284C7 0%, #38BDF8 100%);
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 44px;
+                        height: 6px;
+                        border-radius: 3px;
+                        background: root.is-dark-card ? rgba(241, 245, 249, 0.30) : rgba(15, 23, 42, 0.25);
+                    }
+                }
+                Rectangle { horizontal-stretch: 1; background: transparent; }
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 8px;
+                        height: 8px;
+                        border-radius: 4px;
+                        background: root.is-dark-card ? rgba(255, 255, 255, 0.16) : rgba(15, 23, 42, 0.16);
+                    }
+                }
+            }
+
+            // Mini 2-column Notes layout preview
+            HorizontalLayout {
+                vertical-stretch: 1;
+                spacing: 6px;
+
+                Rectangle {
+                    width: 46px;
+                    border-radius: 5px;
+                    background: root.is-dark-card ? rgba(255, 255, 255, 0.05) : rgba(15, 23, 42, 0.06);
+
+                    VerticalLayout {
+                        padding: 5px;
+                        spacing: 4px;
+                        Rectangle { height: 7px; border-radius: 3px; background: Theme.accent; }
+                        Rectangle { height: 5px; border-radius: 2px; background: root.is-dark-card ? rgba(255, 255, 255, 0.14) : rgba(15, 23, 42, 0.14); }
+                        Rectangle { height: 5px; border-radius: 2px; background: root.is-dark-card ? rgba(255, 255, 255, 0.10) : rgba(15, 23, 42, 0.10); }
+                    }
+                }
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                    border-radius: 5px;
+                    background: root.is-dark-card ? rgba(34, 38, 46, 0.85) : #FFFFFF;
+                    border-width: 1px;
+                    border-color: root.is-dark-card ? rgba(255, 255, 255, 0.07) : rgba(15, 23, 42, 0.08);
+
+                    VerticalLayout {
+                        padding: 6px;
+                        spacing: 5px;
+                        Rectangle { width: 52px; height: 7px; border-radius: 3px; background: root.is-dark-card ? rgba(241, 245, 249, 0.35) : rgba(15, 23, 42, 0.30); }
+                        Rectangle { height: 5px; border-radius: 2px; background: root.is-dark-card ? rgba(255, 255, 255, 0.12) : rgba(15, 23, 42, 0.10); }
+                        Rectangle { width: 82px; height: 5px; border-radius: 2px; background: root.is-dark-card ? rgba(255, 255, 255, 0.10) : rgba(15, 23, 42, 0.08); }
+                        Rectangle { vertical-stretch: 1; background: transparent; }
+                        HorizontalLayout {
+                            alignment: end;
+                            Rectangle { width: 22px; height: 10px; border-radius: 5px; background: Theme.accent; }
+                        }
+                    }
+                }
+            }
+        }
+
+        TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.clicked(); }
+        }
+    }
+
+    Text {
+        text: root.label;
+        color: root.selected ? Theme.text-primary : Theme.text-secondary;
+        font-size: 12.5px;
+        font-weight: root.selected ? 600 : 500;
+        horizontal-alignment: center;
+    }
+}
+
+export component AccentSwatch inherits Rectangle {
+    in property <color> base-color;
+    in property <color> light-color;
+    in property <bool> selected: false;
+    callback clicked();
+
+    horizontal-stretch: 1;
+    height: 30px;
+    border-radius: 7px;
+    background: @linear-gradient(135deg, root.base-color 0%, root.light-color 100%);
+    border-width: root.selected ? 2px : 1px;
+    border-color: root.selected ? #FFFFFF : rgba(255, 255, 255, 0.25);
+    drop-shadow-blur: root.selected ? 10px : 0px;
+    drop-shadow-color: root.selected ? root.base-color : transparent;
+
+    // Glossy center glow dot matching reference screenshot
+    Rectangle {
+        x: (parent.width - 10px) / 2;
+        y: (parent.height - 10px) / 2;
+        width: 10px;
+        height: 10px;
+        border-radius: 5px;
+        background: root.selected
+            ? #FFFFFF
+            : rgba(255, 255, 255, 0.55);
+    }
+
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
