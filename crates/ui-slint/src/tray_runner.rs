@@ -84,7 +84,7 @@ fn wire_tray_callbacks(ui: &TrayMenuWindow) {
         hide_tray_popup();
         emit_ui_cmd("tray_action", &format!("{}|{id}", act.as_str()));
     });
-    ui.on_section_changed(|section| resize_tray_for_section(section));
+    ui.on_section_changed(resize_tray_for_section);
     install_focus_lost_hook(ui.window(), || {
         let should_hide = TRAY_HOST.with(|slot| {
             slot.borrow().as_ref().is_some_and(|s| {
@@ -186,9 +186,7 @@ fn resize_tray_for_section(section: i32) {
 fn show_tray_popup(payload: TrayShowPayload) {
     let weak = TRAY_HOST.with(|slot| {
         let mut guard = slot.borrow_mut();
-        let Some(s) = guard.as_mut() else {
-            return None;
-        };
+        let s = guard.as_mut()?;
         if s.visible {
             let _ = s.ui.hide();
         }
