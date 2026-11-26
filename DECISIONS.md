@@ -251,6 +251,7 @@
      - **Этап 4 (`--worker dock` и `--ui-tray`)**: `DockWindow` (плавающая капсула Concentric Fluent Glass, нативные иконки Windows в `slint::Image`, hover-zoom, bounce, Drag-and-Drop файлов, свободное перетаскивание без автоприлипания к краям и `lock_items`) и предзагруженный резидентный `--ui-tray` (`TrayMenuWindow`, показываемый по IPC `TrayShowPayload` и скрывающийся по потере фокуса / `Esc`).
   2. На Windows 11 для виджетов, док-панели и трей-меню применяется аппаратное полупрозрачное стекло `apply_acrylic` (`window-vibrancy`), с фоллбеком на полупрозрачный `rgba`-фон.
   3. Сохранить `--inproc` и `--legacy-worker <dock|widgets|overlay>` в качестве резервных режимов запуска без удаления бизнес-логики и GDI+ fallback-кода.
+  4. Добавить `[profile.release]` (`opt-level = "z"`, `lto = true`, `codegen-units = 1`, `strip = "symbols"`, `panic = "abort"`) в корневой `Cargo.toml` для удержания `asrbox.exe` в пределах `NF-005 < 25 МБ` без урезания функций.
 - **Причина**: Единый визуальный язык Concentric Fluent Glass на всех окнах `asrbox`, отсутствие конфликта циклов событий Win32/`winit`, мгновенное открытие трей-меню и соблюдение ресурсных бюджетов `NF-001..NF-005`.
 
 
