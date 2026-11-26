@@ -1,28 +1,28 @@
-version: 0.1.0
+version: 0.2.0
 updated: 2026-11-26
-spec_ids: [NF-001, NF-002, NF-005, NF-006, NF-007, ST-001, WG-022]
+spec_ids: [NF-001, NF-002, NF-005, NF-006, NF-007, DK-018, DK-019, ST-001, WG-022]
 atlas_updated: true
 last_session:
-  goal: "Этапы 1 + 2 миграции UI на Slint (v0.1.0): безрамочные стеклянные окна Настроек (--ui-settings) и 3-колоночных Заметок (--ui-notes) с Windows 11 Mica/Acrylic и полной привязкой к Rust-бэкенду"
+  goal: "Этапы 3 + 4 полной миграции UI на Slint (v0.2.0): виджеты рабочего стола (Погода, Системный монитор, Google Календарь), стеклянные док-панели с реальными иконками Windows и предпрогретое контекстное меню трея"
   done:
-    - "Версия workspace поднята до 0.1.0 (Cargo.toml, SPEC.md, DECISIONS.md ADR-021, docs/LICENSES.md, ATLAS.md, ARCHITECTURE.md, CHANGELOG.md, HANDOFF.yaml)"
-    - "Создан крейт crates/ui-slint (slint ~1.18 + slint-build ~1.18 + window-vibrancy 0.8.1): Concentric Fluent Glass, кастомные контролы, 36 px безрамочная шапка, логотип ASR Glass, 4 раздела Настроек и 3-колоночные Заметки с Ctrl+1/2/3 и 450 мс автосохранением"
-    - "Подключён SlintUiBridge в crates/app (src/slint_ui.rs, src/slint_dispatch.rs, src/slint_dispatch_tabs.rs): запуск --ui-settings и --ui-notes в JobObject, двусторонний UI_CMD/STATUS/REFRESH/TAB/SHUTDOWN IPC, сохранение 100% логики бэкапа AES-256, WebDAV, GitHub, Дока, Виджетов и Оверлея"
-    - "Отключено старое Win32-окно Заметок в worker_widgets.rs и main.rs; добавлен selftest_slint_ipc в --selftest"
+    - "Версия workspace поднята до 0.2.0 (Cargo.toml, SPEC.md, DECISIONS.md ADR-022, ATLAS.md, ARCHITECTURE.md, CHANGELOG.md, HANDOFF.yaml, MAP.md)"
+    - "В crates/platform-windows экспортированы SysTelemetryCollector, winhttp_fetch, cred_load, pick_icon_file, activate_or_launch_target, query_running_exe_names, resolve_target_exe_name и системные утилиты для Slint-воркеров"
+    - "Этап 3 (crates/ui-slint): созданы WeatherWindow (Open-Meteo + гибридная Яндекс.Погода 3–7д), SysMonitorWindow (ленивый SysTelemetryCollector) и CalendarWindow (кэш + WinHTTP .ics) с Windows 11 Acrylic и Slint PopupWindow ПКМ-меню; объединены в run_widgets_host"
+    - "Этап 4 (crates/ui-slint): созданы DockWindow (реальные Windows-иконки RGBA, hover-zoom, running dot, drag-and-drop, lock_items, свободный drag без автопримагничивания, PopupWindow меню) и TrayMenuWindow (предпрогретый --ui-tray с быстрым рядом и автоскрытием по фокусу/Esc)"
+    - "Подключено в crates/app: --worker dock и --worker widgets маршрутизированы в Slint (резерв --legacy-worker), добавлен --ui-tray в SlintUiBridge, on_tray и slint_dispatch_tabs.rs, добавлен roundtrip тест TrayShowPayload в --selftest"
   not_done:
     - "Прогон GitHub Actions (.github/workflows/ci.yml) на windows-latest (локально нет cargo)"
-    - "Этап 3: перенос виджетов рабочего стола (Системный монитор, Google Календарь, Погода) на Slint"
-    - "Этап 4: перенос док-панелей и контекстного меню трея на Slint"
   verified:
     ci_build: false
     tests: false
     manual_run: false
 open_bugs: [BUG-003, BUG-004, BUG-005, BUG-006, BUG-007, BUG-008, BUG-009, BUG-010, BUG-011, BUG-012, BUG-013]
-next_step: "Прогнать GitHub Actions (windows-latest) для v0.1.0, проверить Настройки и Заметки на Slint, затем выполнить Этапы 3 + 4 (виджеты, док-панель и меню трея на Slint)"
+next_step: "Прогнать GitHub Actions (windows-latest) для v0.2.0: проверить slint-build, cargo fmt --check, cargo clippy -D warnings, xtask atlas-check, тесты, размер .exe < 25 МБ и --selftest, затем ручная проверка на Windows 11"
 touched_files:
-  - Cargo.toml, SPEC.md, DECISIONS.md, docs/LICENSES.md, ATLAS.md, ARCHITECTURE.md, CHANGELOG.md, HANDOFF.yaml
-  - crates/ui-slint/ (Cargo.toml, build.rs, MAP.md, ui/*.slint, ui/components/*.slint, src/*.rs)
-  - crates/app/ (Cargo.toml, MAP.md, src/{main.rs, slint_ui.rs, slint_dispatch.rs, slint_dispatch_tabs.rs, settings_ctl.rs, settings_general.rs, settings_weather_notes.rs, github_ctl.rs, webdav_ctl.rs, tools.rs, worker_bus.rs, worker_widgets.rs, inproc_widgets.rs, selftest.rs})
+  - Cargo.toml, SPEC.md, DECISIONS.md, ATLAS.md, ARCHITECTURE.md, CHANGELOG.md, HANDOFF.yaml
+  - crates/platform-windows/ (MAP.md, src/{lib.rs, http.rs, shell.rs, sys_telemetry.rs})
+  - crates/ui-slint/ (Cargo.toml, MAP.md, ui/{app.slint, theme.slint, widget_weather.slint, widget_sysmon.slint, widget_calendar.slint, dock.slint, tray_menu.slint}, src/{lib.rs, vibrancy.rs, ipc_proto.rs, win_os.rs, widgets_weather.rs, widgets_weather_data.rs, widgets_sysmon.rs, widgets_sysmon_view.rs, widgets_calendar.rs, widgets_runner.rs, dock_view.rs, dock_runner.rs, tray_runner.rs})
+  - crates/app/ (MAP.md, src/{main.rs, worker.rs, slint_ui.rs, tools.rs, slint_dispatch.rs, slint_dispatch_tabs.rs})
 warnings:
   - "Сборка и тесты не запускались локально (отсутствует cargo); требуется прогон GitHub Actions windows-latest для проверки slint-build, rustfmt, clippy -D warnings, atlas-check и --selftest"
 ideas:

@@ -22,6 +22,25 @@ use crate::worker_widgets::run_widgets_worker;
 use crate::APP_VERSION;
 
 pub fn run_worker(module: ModuleId, parent_pid: u32, safe_mode: bool) -> Result<(), String> {
+    match module {
+        ModuleId::Dock => {
+            asrbox_ui_slint::run_dock_host(resolve_app_paths(), APP_VERSION, parent_pid, safe_mode)
+        }
+        ModuleId::Widgets => asrbox_ui_slint::run_widgets_host(
+            resolve_app_paths(),
+            APP_VERSION,
+            parent_pid,
+            safe_mode,
+        ),
+        ModuleId::Overlay => run_legacy_worker(module, parent_pid, safe_mode),
+    }
+}
+
+pub fn run_legacy_worker(
+    module: ModuleId,
+    parent_pid: u32,
+    safe_mode: bool,
+) -> Result<(), String> {
     let mut host = WindowsDockHost::new_worker()?;
     let hwnd_raw = host.host_hwnd_raw();
     let cmd_queue = spawn_stdin_reader(hwnd_raw);

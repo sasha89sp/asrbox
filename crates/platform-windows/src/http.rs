@@ -95,7 +95,7 @@ fn parse_http_url(url: &str) -> Result<ParsedUrl, String> {
     })
 }
 
-fn fetch_blocking(url: &str, headers: &[(String, String)]) -> HttpFetchResult {
+pub(crate) fn fetch_blocking(url: &str, headers: &[(String, String)]) -> HttpFetchResult {
     let parsed = match parse_http_url(url) {
         Ok(p) => p,
         Err(err) => {

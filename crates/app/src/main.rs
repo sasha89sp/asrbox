@@ -103,25 +103,26 @@ fn main() -> ExitCode {
 
     let safe_mode = args.iter().any(|arg| arg == "--safe-mode");
     let force_inproc = args.iter().any(|arg| arg == "--inproc");
-    if args.iter().any(|arg| arg == "--ui-settings") || args.iter().any(|arg| arg == "--ui-notes") {
-        return match run_ui_process_mode(&args) {
-            Ok(()) => ExitCode::SUCCESS,
-            Err(_) => ExitCode::FAILURE,
-        };
-    }
-    if let Some(worker_mod) = parse_arg_value(&args, "--worker") {
-        let parent_pid = parse_arg_value(&args, "--parent-pid")
+    let res = if args
+        .iter()
+        .any(|a| matches!(a.as_str(), "--ui-settings" | "--ui-notes" | "--ui-tray"))
+    {
+        run_ui_process_mode(&args)
+    } else if let Some((worker_mod, legacy)) = parse_arg_value(&args, "--worker")
+        .map(|m| (m, false))
+        .or_else(|| parse_arg_value(&args, "--legacy-worker").map(|m| (m, true)))
+    {
+        let ppid = parse_arg_value(&args, "--parent-pid")
             .and_then(|v| v.parse::<u32>().ok())
             .unwrap_or(0);
-        return match run_worker_mode(&worker_mod, parent_pid, safe_mode) {
-            Ok(()) => ExitCode::SUCCESS,
-            Err(_) => ExitCode::FAILURE,
-        };
-    }
-
-    match run_app(safe_mode, force_inproc) {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(_) => ExitCode::FAILURE,
+        run_worker_mode(&worker_mod, ppid, safe_mode, legacy)
+    } else {
+        run_app(safe_mode, force_inproc)
+    };
+    if res.is_ok() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
     }
 }
 
@@ -141,6 +142,12 @@ fn run_ui_process_mode(args: &[String]) -> Result<(), String> {
     if args.iter().any(|a| a == "--ui-notes") {
         return asrbox_ui_slint::run_notes_window(paths, APP_VERSION);
     }
+    if args.iter().any(|a| a == "--ui-tray") {
+        let parent_pid = parse_arg_value(args, "--parent-pid")
+            .and_then(|v| v.parse::<u32>().ok())
+            .unwrap_or(0);
+        return asrbox_ui_slint::run_tray_menu_host(paths, APP_VERSION, parent_pid);
+    }
     let tab = parse_arg_value(args, "--tab")
         .and_then(|v| v.parse::<i32>().ok())
         .unwrap_or(0);
@@ -151,16 +158,30 @@ fn run_ui_process_mode(args: &[String]) -> Result<(), String> {
 }
 
 #[cfg(not(windows))]
-fn run_worker_mode(_module: &str, _parent_pid: u32, _safe_mode: bool) -> Result<(), String> {
+fn run_worker_mode(
+    _module: &str,
+    _parent_pid: u32,
+    _safe_mode: bool,
+    _legacy: bool,
+) -> Result<(), String> {
     Err("asrbox workers run on Windows only".to_owned())
 }
 
 #[cfg(windows)]
-fn run_worker_mode(module: &str, parent_pid: u32, safe_mode: bool) -> Result<(), String> {
+fn run_worker_mode(
+    module: &str,
+    parent_pid: u32,
+    safe_mode: bool,
+    legacy: bool,
+) -> Result<(), String> {
     let paths = resolve_app_paths();
     install_crash_log_hook(&paths.logs_dir);
     let id = ModuleId::from_str_id(module).ok_or_else(|| format!("unknown worker: {module}"))?;
-    worker::run_worker(id, parent_pid, safe_mode)
+    if legacy {
+        worker::run_legacy_worker(id, parent_pid, safe_mode)
+    } else {
+        worker::run_worker(id, parent_pid, safe_mode)
+    }
 }
 
 #[cfg(not(windows))]
@@ -203,6 +224,7 @@ fn run_app(safe_mode: bool, force_inproc: bool) -> Result<(), String> {
         safe_mode,
     );
     ctrl.sync_runtime_modules(&mut host);
+    let _ = ctrl.slint_ui.prewarm_tray();
     if !safe_mode
         && ctrl.modules_cfg.widgets_enabled
         && load_notes_config(&ctrl.paths.notes_cfg)

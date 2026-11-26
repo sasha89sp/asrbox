@@ -1,0 +1,419 @@
+import { Theme, SlintTrayDockRow } from "theme.slint";
+import { AsrGlassLogo } from "components/asr_logo.slint";
+
+component TrayQuickBtn inherits Rectangle {
+    in property <string> glyph;
+    in property <bool> danger: false;
+    callback clicked();
+
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    background: ta.has-hover
+        ? (root.danger ? Theme.danger : Theme.hover-bg)
+        : Theme.card-bg;
+    border-width: 1px;
+    border-color: ta.has-hover
+        ? (root.danger ? Theme.danger : Theme.border-strong)
+        : Theme.border-color;
+    animate background { duration: 120ms; }
+
+    Text {
+        width: 100%;
+        height: 100%;
+        text: root.glyph;
+        color: (ta.has-hover && root.danger) ? #FFFFFF : Theme.text-primary;
+        font-size: 13px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component TrayRowBtn inherits Rectangle {
+    in property <string> icon;
+    in property <string> label;
+    in property <string> trailing: "";
+    in property <bool> active-dot: false;
+    in property <bool> danger: false;
+    in property <bool> indent: false;
+    callback clicked();
+
+    height: root.indent ? 28px : 32px;
+    border-radius: 7px;
+    background: ta.has-hover
+        ? (root.danger ? Theme.danger : Theme.hover-bg)
+        : transparent;
+    animate background { duration: 110ms; }
+
+    HorizontalLayout {
+        padding-left: root.indent ? 22px : 10px;
+        padding-right: 10px;
+        spacing: 9px;
+        alignment: stretch;
+
+        if (root.icon != "") : Text {
+            width: 16px;
+            text: root.icon;
+            color: (ta.has-hover && root.danger) ? #FFFFFF : Theme.accent;
+            font-size: 12.5px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        Text {
+            horizontal-stretch: 1;
+            text: root.label;
+            color: (ta.has-hover && root.danger) ? #FFFFFF : Theme.text-primary;
+            font-size: root.indent ? 11.5px : 12.5px;
+            font-weight: root.indent ? 400 : 500;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        if (root.active-dot) : VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 7px;
+                height: 7px;
+                border-radius: 3.5px;
+                background: Theme.success;
+            }
+        }
+
+        if (root.trailing != "") : Text {
+            text: root.trailing;
+            color: Theme.text-muted;
+            font-size: 11px;
+            vertical-alignment: center;
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component TrayMenuWindow inherits Window {
+    title: "asrbox — Трей";
+    no-frame: true;
+    background: transparent;
+    preferred-width: 284px;
+    preferred-height: 410px;
+
+    in property <string> app-version: "0.2.0";
+    in property <bool> dock-module-enabled: true;
+    in property <bool> widgets-module-enabled: true;
+    in property <bool> overlay-module-enabled: false;
+    in property <bool> overlay-setup-mode: false;
+    in property <bool> calendar-visible: true;
+    in property <bool> sysmon-visible: true;
+    in property <bool> weather-visible: true;
+    in property <bool> notes-visible: false;
+    in property <bool> autostart-enabled: false;
+    in property <[SlintTrayDockRow]> docks: [];
+
+    // TrayMenuVisibility flags
+    in property <bool> vis-autostart: true;
+    in property <bool> vis-docks: true;
+    in property <bool> vis-widgets: true;
+    in property <bool> vis-overlay: true;
+    in property <bool> vis-backup: true;
+    in property <bool> vis-debug: true;
+    in property <bool> vis-about: true;
+
+    in-out property <int> expanded-section: 0; // 0=none, 1=docks, 2=widgets, 3=overlay, 4=backup
+
+    callback trigger-action(string, int);
+    callback toggle-theme();
+    callback hide-menu();
+
+    FocusScope {
+        width: 100%;
+        height: 100%;
+        key-pressed(ev) => {
+            if (ev.text == Key.Escape) {
+                root.hide-menu();
+                return accept;
+            }
+            reject
+        }
+
+        Rectangle {
+            width: 100%;
+            height: 100%;
+            border-radius: 12px;
+            background: Theme.popup-bg;
+            border-width: 1px;
+            border-color: Theme.border-strong;
+            clip: true;
+
+            Rectangle {
+                y: 0px;
+                width: 100%;
+                height: 1px;
+                background: Theme.top-shine;
+            }
+
+            VerticalLayout {
+                padding: 8px;
+                spacing: 4px;
+
+                // Top Quick-Action Bar (matches Concentric Fluent Glass spec)
+                HorizontalLayout {
+                    height: 36px;
+                    padding-left: 4px;
+                    padding-right: 2px;
+                    spacing: 6px;
+                    alignment: stretch;
+
+                    VerticalLayout {
+                        alignment: center;
+                        AsrGlassLogo { size: 24px; }
+                    }
+
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        alignment: center;
+                        spacing: 0px;
+                        Text {
+                            text: "asrbox";
+                            color: Theme.text-primary;
+                            font-size: 13px;
+                            font-weight: 700;
+                        }
+                        Text {
+                            text: "v" + root.app-version;
+                            color: Theme.text-muted;
+                            font-size: 10px;
+                        }
+                    }
+
+                    VerticalLayout {
+                        alignment: center;
+                        TrayQuickBtn {
+                            glyph: "⚙";
+                            clicked => { root.trigger-action("open_settings", 0); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        TrayQuickBtn {
+                            glyph: "↻";
+                            clicked => { root.trigger-action("refresh_all", 0); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        TrayQuickBtn {
+                            glyph: Theme.dark-mode ? "☀" : "🌙";
+                            clicked => { root.toggle-theme(); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        TrayQuickBtn {
+                            glyph: "✕";
+                            danger: true;
+                            clicked => { root.trigger-action("exit", 0); }
+                        }
+                    }
+                }
+
+                Rectangle { height: 1px; background: Theme.divider-color; }
+
+                // Scrollable menu body
+                Flickable {
+                    vertical-stretch: 1;
+                    viewport-width: self.width;
+                    viewport-height: body-col.preferred-height;
+
+                    body-col := VerticalLayout {
+                        width: parent.width;
+                        spacing: 2px;
+
+                        TrayRowBtn {
+                            icon: "⚙";
+                            label: "Настройки";
+                            clicked => { root.trigger-action("open_settings", 0); }
+                        }
+
+                        // Docks expandable section
+                        if (root.vis-docks) : TrayRowBtn {
+                            icon: "▦";
+                            label: "Док-панели";
+                            active-dot: root.dock-module-enabled;
+                            trailing: root.expanded-section == 1 ? "⌃" : "⌄";
+                            clicked => {
+                                root.expanded-section = root.expanded-section == 1 ? 0 : 1;
+                            }
+                        }
+                        if (root.vis-docks && root.expanded-section == 1) : VerticalLayout {
+                            spacing: 1px;
+                            TrayRowBtn {
+                                indent: true;
+                                label: root.dock-module-enabled ? "Отключить модуль доков" : "Включить модуль доков";
+                                active-dot: root.dock-module-enabled;
+                                clicked => { root.trigger-action("toggle_dock_module", 0); }
+                            }
+                            for d in root.docks : TrayRowBtn {
+                                indent: true;
+                                label: d.title;
+                                active-dot: d.enabled;
+                                clicked => { root.trigger-action("toggle_dock", d.id); }
+                            }
+                            TrayRowBtn {
+                                indent: true;
+                                label: "＋ Добавить док-панель";
+                                clicked => { root.trigger-action("add_dock", 0); }
+                            }
+                            TrayRowBtn {
+                                indent: true;
+                                label: "Открыть docks.cfg";
+                                clicked => { root.trigger-action("open_dock_cfg", 0); }
+                            }
+                        }
+
+                        // Widgets expandable section
+                        if (root.vis-widgets) : TrayRowBtn {
+                            icon: "⊞";
+                            label: "Виджеты";
+                            active-dot: root.widgets-module-enabled;
+                            trailing: root.expanded-section == 2 ? "⌃" : "⌄";
+                            clicked => {
+                                root.expanded-section = root.expanded-section == 2 ? 0 : 2;
+                            }
+                        }
+                        if (root.vis-widgets && root.expanded-section == 2) : VerticalLayout {
+                            spacing: 1px;
+                            TrayRowBtn {
+                                indent: true;
+                                label: root.widgets-module-enabled ? "Отключить модуль виджетов" : "Включить модуль виджетов";
+                                active-dot: root.widgets-module-enabled;
+                                clicked => { root.trigger-action("toggle_widgets_module", 0); }
+                            }
+                            TrayRowBtn {
+                                indent: true;
+                                label: "Погода";
+                                active-dot: root.weather-visible;
+                                clicked => { root.trigger-action("toggle_weather", 0); }
+                            }
+                            TrayRowBtn {
+                                indent: true;
+                                label: "Системный монитор";
+                                active-dot: root.sysmon-visible;
+                                clicked => { root.trigger-action("toggle_sysmon", 0); }
+                            }
+                            TrayRowBtn {
+                                indent: true;
+                                label: "Google Календарь";
+                                active-dot: root.calendar-visible;
+                                clicked => { root.trigger-action("toggle_calendar", 0); }
+                            }
+                            TrayRowBtn {
+                                indent: true;
+                                label: "Заметки";
+                                active-dot: root.notes-visible;
+                                clicked => { root.trigger-action("toggle_notes", 0); }
+                            }
+                        }
+
+                        // Overlay expandable section
+                        if (root.vis-overlay) : TrayRowBtn {
+                            icon: "◈";
+                            label: "Игровой оверлей";
+                            active-dot: root.overlay-module-enabled;
+                            trailing: root.expanded-section == 3 ? "⌃" : "⌄";
+                            clicked => {
+                                root.expanded-section = root.expanded-section == 3 ? 0 : 3;
+                            }
+                        }
+                        if (root.vis-overlay && root.expanded-section == 3) : VerticalLayout {
+                            spacing: 1px;
+                            TrayRowBtn {
+                                indent: true;
+                                label: root.overlay-module-enabled ? "Выключить оверлей" : "Включить оверлей";
+                                active-dot: root.overlay-module-enabled;
+                                clicked => { root.trigger-action("toggle_overlay_module", 0); }
+                            }
+                            TrayRowBtn {
+                                indent: true;
+                                label: "Режим настройки позиции";
+                                active-dot: root.overlay-setup-mode;
+                                clicked => { root.trigger-action("toggle_overlay_setup", 0); }
+                            }
+                            TrayRowBtn {
+                                indent: true;
+                                label: "Параметры оверлея";
+                                clicked => { root.trigger-action("open_overlay_tab", 0); }
+                            }
+                        }
+
+                        // Backup expandable section
+                        if (root.vis-backup) : TrayRowBtn {
+                            icon: "☁";
+                            label: "Бэкап и облако";
+                            trailing: root.expanded-section == 4 ? "⌃" : "⌄";
+                            clicked => {
+                                root.expanded-section = root.expanded-section == 4 ? 0 : 4;
+                            }
+                        }
+                        if (root.vis-backup && root.expanded-section == 4) : VerticalLayout {
+                            spacing: 1px;
+                            TrayRowBtn {
+                                indent: true;
+                                label: "Бэкап настроек сейчас";
+                                clicked => { root.trigger-action("backup_settings", 0); }
+                            }
+                            TrayRowBtn {
+                                indent: true;
+                                label: "Полный бэкап сейчас";
+                                clicked => { root.trigger-action("backup_full", 0); }
+                            }
+                            TrayRowBtn {
+                                indent: true;
+                                label: "Настройки облака";
+                                clicked => { root.trigger-action("open_backup_tab", 0); }
+                            }
+                        }
+
+                        Rectangle { height: 1px; background: Theme.divider-color; }
+
+                        if (root.vis-autostart) : TrayRowBtn {
+                            icon: "⚡";
+                            label: "Автозагрузка с Windows";
+                            active-dot: root.autostart-enabled;
+                            clicked => { root.trigger-action("toggle_autostart", 0); }
+                        }
+
+                        if (root.vis-debug) : TrayRowBtn {
+                            icon: "🛠";
+                            label: "Диагностика и логи";
+                            clicked => { root.trigger-action("open_debug", 0); }
+                        }
+
+                        if (root.vis-about) : TrayRowBtn {
+                            icon: "ℹ";
+                            label: "О программе";
+                            clicked => { root.trigger-action("open_about", 0); }
+                        }
+
+                        Rectangle { height: 1px; background: Theme.divider-color; }
+
+                        TrayRowBtn {
+                            icon: "⏻";
+                            label: "Выход";
+                            danger: true;
+                            clicked => { root.trigger-action("exit", 0); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

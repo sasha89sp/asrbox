@@ -22,6 +22,10 @@ use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
 use crate::running::resolve_lnk_target;
 
+pub fn pick_icon_file() -> Result<Option<PathBuf>, String> {
+    pick_icon_dialog(HWND::default())
+}
+
 pub(crate) fn pick_icon_dialog(owner: HWND) -> Result<Option<PathBuf>, String> {
     // SAFETY: Release any active mouse capture before running a modal Win32 dialog.
     unsafe {

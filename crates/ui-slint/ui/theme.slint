@@ -67,6 +67,61 @@ export struct SlintTaskRow {
     done: bool,
 }
 
+export struct SlintWeatherHourRow {
+    time-label: string,
+    icon-glyph: string,
+    temp-text: string,
+}
+
+export struct SlintWeatherDayRow {
+    day-label: string,
+    icon-glyph: string,
+    min-text: string,
+    max-text: string,
+    bar-start: float,
+    bar-span: float,
+    is-hybrid: bool,
+}
+
+export struct SlintSysDriveRow {
+    label: string,
+    busy-pct: int,
+    details: string,
+}
+
+export struct SlintSysProcRow {
+    cpu-name: string,
+    cpu-val: string,
+    ram-name: string,
+    ram-val: string,
+}
+
+export struct SlintCalEventRow {
+    summary: string,
+    subtitle: string,
+    accent-r: int,
+    accent-g: int,
+    accent-b: int,
+    url: string,
+    is-today: bool,
+}
+
+export struct SlintDockIconRow {
+    id: int,
+    label: string,
+    has-icon: bool,
+    icon-img: image,
+    is-separator: bool,
+    is-running: bool,
+    is-folder: bool,
+}
+
+export struct SlintTrayDockRow {
+    id: int,
+    title: string,
+    enabled: bool,
+}
+
 export global Theme {
     in-out property <bool> dark-mode: true;
     in-out property <int> accent-index: 0;

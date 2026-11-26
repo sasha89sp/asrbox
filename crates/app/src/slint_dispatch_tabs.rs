@@ -1,12 +1,14 @@
 #![cfg(windows)]
 
-use asrbox_core::ModuleId;
+use asrbox_core::{ModuleId, SupervisorCmd};
 use asrbox_mod_settings::SettingsAction;
 use asrbox_mod_widgets::{
     load_weather_config, load_widget_config, save_weather_config, save_widget_config,
     CalendarSource, YANDEX_WEATHER_CRED_TARGET,
 };
-use asrbox_platform_api::{DockPlatform, IconProvider, ToolsPlatform, WidgetLayer, WidgetPlatform};
+use asrbox_platform_api::{
+    DockPlatform, IconProvider, ThemeMode, ToolsPlatform, TrayAction, WidgetLayer, WidgetPlatform,
+};
 
 use crate::AppController;
 
@@ -27,6 +29,37 @@ impl<I: IconProvider> AppController<I> {
             return res;
         }
         self.dispatch_overlay_cmd(host, act, arg)
+    }
+
+    pub(crate) fn dispatch_tray_cmd<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
+        &mut self,
+        host: &mut H,
+        act: &str,
+        arg: &str,
+    ) -> (bool, bool) {
+        if act == "tray_toggle_theme" {
+            let next = if self.appearance.theme_mode == ThemeMode::Light {
+                ThemeMode::Dark
+            } else {
+                ThemeMode::Light
+            };
+            self.apply_settings_action(host, SettingsAction::SetThemeMode(next));
+            return (true, true);
+        }
+        let (name, id_s) = arg.split_once('|').unwrap_or((arg, "0"));
+        let id = id_s.parse::<u64>().unwrap_or(0);
+        if name == "refresh_all" {
+            self.send_or_run_widgets_cmd(host, SupervisorCmd::RefreshWeather);
+            self.send_or_run_widgets_cmd(host, SupervisorCmd::RefreshSysMonitor);
+            self.send_or_run_widgets_cmd(host, SupervisorCmd::RefreshCalendar);
+            self.reload_module_config(host, ModuleId::Dock);
+            return (true, true);
+        }
+        let Some(action) = decode_tray_action(name, id) else {
+            return (false, false);
+        };
+        self.apply_tray_action(host, action);
+        (true, false)
     }
 
     fn dispatch_cal_and_sys_cmd<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
@@ -239,4 +272,30 @@ pub(crate) fn idx_to_layer(raw: &str) -> WidgetLayer {
         2 => WidgetLayer::Topmost,
         _ => WidgetLayer::Wallpaper,
     }
+}
+
+fn decode_tray_action(name: &str, id: u64) -> Option<TrayAction> {
+    Some(match name {
+        "open_settings" => TrayAction::OpenSettings,
+        "toggle_dock_module" => TrayAction::ToggleDockModule,
+        "toggle_dock" => TrayAction::ToggleDock(id),
+        "add_dock" => TrayAction::AddDock,
+        "open_dock_cfg" => TrayAction::OpenDockConfig,
+        "toggle_widgets_module" => TrayAction::ToggleWidgetsModule,
+        "toggle_weather" => TrayAction::ToggleWeatherWidget,
+        "toggle_sysmon" => TrayAction::ToggleSysMonitorWidget,
+        "toggle_calendar" => TrayAction::ToggleCalendarWidget,
+        "toggle_notes" => TrayAction::ToggleNotesWidget,
+        "toggle_overlay_module" => TrayAction::ToggleOverlayModule,
+        "toggle_overlay_setup" => TrayAction::ToggleOverlaySetupMode,
+        "open_overlay_tab" => TrayAction::OpenOverlayTab,
+        "backup_settings" => TrayAction::BackupSettingsNow,
+        "backup_full" => TrayAction::BackupFullNow,
+        "open_backup_tab" => TrayAction::OpenBackupTab,
+        "toggle_autostart" => TrayAction::ToggleAutostart,
+        "open_debug" => TrayAction::OpenDebugWindow,
+        "open_about" => TrayAction::OpenAboutWindow,
+        "exit" => TrayAction::Exit,
+        _ => return None,
+    })
 }

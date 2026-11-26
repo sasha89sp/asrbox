@@ -23,6 +23,7 @@ slint = { version = "~1.18", default-features = false, features = [
 ] }
 
 [target.'cfg(windows)'.dependencies]
+asrbox-platform-windows = { path = "../platform-windows" }
 window-vibrancy = "0.8.1"
 
 [build-dependencies]

@@ -7,13 +7,17 @@ use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+use asrbox_platform_api::{PixelPoint, TrayMenuEntry, TrayModuleFlags};
 use asrbox_platform_windows::{wake_host_window, JobObject};
-use asrbox_ui_slint::{encode_runtime_status, UiRuntimeStatus};
+use asrbox_ui_slint::{
+    encode_runtime_status, encode_tray_show, TrayShowPayload, UiRuntimeStatus,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum UiProcKind {
     Settings,
     Notes,
+    Tray,
 }
 
 struct UiProcHandle {
@@ -25,6 +29,7 @@ pub(crate) struct SlintUiBridge {
     job: Option<JobObject>,
     settings: Option<UiProcHandle>,
     notes: Option<UiProcHandle>,
+    tray: Option<UiProcHandle>,
     inbox: Arc<Mutex<VecDeque<(UiProcKind, String)>>>,
     host_hwnd_raw: usize,
 }
@@ -35,6 +40,7 @@ impl SlintUiBridge {
             job: JobObject::new_kill_on_close().ok(),
             settings: None,
             notes: None,
+            tray: None,
             inbox: Arc::new(Mutex::new(VecDeque::new())),
             host_hwnd_raw,
         }
@@ -128,6 +134,44 @@ impl SlintUiBridge {
         }
     }
 
+    pub(crate) fn prewarm_tray(&mut self) -> Result<(), String> {
+        self.reap_exited();
+        if self.tray.is_some() {
+            return Ok(());
+        }
+        let args = ["--ui-tray".to_owned()];
+        self.tray = Some(self.spawn_ui_process(UiProcKind::Tray, &args)?);
+        Ok(())
+    }
+
+    pub(crate) fn show_tray_menu(
+        &mut self,
+        screen: PixelPoint,
+        docks: &[TrayMenuEntry],
+        flags: TrayModuleFlags,
+    ) -> Result<(), String> {
+        self.reap_exited();
+        if self.tray.is_none() {
+            self.prewarm_tray()?;
+        }
+        let line = encode_tray_show(&TrayShowPayload {
+            x: screen.x,
+            y: screen.y,
+            flags,
+            docks: docks.to_vec(),
+        });
+        if send_line(&mut self.tray, &line) {
+            return Ok(());
+        }
+        stop_handle(&mut self.tray);
+        self.prewarm_tray()?;
+        if send_line(&mut self.tray, &line) {
+            Ok(())
+        } else {
+            Err("failed to send SHOW to Slint tray process".to_owned())
+        }
+    }
+
     pub(crate) fn poll_events(&mut self) -> Vec<(UiProcKind, String)> {
         self.reap_exited();
         let mut out = Vec::new();
@@ -142,6 +186,7 @@ impl SlintUiBridge {
     pub(crate) fn stop_all(&mut self) {
         stop_handle(&mut self.settings);
         stop_handle(&mut self.notes);
+        stop_handle(&mut self.tray);
     }
 
     fn reap_exited(&mut self) {
@@ -160,6 +205,14 @@ impl SlintUiBridge {
             .is_some()
         {
             self.notes = None;
+        }
+        if self
+            .tray
+            .as_mut()
+            .and_then(|h| h.child.try_wait().ok().flatten())
+            .is_some()
+        {
+            self.tray = None;
         }
     }
 

@@ -100,7 +100,77 @@ pub use icons::WindowsIconProvider;
 #[cfg(windows)]
 pub use job::{is_process_alive, JobObject};
 #[cfg(windows)]
+pub use shell::pick_icon_file;
+#[cfg(windows)]
+pub use sys_telemetry::SysTelemetryCollector;
+#[cfg(windows)]
 pub use window::{wake_host_window, WindowsDockHost};
+
+#[cfg(windows)]
+pub fn cred_load(target: &str) -> Result<Option<(String, String)>, String> {
+    autostart::cred_load(target)
+}
+
+#[cfg(windows)]
+pub fn winhttp_fetch(
+    url: &str,
+    headers: &[(String, String)],
+) -> asrbox_platform_api::HttpFetchResult {
+    http::fetch_blocking(url, headers)
+}
+
+#[cfg(windows)]
+pub fn activate_or_launch_target(
+    path: &std::path::Path,
+    focus_running: bool,
+) -> Result<bool, String> {
+    running::activate_or_launch_target(path, focus_running)
+}
+
+#[cfg(windows)]
+pub fn query_running_exe_names() -> std::collections::HashSet<String> {
+    running::query_running_exe_names()
+}
+
+#[cfg(windows)]
+pub fn resolve_target_exe_name(path: &std::path::Path) -> Option<String> {
+    running::resolve_target_exe_name(path)
+}
+
+#[cfg(windows)]
+pub fn launch_system_tool(cmd: &str, args: &str) -> Result<(), String> {
+    shell::launch_system_tool(cmd, args)
+}
+
+#[cfg(windows)]
+pub fn open_in_explorer(path: &std::path::Path) -> Result<(), String> {
+    shell::open_in_explorer(path)
+}
+
+#[cfg(windows)]
+pub fn open_item_location(path: &std::path::Path) -> Result<(), String> {
+    shell::open_item_location(path)
+}
+
+#[cfg(windows)]
+pub fn open_in_notepad(path: &std::path::Path) -> Result<(), String> {
+    shell::open_in_notepad(path)
+}
+
+#[cfg(windows)]
+pub fn open_url_str(url: &str) -> Result<(), String> {
+    shell::open_url_str(url)
+}
+
+#[cfg(windows)]
+pub fn query_local_time() -> asrbox_platform_api::LocalDateTime {
+    widget_text::query_local_time()
+}
+
+#[cfg(windows)]
+pub fn primary_work_area() -> Result<PixelRect, String> {
+    query_primary_work_area()
+}
 
 #[cfg(windows)]
 use std::ffi::c_void;

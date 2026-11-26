@@ -66,11 +66,61 @@ pub(crate) fn drain_telemetry_results() -> Vec<SysTelemetry> {
         .unwrap_or_default()
 }
 
+pub struct SysTelemetryCollector {
+    procs: ProcAndDiskSampler,
+    gpu: GpuSampler,
+    net: NetSampler,
+}
+
+impl Default for SysTelemetryCollector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SysTelemetryCollector {
+    pub fn new() -> Self {
+        Self {
+            procs: ProcAndDiskSampler::new(),
+            gpu: GpuSampler::new(),
+            net: NetSampler::new(),
+        }
+    }
+
+    pub fn sample(&mut self) -> SysTelemetry {
+        let t0 = Instant::now();
+        let mut err_count = 0u32;
+        let (cpu, ram, drives, top_cpu, top_ram) = self.procs.sample(&mut err_count);
+        let gpu_stat = self.gpu.sample();
+        let mut net_stat = self.net.sample();
+        net_stat.timer_res_us = query_timer_resolution_us();
+        net_stat.sample_us = u32::try_from(t0.elapsed().as_micros()).unwrap_or(0);
+
+        let system_watts = match (cpu.tdp_watts, gpu_stat.power_watts) {
+            (Some(c), Some(g)) => Some(c.saturating_add(g)),
+            (None, Some(g)) => Some(g),
+            (Some(c), None) => Some(c),
+            (None, None) => None,
+        };
+        SysTelemetry {
+            uptime_sec: query_uptime_sec(),
+            power_plan: query_power_plan(),
+            system_watts,
+            err_count,
+            cpu,
+            gpu: gpu_stat,
+            ram,
+            drives,
+            net: net_stat,
+            top_cpu,
+            top_ram,
+        }
+    }
+}
+
 fn spawn_worker() {
     thread::spawn(|| {
-        let mut procs = ProcAndDiskSampler::new();
-        let mut gpu = GpuSampler::new();
-        let mut net = NetSampler::new();
+        let mut collector = SysTelemetryCollector::new();
 
         while let Some(pair) = SIGNAL.get() {
             let target_hwnd = {
@@ -87,33 +137,7 @@ fn spawn_worker() {
                 guard.target_hwnd
             };
 
-            let t0 = Instant::now();
-            let mut err_count = 0u32;
-            let (cpu, ram, drives, top_cpu, top_ram) = procs.sample(&mut err_count);
-            let gpu_stat = gpu.sample();
-            let mut net_stat = net.sample();
-            net_stat.timer_res_us = query_timer_resolution_us();
-            net_stat.sample_us = u32::try_from(t0.elapsed().as_micros()).unwrap_or(0);
-
-            let system_watts = match (cpu.tdp_watts, gpu_stat.power_watts) {
-                (Some(c), Some(g)) => Some(c.saturating_add(g)),
-                (None, Some(g)) => Some(g),
-                (Some(c), None) => Some(c),
-                (None, None) => None,
-            };
-            let snap = SysTelemetry {
-                uptime_sec: query_uptime_sec(),
-                power_plan: query_power_plan(),
-                system_watts,
-                err_count,
-                cpu,
-                gpu: gpu_stat,
-                ram,
-                drives,
-                net: net_stat,
-                top_cpu,
-                top_ram,
-            };
+            let snap = collector.sample();
 
             let queue = RESULTS.get_or_init(|| Mutex::new(VecDeque::new()));
             if let Ok(mut q) = queue.lock() {
@@ -160,7 +184,8 @@ fn query_power_plan() -> String {
 type NtQueryTimerResFn = unsafe extern "system" fn(*mut u32, *mut u32, *mut u32) -> i32;
 
 fn query_timer_resolution_us() -> u32 {
-    // SAFETY: Resolving NtQueryTimerResolution from already-loaded ntdll.dll and calling with valid u32 pointers.
+    // SAFETY: Resolving NtQueryTimerResolution from already-loaded ntdll.dll
+    // and calling with valid u32 out-pointers.
     unsafe {
         let Ok(hmod) = GetModuleHandleW(w!("ntdll.dll")) else {
             return 0;
@@ -188,7 +213,8 @@ pub(crate) struct DiskPrev {
 
 pub(crate) fn read_disk_perf(letter: char) -> Option<DiskPrev> {
     let path = encode_wide_str(&format!("\\\\.\\{letter}:"));
-    // SAFETY: Opening volume handle with 0 access for IOCTL_DISK_PERFORMANCE and closing immediately.
+    // SAFETY: Opening volume handle with 0 access for IOCTL_DISK_PERFORMANCE
+    // and closing immediately.
     unsafe {
         let h = CreateFileW(
             PCWSTR(path.as_ptr()),

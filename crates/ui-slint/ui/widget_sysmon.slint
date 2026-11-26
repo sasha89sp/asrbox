@@ -1,0 +1,718 @@
+import { Theme, SlintSysDriveRow, SlintSysProcRow } from "theme.slint";
+
+component SysGlowBar inherits Rectangle {
+    in property <int> percent: 0;
+    in property <color> bar-color: Theme.accent;
+
+    height: 6px;
+    border-radius: 3px;
+    background: Theme.input-bg;
+    border-width: 1px;
+    border-color: Theme.divider-color;
+    clip: true;
+
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        width: parent.width * Math.clamp((root.percent * 1.0) / 100.0, 0.0, 1.0);
+        height: parent.height;
+        border-radius: 3px;
+        background: root.percent >= 85 ? #EF4444
+            : (root.percent >= 65 ? #F59E0B : root.bar-color);
+        animate width { duration: 220ms; easing: ease-out; }
+    }
+}
+
+component SysSectionCard inherits Rectangle {
+    in property <string> title;
+    in property <string> tag: "";
+    in property <bool> accent-tag: false;
+    callback clicked();
+    callback right-clicked();
+
+    border-radius: 9px;
+    background: ta.has-hover ? Theme.hover-bg : Theme.card-bg;
+    border-width: 1px;
+    border-color: ta.has-hover ? Theme.border-strong : Theme.border-color;
+    animate background { duration: 120ms; }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        pointer-event(ev) => {
+            if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
+                root.right-clicked();
+            } else if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.up) {
+                root.clicked();
+            }
+        }
+    }
+
+    VerticalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        padding-top: 6px;
+        padding-bottom: 7px;
+        spacing: 4px;
+
+        HorizontalLayout {
+            height: 18px;
+            alignment: stretch;
+
+            Text {
+                horizontal-stretch: 1;
+                text: root.title;
+                color: Theme.text-primary;
+                font-size: 11px;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+
+            if (root.tag != "") : Rectangle {
+                border-radius: 5px;
+                background: root.accent-tag ? Theme.accent-tint : transparent;
+                border-width: root.accent-tag ? 1px : 0px;
+                border-color: root.accent-tag ? Theme.accent : transparent;
+
+                HorizontalLayout {
+                    padding-left: root.accent-tag ? 6px : 0px;
+                    padding-right: root.accent-tag ? 6px : 0px;
+                    Text {
+                        text: root.tag;
+                        color: root.accent-tag ? Theme.accent : Theme.text-muted;
+                        font-size: 10px;
+                        font-weight: root.accent-tag ? 600 : 500;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        @children
+    }
+}
+
+component SMenuBtn inherits Rectangle {
+    in property <string> label;
+    in property <bool> checked: false;
+    in property <bool> danger: false;
+    callback clicked();
+
+    height: 28px;
+    border-radius: 6px;
+    background: ta.has-hover
+        ? (root.danger ? Theme.danger : Theme.hover-bg)
+        : (root.checked ? Theme.accent-tint : transparent);
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 8px;
+        Text {
+            horizontal-stretch: 1;
+            text: root.label;
+            color: (ta.has-hover && root.danger) ? #FFFFFF : Theme.text-primary;
+            font-size: 12px;
+            font-weight: root.checked ? 600 : 400;
+            vertical-alignment: center;
+        }
+        if (root.checked) : Text {
+            text: "●";
+            color: Theme.accent;
+            font-size: 9px;
+            vertical-alignment: center;
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component SysMonitorWindow inherits Window {
+    title: "asrbox — Системный монитор";
+    no-frame: true;
+    background: transparent;
+    preferred-width: 560px;
+    preferred-height: 492px;
+    min-width: 440px;
+    min-height: 380px;
+
+    in property <string> header-meta: "";
+    in property <int> cpu-pct: 0;
+    in property <string> cpu-temp-line: "";
+    in property <string> cpu-freq-line: "";
+    in property <string> cpu-cores-line: "";
+    in property <bool> cpu-throttled: false;
+    in property <string> cpu-gpu-hint: "";
+    in property <string> cpu-top-line: "";
+
+    in property <string> gpu-hz-badge: "GPU";
+    in property <int> gpu-pct: 0;
+    in property <string> gpu-load-text: "Нагрузка: —";
+    in property <string> gpu-clock-text: "Частота: —";
+    in property <int> vram-pct: 0;
+    in property <string> gpu-vram-text: "VRAM: —";
+    in property <string> gpu-temp-text: "";
+
+    in property <int> ram-pct: 0;
+    in property <string> ram-line: "";
+    in property <string> ram-top-line: "";
+    in property <[SlintSysDriveRow]> drives: [];
+
+    in property <string> net-ip-line: "IP: —";
+    in property <string> net-rx-text: "▼ 0.0 Мбит/с";
+    in property <string> net-tx-text: "▲ 0.0 Мбит/с";
+    in property <string> net-latency-line: "";
+
+    in property <[SlintSysProcRow]> top-procs: [];
+
+    in property <int> layer-index: 0;
+    in property <int> opacity-pct: 88;
+    in property <int> refresh-ms: 2000;
+
+    in property <bool> vis-refresh: true;
+    in property <bool> vis-layer: true;
+    in property <bool> vis-opacity: true;
+    in property <bool> vis-interval: true;
+    in property <bool> vis-open-config: true;
+    in property <bool> vis-hide: true;
+
+    callback drag-window();
+    callback start-resize();
+    callback open-settings();
+    callback refresh-now();
+    callback open-section-tool(int);
+    callback set-layer(int);
+    callback set-opacity(int);
+    callback set-refresh-ms(int);
+    callback open-config();
+    callback hide-widget();
+
+    private property <length> ctx-x: 12px;
+    private property <length> ctx-y: 36px;
+
+    Rectangle {
+        width: 100%;
+        height: 100%;
+        border-radius: 14px;
+        background: Theme.dark-mode
+            ? rgba(24, 27, 32, Math.clamp((root.opacity-pct * 1.0) / 100.0, 0.25, 0.98))
+            : rgba(243, 245, 248, Math.clamp((root.opacity-pct * 1.0) / 100.0, 0.30, 0.98));
+        border-width: 1px;
+        border-color: Theme.border-color;
+        clip: true;
+
+        Rectangle {
+            y: 0px;
+            width: 100%;
+            height: 1px;
+            background: Theme.top-shine;
+        }
+
+        TouchArea {
+            pointer-event(ev) => {
+                if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
+                    root.ctx-x = Math.clamp(self.mouse-x, 8px, Math.max(8px, root.width - 216px));
+                    root.ctx-y = Math.clamp(self.mouse-y, 8px, Math.max(8px, root.height - 260px));
+                    ctx-menu.show();
+                }
+            }
+        }
+
+        VerticalLayout {
+            padding: 12px;
+            spacing: 7px;
+
+            // Header (draggable)
+            Rectangle {
+                height: 32px;
+                background: transparent;
+
+                TouchArea {
+                    pointer-event(ev) => {
+                        if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
+                            root.drag-window();
+                        } else if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
+                            root.ctx-x = Math.clamp(self.mouse-x, 8px, Math.max(8px, root.width - 216px));
+                            root.ctx-y = 34px;
+                            ctx-menu.show();
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 6px;
+                    alignment: stretch;
+
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        alignment: center;
+                        spacing: 1px;
+
+                        Text {
+                            text: "Системный монитор";
+                            color: Theme.text-primary;
+                            font-size: 14px;
+                            font-weight: 700;
+                            overflow: elide;
+                        }
+
+                        Text {
+                            text: root.header-meta;
+                            color: Theme.text-secondary;
+                            font-size: 10px;
+                            overflow: elide;
+                        }
+                    }
+
+                    Rectangle {
+                        width: 26px;
+                        height: 26px;
+                        border-radius: 6px;
+                        background: set-ta.has-hover ? Theme.hover-bg : transparent;
+                        Text {
+                            width: 100%;
+                            height: 100%;
+                            text: "⚙";
+                            color: Theme.text-secondary;
+                            font-size: 13px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        set-ta := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.open-settings(); }
+                        }
+                    }
+
+                    Rectangle {
+                        width: 26px;
+                        height: 26px;
+                        border-radius: 6px;
+                        background: ref-ta.has-hover ? Theme.hover-bg : transparent;
+                        Text {
+                            width: 100%;
+                            height: 100%;
+                            text: "↻";
+                            color: Theme.text-secondary;
+                            font-size: 13px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        ref-ta := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.refresh-now(); }
+                        }
+                    }
+                }
+            }
+
+            // 1. CPU Section
+            SysSectionCard {
+                title: "ПРОЦЕССОР";
+                tag: "CPU";
+                clicked => { root.open-section-tool(0); }
+                right-clicked => { root.ctx-x = 24px; root.ctx-y = 48px; ctx-menu.show(); }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        width: 84px;
+                        text: "Нагрузка: \(root.cpu-pct)%";
+                        color: Theme.text-primary;
+                        font-size: 11.5px;
+                        vertical-alignment: center;
+                    }
+                    VerticalLayout {
+                        width: 90px;
+                        alignment: center;
+                        SysGlowBar { percent: root.cpu-pct; }
+                    }
+                    Text {
+                        horizontal-stretch: 1;
+                        text: root.cpu-temp-line;
+                        color: Theme.text-primary;
+                        font-size: 11px;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        horizontal-stretch: 1;
+                        text: root.cpu-freq-line;
+                        color: Theme.text-secondary;
+                        font-size: 11px;
+                        overflow: elide;
+                    }
+                    Text {
+                        horizontal-stretch: 1;
+                        text: root.cpu-cores-line;
+                        color: root.cpu-throttled ? #F59E0B : Theme.text-secondary;
+                        font-size: 11px;
+                        overflow: elide;
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        horizontal-stretch: 1;
+                        text: root.cpu-gpu-hint;
+                        color: Theme.text-muted;
+                        font-size: 10.5px;
+                        overflow: elide;
+                    }
+                    Text {
+                        horizontal-stretch: 1;
+                        text: root.cpu-top-line;
+                        color: Theme.text-secondary;
+                        font-size: 10.5px;
+                        overflow: elide;
+                    }
+                }
+            }
+
+            // 2. GPU Section
+            SysSectionCard {
+                title: "ГРАФИКА";
+                tag: root.gpu-hz-badge;
+                accent-tag: true;
+                clicked => { root.open-section-tool(1); }
+                right-clicked => { root.ctx-x = 24px; root.ctx-y = 120px; ctx-menu.show(); }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        width: 84px;
+                        text: root.gpu-load-text;
+                        color: Theme.text-primary;
+                        font-size: 11.5px;
+                        vertical-alignment: center;
+                    }
+                    VerticalLayout {
+                        width: 74px;
+                        alignment: center;
+                        SysGlowBar { percent: root.gpu-pct; }
+                    }
+                    Text {
+                        horizontal-stretch: 1;
+                        text: root.gpu-clock-text;
+                        color: Theme.text-secondary;
+                        font-size: 11px;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                    Text {
+                        text: "VRAM:";
+                        color: Theme.text-secondary;
+                        font-size: 11px;
+                        vertical-alignment: center;
+                    }
+                    VerticalLayout {
+                        width: 64px;
+                        alignment: center;
+                        SysGlowBar { percent: root.vram-pct; bar-color: #8B5CF6; }
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        horizontal-stretch: 1;
+                        text: root.gpu-vram-text;
+                        color: Theme.text-secondary;
+                        font-size: 11px;
+                        overflow: elide;
+                    }
+                    Text {
+                        horizontal-stretch: 1;
+                        text: root.gpu-temp-text;
+                        color: Theme.text-secondary;
+                        font-size: 11px;
+                        overflow: elide;
+                    }
+                }
+            }
+
+            // 3. RAM & Drives
+            SysSectionCard {
+                title: "ПАМЯТЬ И ДИСКИ";
+                tag: "RAM / STORAGE";
+                clicked => { root.open-section-tool(2); }
+                right-clicked => { root.ctx-x = 24px; root.ctx-y = 180px; ctx-menu.show(); }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        horizontal-stretch: 2;
+                        text: root.ram-line;
+                        color: Theme.text-primary;
+                        font-size: 11px;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                    VerticalLayout {
+                        width: 68px;
+                        alignment: center;
+                        SysGlowBar { percent: root.ram-pct; }
+                    }
+                    Text {
+                        horizontal-stretch: 1;
+                        text: root.ram-top-line;
+                        color: Theme.text-secondary;
+                        font-size: 10.5px;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                }
+
+                for d in root.drives : HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        width: 78px;
+                        text: d.label;
+                        color: Theme.text-primary;
+                        font-size: 11px;
+                        vertical-alignment: center;
+                    }
+                    VerticalLayout {
+                        width: 56px;
+                        alignment: center;
+                        SysGlowBar { percent: d.busy-pct; bar-color: #06B6D4; }
+                    }
+                    Text {
+                        horizontal-stretch: 1;
+                        text: d.details;
+                        color: Theme.text-secondary;
+                        font-size: 10.5px;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                }
+            }
+
+            // 4. Network & Latency
+            SysSectionCard {
+                title: "СЕТЬ И ЗАДЕРЖКИ";
+                tag: "NET / LATENCY";
+                clicked => { root.open-section-tool(3); }
+                right-clicked => { root.ctx-x = 24px; root.ctx-y = 220px; ctx-menu.show(); }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        horizontal-stretch: 1;
+                        text: root.net-ip-line;
+                        color: Theme.text-primary;
+                        font-size: 11px;
+                        overflow: elide;
+                    }
+                    Text {
+                        text: root.net-rx-text;
+                        color: Theme.accent;
+                        font-size: 11px;
+                        font-weight: 600;
+                    }
+                    Text {
+                        text: root.net-tx-text;
+                        color: Theme.success;
+                        font-size: 11px;
+                        font-weight: 600;
+                    }
+                }
+
+                Text {
+                    text: root.net-latency-line;
+                    color: Theme.text-secondary;
+                    font-size: 10.5px;
+                    overflow: elide;
+                }
+            }
+
+            // 5. Top-5 Processes
+            SysSectionCard {
+                vertical-stretch: 1;
+                title: "ТОП-5 ПРОЦЕССОВ В МОМЕНТЕ";
+                tag: "CPU  |  RAM";
+                clicked => { root.open-section-tool(4); }
+                right-clicked => { root.ctx-x = 24px; root.ctx-y = 220px; ctx-menu.show(); }
+
+                for p in root.top-procs : HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        horizontal-stretch: 1;
+                        text: p.cpu-name;
+                        color: Theme.text-primary;
+                        font-size: 11px;
+                        overflow: elide;
+                    }
+                    Text {
+                        width: 36px;
+                        text: p.cpu-val;
+                        color: Theme.accent;
+                        font-size: 11px;
+                        font-weight: 600;
+                        horizontal-alignment: right;
+                    }
+                    Rectangle { width: 1px; background: Theme.divider-color; }
+                    Text {
+                        horizontal-stretch: 1;
+                        text: p.ram-name;
+                        color: Theme.text-primary;
+                        font-size: 11px;
+                        overflow: elide;
+                    }
+                    Text {
+                        width: 54px;
+                        text: p.ram-val;
+                        color: Theme.text-secondary;
+                        font-size: 11px;
+                        horizontal-alignment: right;
+                    }
+                }
+            }
+        }
+
+        // Bottom-right SE resize grip
+        Rectangle {
+            x: parent.width - 18px;
+            y: parent.height - 18px;
+            width: 16px;
+            height: 16px;
+            background: transparent;
+
+            Text {
+                width: 100%;
+                height: 100%;
+                text: "◢";
+                color: res-ta.has-hover ? Theme.accent : Theme.text-muted;
+                font-size: 9px;
+                horizontal-alignment: right;
+                vertical-alignment: bottom;
+            }
+
+            res-ta := TouchArea {
+                mouse-cursor: nwse-resize;
+                pointer-event(ev) => {
+                    if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
+                        root.start-resize();
+                    }
+                }
+            }
+        }
+    }
+
+    ctx-menu := PopupWindow {
+        x: root.ctx-x;
+        y: root.ctx-y;
+        width: 210px;
+        close-policy: PopupClosePolicy.close-on-click-outside;
+
+        Rectangle {
+            border-radius: 10px;
+            background: Theme.popup-bg;
+            border-width: 1px;
+            border-color: Theme.border-strong;
+            drop-shadow-blur: 18px;
+            drop-shadow-color: rgba(0, 0, 0, 0.45);
+            drop-shadow-offset-y: 6px;
+
+            VerticalLayout {
+                padding: 5px;
+                spacing: 2px;
+
+                if (root.vis-refresh) : SMenuBtn {
+                    label: "↻  Обновить датчики";
+                    clicked => { ctx-menu.close(); root.refresh-now(); }
+                }
+                SMenuBtn {
+                    label: "⚙  Настройки монитора";
+                    clicked => { ctx-menu.close(); root.open-settings(); }
+                }
+                if (root.vis-open-config) : SMenuBtn {
+                    label: "📄  Открыть sysmon.cfg";
+                    clicked => { ctx-menu.close(); root.open-config(); }
+                }
+
+                if (root.vis-layer) : Rectangle { height: 1px; background: Theme.divider-color; }
+                if (root.vis-layer) : SMenuBtn {
+                    label: "Слой: На рабочем столе";
+                    checked: root.layer-index == 0;
+                    clicked => { ctx-menu.close(); root.set-layer(0); }
+                }
+                if (root.vis-layer) : SMenuBtn {
+                    label: "Слой: Обычный";
+                    checked: root.layer-index == 1;
+                    clicked => { ctx-menu.close(); root.set-layer(1); }
+                }
+                if (root.vis-layer) : SMenuBtn {
+                    label: "Слой: Поверх окон";
+                    checked: root.layer-index == 2;
+                    clicked => { ctx-menu.close(); root.set-layer(2); }
+                }
+
+                if (root.vis-opacity) : Rectangle { height: 1px; background: Theme.divider-color; }
+                if (root.vis-opacity) : HorizontalLayout {
+                    height: 26px;
+                    padding-left: 6px;
+                    padding-right: 6px;
+                    spacing: 4px;
+                    for pct in [65, 80, 90, 100] : Rectangle {
+                        horizontal-stretch: 1;
+                        border-radius: 5px;
+                        background: root.opacity-pct == pct ? Theme.accent : Theme.card-bg;
+                        Text {
+                            width: 100%;
+                            height: 100%;
+                            text: "\(pct)%";
+                            color: root.opacity-pct == pct ? #FFFFFF : Theme.text-primary;
+                            font-size: 10.5px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { ctx-menu.close(); root.set-opacity(pct); }
+                        }
+                    }
+                }
+
+                if (root.vis-interval) : HorizontalLayout {
+                    height: 26px;
+                    padding-left: 6px;
+                    padding-right: 6px;
+                    spacing: 4px;
+                    for ms in [1000, 2000, 3000, 5000] : Rectangle {
+                        horizontal-stretch: 1;
+                        border-radius: 5px;
+                        background: root.refresh-ms == ms ? Theme.accent : Theme.card-bg;
+                        Text {
+                            width: 100%;
+                            height: 100%;
+                            text: "\(Math.round((ms * 1.0) / 1000.0))с";
+                            color: root.refresh-ms == ms ? #FFFFFF : Theme.text-primary;
+                            font-size: 10.5px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { ctx-menu.close(); root.set-refresh-ms(ms); }
+                        }
+                    }
+                }
+
+                if (root.vis-hide) : Rectangle { height: 1px; background: Theme.divider-color; }
+                if (root.vis-hide) : SMenuBtn {
+                    label: "✕  Скрыть виджет";
+                    danger: true;
+                    clicked => { ctx-menu.close(); root.hide-widget(); }
+                }
+            }
+        }
+    }
+}

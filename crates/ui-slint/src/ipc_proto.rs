@@ -1,3 +1,5 @@
+use asrbox_platform_api::{TrayMenuEntry, TrayMenuVisibility, TrayModuleFlags};
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct UiModuleStatus {
     pub id: String,
@@ -21,6 +23,14 @@ pub struct UiRuntimeStatus {
     pub modules: Vec<UiModuleStatus>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrayShowPayload {
+    pub x: i32,
+    pub y: i32,
+    pub flags: TrayModuleFlags,
+    pub docks: Vec<TrayMenuEntry>,
+}
+
 pub fn encode_ui_cmd(action: &str, arg: &str) -> String {
     format!("UI_CMD|{}|{}", escape_field(action), escape_field(arg))
 }
@@ -29,6 +39,86 @@ pub fn decode_ui_cmd(line: &str) -> Option<(String, String)> {
     let rest = line.trim().strip_prefix("UI_CMD|")?;
     let (act, arg) = rest.split_once('|')?;
     Some((unescape_field(act), unescape_field(arg)))
+}
+
+pub fn encode_tray_show(p: &TrayShowPayload) -> String {
+    let b = |v: bool| if v { '1' } else { '0' };
+    let f = &p.flags;
+    let mv = &f.menu_vis;
+    let bits = format!(
+        "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}",
+        b(f.dock_module_enabled),
+        b(f.widgets_module_enabled),
+        b(f.overlay_module_enabled),
+        b(f.overlay_setup_mode),
+        b(f.calendar_visible),
+        b(f.sys_monitor_visible),
+        b(f.weather_visible),
+        b(f.notes_visible),
+        b(f.autostart_enabled),
+        b(mv.show_autostart),
+        b(mv.show_docks),
+        b(mv.show_widgets),
+        b(mv.show_overlay),
+        b(mv.show_backup),
+        b(mv.show_debug),
+        b(mv.show_about),
+    );
+    let docks: Vec<String> = p
+        .docks
+        .iter()
+        .map(|d| format!("{}~{}~{}", d.dock_id, b(d.enabled), escape_sub(&d.title)))
+        .collect();
+    format!("SHOW|{}|{}|{}|{}", p.x, p.y, bits, escape_field(&docks.join(";")))
+}
+
+pub fn decode_tray_show(line: &str) -> Option<TrayShowPayload> {
+    let rest = line.trim().strip_prefix("SHOW|")?;
+    let cols: Vec<&str> = rest.splitn(4, '|').collect();
+    if cols.len() != 4 {
+        return None;
+    }
+    let x = cols[0].parse::<i32>().ok()?;
+    let y = cols[1].parse::<i32>().ok()?;
+    let bits: Vec<u8> = cols[2].bytes().collect();
+    if bits.len() != 16 {
+        return None;
+    }
+    let at = |i: usize| bits.get(i).copied() == Some(b'1');
+    let flags = TrayModuleFlags {
+        dock_module_enabled: at(0),
+        widgets_module_enabled: at(1),
+        overlay_module_enabled: at(2),
+        overlay_setup_mode: at(3),
+        calendar_visible: at(4),
+        sys_monitor_visible: at(5),
+        weather_visible: at(6),
+        notes_visible: at(7),
+        autostart_enabled: at(8),
+        menu_vis: TrayMenuVisibility {
+            show_autostart: at(9),
+            show_docks: at(10),
+            show_widgets: at(11),
+            show_overlay: at(12),
+            show_backup: at(13),
+            show_debug: at(14),
+            show_about: at(15),
+        },
+    };
+    let mut docks = Vec::new();
+    for entry in unescape_field(cols[3]).split(';').filter(|s| !s.is_empty()) {
+        let mut p = entry.splitn(3, '~');
+        if let (Some(id_s), Some(en_s), Some(t_s)) = (p.next(), p.next(), p.next()) {
+            if let Ok(dock_id) = id_s.parse::<u64>() {
+                docks.push(TrayMenuEntry {
+                    dock_id,
+                    title: unescape_sub(t_s),
+                    enabled: en_s == "1",
+                });
+            }
+        }
+    }
+    Some(TrayShowPayload { x, y, flags, docks })
 }
 
 pub fn encode_runtime_status(st: &UiRuntimeStatus) -> String {
@@ -151,7 +241,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ui_cmd_and_status_roundtrip() {
+    fn ui_cmd_status_and_tray_roundtrip() {
         let encoded = encode_ui_cmd("save_gh", "owner/repo|main|tok\\1");
         assert_eq!(
             decode_ui_cmd(&encoded),
@@ -160,12 +250,8 @@ mod tests {
         let st = UiRuntimeStatus {
             autostart: true,
             has_zip_pw: true,
-            has_gh_tok: false,
             has_ya_key: true,
-            overlay_setup: false,
             diag_verbose: true,
-            diag_file_log: false,
-            backup_busy: false,
             diag_summary: "RAM 18.2 МБ | CPU 0.1%".to_owned(),
             status_banner: "OK".to_owned(),
             modules: vec![UiModuleStatus {
@@ -174,7 +260,30 @@ mod tests {
                 running: true,
                 status_text: "PID 1234 · работает".to_owned(),
             }],
+            ..UiRuntimeStatus::default()
         };
         assert_eq!(decode_runtime_status(&encode_runtime_status(&st)), Some(st));
+        let tray = TrayShowPayload {
+            x: 1620,
+            y: 980,
+            flags: TrayModuleFlags {
+                dock_module_enabled: true,
+                widgets_module_enabled: true,
+                overlay_module_enabled: false,
+                overlay_setup_mode: false,
+                calendar_visible: true,
+                sys_monitor_visible: false,
+                weather_visible: true,
+                notes_visible: true,
+                autostart_enabled: true,
+                menu_vis: TrayMenuVisibility::default(),
+            },
+            docks: vec![TrayMenuEntry {
+                dock_id: 2,
+                title: "Док | 2 ~ главный;тест".to_owned(),
+                enabled: true,
+            }],
+        };
+        assert_eq!(decode_tray_show(&encode_tray_show(&tray)), Some(tray));
     }
 }

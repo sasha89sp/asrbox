@@ -1,16 +1,16 @@
 # MAP.md — `crates/app`
 
-Исполняемый бинарник `asrbox.exe`. Работает как мастер-супервизор (Fluent-трей, бэкап/AES-256/GitHub/WebDAV/синхронизация) с изолированными дочерними процессами модулей (`--worker dock|widgets|overlay`), Slint-окнами (`--ui-settings`, `--ui-notes`) и резервным `inproc`-режимом (`--inproc`).
+Исполняемый бинарник `asrbox.exe`. Работает как мастер-супервизор (системный трей, бэкап/AES-256/GitHub/WebDAV/синхронизация) с изолированными Slint-воркерами (`--worker dock|widgets`), оверлеем (`--worker overlay`), Slint-окнами (`--ui-settings`, `--ui-notes`, `--ui-tray`) и резервными `--inproc` / `--legacy-worker`.
 
 ## Файлы
 - `build.rs` — zero-dependency генератор Win32-ресурса `.res` (`RT_GROUP_ICON` + 7 размеров 16..256 px) для встраивания фирменной иконки «Стеклянный блок ASR» в `asrbox.exe`.
-- `src/main.rs` — точка входа, CLI (`--version`, `--selftest`, `--safe-mode`, `--inproc`, `--worker`, `--ui-settings`, `--ui-notes`, `--parent-pid`) и `AppController`.
+- `src/main.rs` — точка входа, CLI (`--version`, `--selftest`, `--safe-mode`, `--inproc`, `--worker`, `--legacy-worker`, `--ui-settings`, `--ui-notes`, `--ui-tray`, `--parent-pid`) и `AppController`.
 - `src/supervisor.rs` — `ModuleSupervisor`: запуск/остановка процессов модулей в Win32 `JobObject`, stdin/stdout IPC и автоперезапуск при сбое.
-- `src/slint_ui.rs` — `SlintUiBridge`: запуск/остановка и stdin/stdout IPC дочерних Slint-окон (`--ui-settings`, `--ui-notes`) в `JobObject` с пробуждением через `wake_host_window`.
-- `src/slint_dispatch.rs` — синхронизация `UiRuntimeStatus` и маршрутизация команд общих настроек, бэкапа, WebDAV, GitHub, синхронизации и диагностики из Slint.
+- `src/slint_ui.rs` — `SlintUiBridge`: запуск/остановка и stdin/stdout IPC дочерних Slint-процессов (`--ui-settings`, `--ui-notes`, предпрогретый `--ui-tray`) в `JobObject`.
+- `src/slint_dispatch.rs` — синхронизация `UiRuntimeStatus` и маршрутизация команд общих настроек, бэкапа, WebDAV, GitHub, синхронизации, диагностики и трея из Slint.
 - `src/slint_dispatch_dock.rs` — маршрутизация команд Slint для вкладки «Док-панели» (выбор, параметры, ярлыки/папки, меню ПКМ).
-- `src/slint_dispatch_tabs.rs` — маршрутизация команд Slint для вкладок «Виджеты» (Календарь/Монитор/Погода/Заметки) и «Игровой оверлей».
-- `src/worker.rs` — изолированный цикл воркера док-панелей (`--worker dock`), чтение `SupervisorCmd`, `menus.cfg`, watchdog PID и отправка логов/метрик.
+- `src/slint_dispatch_tabs.rs` — маршрутизация команд Slint для трея (`tray_action`/`tray_toggle_theme`), вкладок «Виджеты» и «Игровой оверлей».
+- `src/worker.rs` — точка входа воркеров (`--worker dock|widgets` -> Slint `run_dock_host`/`run_widgets_host`; `--worker overlay`; резервный `--legacy-worker`).
 - `src/worker_widgets.rs` — изолированный цикл воркера виджетов (`--worker widgets`): Google Календарь, Системный монитор и Погода (Заметки перенесены в `--ui-notes`).
 - `src/worker_overlay.rs` — изолированный цикл воркера игрового оверлея (`--worker overlay`) и интеграция настроек/режима настройки с `AppController`.
 - `src/docks.rs` — `DockManager`: жизненный цикл док-панелей, обновление окон на месте, видимость пунктов ПКМ (`DockMenuVisibility`), индикатор запущенных приложений и `docks.cfg`.
@@ -27,7 +27,7 @@
 - `src/settings_general.rs` — обработка действий раздела «Общие настройки» (дизайн-тема, тема, акцент, язык, контекстные меню, бэкап/AES-256/GitHub/WebDAV, подтверждённый сброс).
 - `src/settings_weather_notes.rs` — применение настроек виджетов Погоды (Open-Meteo / Яндекс.Погода + API-ключ в Credential Manager, `1/3/7` дней, город) и Заметок (`weather.cfg`, `notes.cfg`).
 - `src/settings_widgets.rs` — применение настроек док-панелей (`docks.cfg`, включая открытие папки и удаление значка) и виджетов Календаря/Монитора (`widgets.cfg`, `sysmon.cfg`).
-- `src/tools.rs` — Fluent ПКМ-меню трея (`TrayMenuVisibility`, Погода, Заметки), crash-hook и вспомогательные окна «Диагностика» и «О программе».
+- `src/tools.rs` — показ Slint-меню трея (`--ui-tray` с Win32-фолбэком), `apply_tray_action`, crash-hook и вспомогательные окна «Диагностика» и «О программе».
 - `src/worker_bus.rs` — маршрутизация `SupervisorCmd`/`WorkerMsg` между супервизором и воркерами.
 - `src/inproc_widgets.rs` — `inproc`-диспетчер событий для всех 4 виджетов (Календарь, Монитор, Погода, Заметки).
 - `src/selftest.rs` — кроссплатформенный `--selftest` (ядро, тема/логотип, доки, все 4 виджета, оверлей).

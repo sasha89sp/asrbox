@@ -157,6 +157,9 @@ impl<I: IconProvider> AppController<I> {
                 return (false, false);
             }
             "notes_closed" | "notes_changed" => return (true, false),
+            "tray_action" | "tray_toggle_theme" => {
+                return self.dispatch_tray_cmd(host, act, arg);
+            }
             _ => {}
         }
         if let Some(res) = self.dispatch_appearance_and_sys_cmd(host, act, arg) {

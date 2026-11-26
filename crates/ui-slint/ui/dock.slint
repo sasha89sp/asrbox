@@ -1,0 +1,673 @@
+import { Theme, SlintDockIconRow } from "theme.slint";
+import { AsrGlassLogo } from "components/asr_logo.slint";
+
+component DockMenuBtn inherits Rectangle {
+    in property <string> label;
+    in property <bool> checked: false;
+    in property <bool> danger: false;
+    callback clicked();
+
+    height: 27px;
+    border-radius: 6px;
+    background: ta.has-hover
+        ? (root.danger ? Theme.danger : Theme.hover-bg)
+        : (root.checked ? Theme.accent-tint : transparent);
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 8px;
+
+        Text {
+            horizontal-stretch: 1;
+            text: root.label;
+            color: (ta.has-hover && root.danger) ? #FFFFFF : Theme.text-primary;
+            font-size: 11.5px;
+            font-weight: root.checked ? 600 : 400;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        if (root.checked) : Text {
+            text: "●";
+            color: Theme.accent;
+            font-size: 9px;
+            vertical-alignment: center;
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component DockTile inherits Rectangle {
+    in property <SlintDockIconRow> item;
+    in property <length> icon-size: 44px;
+    in property <int> label-mode: 0; // 0=IconsOnly, 1=Below, 2=Right, 3=Tooltip
+    in property <bool> hover-zoom: true;
+    in property <bool> show-running-dot: true;
+    in property <bool> launch-anim: true;
+    callback launched(int);
+    callback right-clicked(int, bool, length, length);
+    callback hovered(string);
+    callback unhovered();
+
+    private property <bool> bouncing: false;
+
+    width: root.label-mode == 2 ? (root.icon-size + 96px) : (root.icon-size + 12px);
+    height: root.label-mode == 1 ? (root.icon-size + 24px) : (root.icon-size + 12px);
+    border-radius: 10px;
+    background: ta.pressed
+        ? Theme.press-bg
+        : (ta.has-hover ? Theme.hover-bg : transparent);
+    border-width: 1px;
+    border-color: ta.has-hover ? Theme.border-strong : transparent;
+    animate background { duration: 120ms; easing: ease-out; }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        changed has-hover => {
+            if (self.has-hover) {
+                root.hovered(root.item.label);
+            } else {
+                root.unhovered();
+            }
+        }
+        pointer-event(ev) => {
+            if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
+                root.right-clicked(root.item.id, root.item.is-separator, self.mouse-x, self.mouse-y);
+            } else if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
+                if (root.launch-anim) {
+                    root.bouncing = true;
+                }
+            } else if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.up) {
+                root.bouncing = false;
+                root.launched(root.item.id);
+            } else if (ev.kind == PointerEventKind.cancel) {
+                root.bouncing = false;
+            }
+        }
+    }
+
+    // Horizontal layout when label is Right (mode 2), otherwise icon centered (+ optional bottom label)
+    if (root.label-mode == 2) : HorizontalLayout {
+        padding-left: 6px;
+        padding-right: 8px;
+        spacing: 8px;
+        alignment: start;
+
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: root.icon-size;
+                height: root.icon-size;
+                border-radius: 9px;
+                background: root.item.has-icon ? transparent : Theme.card-bg;
+
+                if (root.item.has-icon) : Image {
+                    width: (ta.has-hover && root.hover-zoom) ? root.icon-size * 1.06 : root.icon-size * 0.90;
+                    height: (ta.has-hover && root.hover-zoom) ? root.icon-size * 1.06 : root.icon-size * 0.90;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2 + (root.bouncing ? -3px : 0px);
+                    source: root.item.icon-img;
+                    image-fit: contain;
+                    animate width, height, y { duration: 120ms; easing: ease-out; }
+                }
+
+                if (!root.item.has-icon) : Text {
+                    width: 100%;
+                    height: 100%;
+                    text: root.item.is-folder ? "📁" : "◈";
+                    color: Theme.accent;
+                    font-size: 20px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        Text {
+            horizontal-stretch: 1;
+            text: root.item.label;
+            color: Theme.text-primary;
+            font-size: 11.5px;
+            font-weight: 500;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+
+    if (root.label-mode != 2) : VerticalLayout {
+        padding: 4px;
+        spacing: 2px;
+        alignment: center;
+
+        Rectangle {
+            width: root.icon-size;
+            height: root.icon-size;
+            border-radius: 9px;
+            background: root.item.has-icon ? transparent : Theme.card-bg;
+
+            if (root.item.has-icon) : Image {
+                width: (ta.has-hover && root.hover-zoom) ? root.icon-size * 1.08 : root.icon-size * 0.90;
+                height: (ta.has-hover && root.hover-zoom) ? root.icon-size * 1.08 : root.icon-size * 0.90;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2
+                    + (root.bouncing ? -4px : (ta.has-hover && root.hover-zoom ? -2px : 0px));
+                source: root.item.icon-img;
+                image-fit: contain;
+                animate width, height, y { duration: 120ms; easing: ease-out; }
+            }
+
+            if (!root.item.has-icon) : Text {
+                width: 100%;
+                height: 100%;
+                text: root.item.is-folder ? "📁" : "◈";
+                color: Theme.accent;
+                font-size: 20px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        if (root.label-mode == 1) : Text {
+            width: root.icon-size + 6px;
+            text: root.item.label;
+            color: Theme.text-primary;
+            font-size: 10px;
+            horizontal-alignment: center;
+            overflow: elide;
+        }
+    }
+
+    // Running-app indicator dot
+    if (root.show-running-dot && root.item.is-running) : Rectangle {
+        x: (parent.width - 12px) / 2;
+        y: parent.height - 4px;
+        width: 12px;
+        height: 3px;
+        border-radius: 1.5px;
+        background: Theme.accent;
+    }
+}
+
+export component DockWindow inherits Window {
+    title: "asrbox — Док";
+    no-frame: true;
+    background: transparent;
+    preferred-width: 480px;
+    preferred-height: 76px;
+
+    in property <string> dock-name: "Док 1";
+    in property <bool> is-horizontal: true;
+    in property <length> icon-size: 44px;
+    in property <length> item-spacing: 6px;
+    in property <length> dock-padding: 8px;
+    in property <length> corner-radius: 16px;
+    in property <int> opacity-pct: 85;
+    in property <int> edge-index: 3; // 0=Left, 1=Right, 2=Top, 3=Bottom
+    in property <int> layer-index: 0; // 0=Wallpaper, 1=Normal, 2=Topmost
+    in property <int> label-mode: 0;
+    in property <bool> locked: true;
+    in property <bool> lock-items: false;
+    in property <bool> hover-zoom: true;
+    in property <bool> show-running-dot: true;
+    in property <bool> focus-running: true;
+    in property <bool> launch-anim: true;
+    in property <bool> show-settings-button: true;
+    in property <bool> can-remove-dock: false;
+    in property <[SlintDockIconRow]> items: [];
+
+    // Menu visibility flags (from menus.cfg)
+    in property <bool> vis-item-actions: true;
+    in property <bool> vis-add-separator: true;
+    in property <bool> vis-edge-layer: true;
+    in property <bool> vis-appearance: true;
+    in property <bool> vis-behavior: true;
+    in property <bool> vis-lock: true;
+    in property <bool> vis-dock-mgmt: true;
+
+    callback drag-window();
+    callback launch-item(int);
+    callback open-settings();
+    callback menu-action(string, int);
+
+    private property <int> ctx-item-id: -1;
+    private property <bool> ctx-item-is-sep: false;
+    private property <length> ctx-x: 16px;
+    private property <length> ctx-y: 12px;
+    private property <string> hover-tip: "";
+
+    Rectangle {
+        width: 100%;
+        height: 100%;
+        border-radius: root.corner-radius;
+        background: Theme.dark-mode
+            ? rgba(24, 27, 32, Math.clamp((root.opacity-pct * 1.0) / 100.0, 0.22, 0.98))
+            : rgba(243, 245, 248, Math.clamp((root.opacity-pct * 1.0) / 100.0, 0.28, 0.98));
+        border-width: 1px;
+        border-color: Theme.border-strong;
+        clip: true;
+
+        // Top specular glass highlight
+        Rectangle {
+            y: 0px;
+            width: 100%;
+            height: 1px;
+            background: Theme.top-shine;
+        }
+
+        // Background drag (when unlocked) + right-click context menu
+        TouchArea {
+            pointer-event(ev) => {
+                if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down && !root.locked) {
+                    root.drag-window();
+                } else if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
+                    root.ctx-item-id = -1;
+                    root.ctx-item-is-sep = false;
+                    root.ctx-x = Math.clamp(self.mouse-x, 4px, Math.max(4px, root.width - 216px));
+                    root.ctx-y = 4px;
+                    ctx-menu.show();
+                }
+            }
+        }
+
+        // Horizontal capsule layout
+        if (root.is-horizontal) : HorizontalLayout {
+            padding: root.dock-padding;
+            spacing: root.item-spacing;
+            alignment: center;
+
+            if (!root.locked) : Rectangle {
+                width: 16px;
+                height: root.icon-size + 8px;
+                border-radius: 6px;
+                background: drag-ta.has-hover ? Theme.hover-bg : transparent;
+
+                Text {
+                    width: 100%;
+                    height: 100%;
+                    text: "⋮⋮";
+                    color: Theme.text-muted;
+                    font-size: 13px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+                drag-ta := TouchArea {
+                    mouse-cursor: grab;
+                    pointer-event(ev) => {
+                        if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
+                            root.drag-window();
+                        }
+                    }
+                }
+            }
+
+            for it in root.items : Rectangle {
+                width: it.is-separator ? 10px
+                    : (root.label-mode == 2 ? (root.icon-size + 96px) : (root.icon-size + 12px));
+                height: root.label-mode == 1 ? (root.icon-size + 24px) : (root.icon-size + 12px);
+                background: transparent;
+
+                if (it.is-separator) : Rectangle {
+                    x: 4px;
+                    y: (parent.height - root.icon-size * 0.65) / 2;
+                    width: 2px;
+                    height: root.icon-size * 0.65;
+                    border-radius: 1px;
+                    background: Theme.border-strong;
+
+                    TouchArea {
+                        pointer-event(ev) => {
+                            if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
+                                root.ctx-item-id = it.id;
+                                root.ctx-item-is-sep = true;
+                                root.ctx-x = 12px;
+                                root.ctx-y = 4px;
+                                ctx-menu.show();
+                            }
+                        }
+                    }
+                }
+
+                if (!it.is-separator) : DockTile {
+                    item: it;
+                    icon-size: root.icon-size;
+                    label-mode: root.label-mode;
+                    hover-zoom: root.hover-zoom;
+                    show-running-dot: root.show-running-dot;
+                    launch-anim: root.launch-anim;
+                    launched(id) => { root.launch-item(id); }
+                    hovered(lbl) => { root.hover-tip = lbl; }
+                    unhovered => { root.hover-tip = ""; }
+                    right-clicked(id, sep, _mx, _my) => {
+                        root.ctx-item-id = id;
+                        root.ctx-item-is-sep = sep;
+                        root.ctx-x = 12px;
+                        root.ctx-y = 4px;
+                        ctx-menu.show();
+                    }
+                }
+            }
+
+            if (root.show-settings-button) : Rectangle {
+                width: root.icon-size + 12px;
+                height: root.icon-size + 12px;
+                border-radius: 10px;
+                background: set-ta.has-hover ? Theme.hover-bg : transparent;
+                border-width: 1px;
+                border-color: set-ta.has-hover ? Theme.border-strong : transparent;
+
+                AsrGlassLogo {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    size: root.icon-size * 0.88;
+                }
+
+                set-ta := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.open-settings(); }
+                    pointer-event(ev) => {
+                        if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
+                            root.ctx-item-id = -1;
+                            root.ctx-item-is-sep = false;
+                            root.ctx-x = Math.max(4px, root.width - 216px);
+                            root.ctx-y = 4px;
+                            ctx-menu.show();
+                        }
+                    }
+                }
+            }
+        }
+
+        // Vertical capsule layout
+        if (!root.is-horizontal) : VerticalLayout {
+            padding: root.dock-padding;
+            spacing: root.item-spacing;
+            alignment: center;
+
+            if (!root.locked) : Rectangle {
+                width: root.icon-size + 8px;
+                height: 16px;
+                border-radius: 6px;
+                background: vdrag-ta.has-hover ? Theme.hover-bg : transparent;
+
+                Text {
+                    width: 100%;
+                    height: 100%;
+                    text: "⋯";
+                    color: Theme.text-muted;
+                    font-size: 13px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+                vdrag-ta := TouchArea {
+                    mouse-cursor: grab;
+                    pointer-event(ev) => {
+                        if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
+                            root.drag-window();
+                        }
+                    }
+                }
+            }
+
+            for it in root.items : Rectangle {
+                width: root.label-mode == 2 ? (root.icon-size + 96px) : (root.icon-size + 12px);
+                height: it.is-separator ? 10px
+                    : (root.label-mode == 1 ? (root.icon-size + 24px) : (root.icon-size + 12px));
+                background: transparent;
+
+                if (it.is-separator) : Rectangle {
+                    x: (parent.width - root.icon-size * 0.65) / 2;
+                    y: 4px;
+                    width: root.icon-size * 0.65;
+                    height: 2px;
+                    border-radius: 1px;
+                    background: Theme.border-strong;
+
+                    TouchArea {
+                        pointer-event(ev) => {
+                            if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
+                                root.ctx-item-id = it.id;
+                                root.ctx-item-is-sep = true;
+                                root.ctx-x = 4px;
+                                root.ctx-y = 12px;
+                                ctx-menu.show();
+                            }
+                        }
+                    }
+                }
+
+                if (!it.is-separator) : DockTile {
+                    item: it;
+                    icon-size: root.icon-size;
+                    label-mode: root.label-mode;
+                    hover-zoom: root.hover-zoom;
+                    show-running-dot: root.show-running-dot;
+                    launch-anim: root.launch-anim;
+                    launched(id) => { root.launch-item(id); }
+                    hovered(lbl) => { root.hover-tip = lbl; }
+                    unhovered => { root.hover-tip = ""; }
+                    right-clicked(id, sep, _mx, _my) => {
+                        root.ctx-item-id = id;
+                        root.ctx-item-is-sep = sep;
+                        root.ctx-x = 4px;
+                        root.ctx-y = 12px;
+                        ctx-menu.show();
+                    }
+                }
+            }
+
+            if (root.show-settings-button) : Rectangle {
+                width: root.icon-size + 12px;
+                height: root.icon-size + 12px;
+                border-radius: 10px;
+                background: vset-ta.has-hover ? Theme.hover-bg : transparent;
+
+                AsrGlassLogo {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    size: root.icon-size * 0.88;
+                }
+
+                vset-ta := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.open-settings(); }
+                    pointer-event(ev) => {
+                        if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
+                            root.ctx-item-id = -1;
+                            root.ctx-item-is-sep = false;
+                            root.ctx-x = 4px;
+                            root.ctx-y = 12px;
+                            ctx-menu.show();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Slint PopupWindow context menu (auto-closes on outside click / Esc, never hangs)
+    ctx-menu := PopupWindow {
+        x: root.ctx-x;
+        y: root.ctx-y;
+        width: 214px;
+        close-policy: PopupClosePolicy.close-on-click-outside;
+
+        Rectangle {
+            border-radius: 10px;
+            background: Theme.popup-bg;
+            border-width: 1px;
+            border-color: Theme.border-strong;
+            drop-shadow-blur: 18px;
+            drop-shadow-color: rgba(0, 0, 0, 0.45);
+            drop-shadow-offset-y: 6px;
+
+            VerticalLayout {
+                padding: 5px;
+                spacing: 2px;
+
+                if (root.ctx-item-id >= 0 && root.vis-item-actions && !root.ctx-item-is-sep) : DockMenuBtn {
+                    label: "📂  Открыть расположение";
+                    clicked => { ctx-menu.close(); root.menu-action("open_item_folder", root.ctx-item-id); }
+                }
+                if (root.ctx-item-id >= 0 && root.vis-item-actions && !root.ctx-item-is-sep) : DockMenuBtn {
+                    label: "🖼  Выбрать иконку…";
+                    clicked => { ctx-menu.close(); root.menu-action("choose_icon", root.ctx-item-id); }
+                }
+                if (root.ctx-item-id >= 0 && root.vis-item-actions && !root.ctx-item-is-sep) : DockMenuBtn {
+                    label: "↺  Сбросить иконку";
+                    clicked => { ctx-menu.close(); root.menu-action("reset_icon", root.ctx-item-id); }
+                }
+                if (root.ctx-item-id >= 0 && root.vis-item-actions && !root.lock-items) : HorizontalLayout {
+                    height: 26px;
+                    spacing: 4px;
+                    DockMenuBtn {
+                        horizontal-stretch: 1;
+                        label: "◀ Сдвинуть";
+                        clicked => { ctx-menu.close(); root.menu-action("move_prev", root.ctx-item-id); }
+                    }
+                    DockMenuBtn {
+                        horizontal-stretch: 1;
+                        label: "Сдвинуть ▶";
+                        clicked => { ctx-menu.close(); root.menu-action("move_next", root.ctx-item-id); }
+                    }
+                }
+                if (root.ctx-item-id >= 0 && root.vis-item-actions && !root.lock-items) : DockMenuBtn {
+                    label: root.ctx-item-is-sep ? "🗑  Удалить разделитель" : "🗑  Удалить значок";
+                    danger: true;
+                    clicked => { ctx-menu.close(); root.menu-action("remove_item", root.ctx-item-id); }
+                }
+                if (root.ctx-item-id >= 0 && root.vis-item-actions) : Rectangle {
+                    height: 1px;
+                    background: Theme.divider-color;
+                }
+
+                if (root.vis-add-separator && !root.lock-items) : DockMenuBtn {
+                    label: "➕  Добавить разделитель";
+                    clicked => { ctx-menu.close(); root.menu-action("add_separator", 0); }
+                }
+
+                if (root.vis-edge-layer) : HorizontalLayout {
+                    height: 25px;
+                    padding-left: 4px;
+                    padding-right: 4px;
+                    spacing: 3px;
+                    for e[idx] in ["Лево", "Право", "Верх", "Низ"] : Rectangle {
+                        horizontal-stretch: 1;
+                        border-radius: 5px;
+                        background: root.edge-index == idx ? Theme.accent : Theme.card-bg;
+                        Text {
+                            width: 100%;
+                            height: 100%;
+                            text: e;
+                            color: root.edge-index == idx ? #FFFFFF : Theme.text-primary;
+                            font-size: 10px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { ctx-menu.close(); root.menu-action("set_edge", idx); }
+                        }
+                    }
+                }
+                if (root.vis-edge-layer) : HorizontalLayout {
+                    height: 25px;
+                    padding-left: 4px;
+                    padding-right: 4px;
+                    spacing: 3px;
+                    for l[idx] in ["Обои", "Обычн.", "Поверх"] : Rectangle {
+                        horizontal-stretch: 1;
+                        border-radius: 5px;
+                        background: root.layer-index == idx ? Theme.accent : Theme.card-bg;
+                        Text {
+                            width: 100%;
+                            height: 100%;
+                            text: l;
+                            color: root.layer-index == idx ? #FFFFFF : Theme.text-primary;
+                            font-size: 10px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { ctx-menu.close(); root.menu-action("set_layer", idx); }
+                        }
+                    }
+                }
+
+                if (root.vis-appearance) : HorizontalLayout {
+                    height: 25px;
+                    padding-left: 4px;
+                    padding-right: 4px;
+                    spacing: 3px;
+                    for sz in [40, 48, 64] : Rectangle {
+                        horizontal-stretch: 1;
+                        border-radius: 5px;
+                        background: root.icon-size == sz * 1px ? Theme.accent : Theme.card-bg;
+                        Text {
+                            width: 100%;
+                            height: 100%;
+                            text: "\(sz)px";
+                            color: root.icon-size == sz * 1px ? #FFFFFF : Theme.text-primary;
+                            font-size: 10px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { ctx-menu.close(); root.menu-action("icon_size", sz); }
+                        }
+                    }
+                }
+                if (root.vis-appearance) : DockMenuBtn {
+                    label: "🏷  Режим подписей (цикл)";
+                    clicked => { ctx-menu.close(); root.menu-action("cycle_labels", 0); }
+                }
+
+                if (root.vis-behavior) : DockMenuBtn {
+                    label: "🔍  Увеличение при наведении";
+                    checked: root.hover-zoom;
+                    clicked => { ctx-menu.close(); root.menu-action("toggle_hover_zoom", 0); }
+                }
+                if (root.vis-behavior) : DockMenuBtn {
+                    label: "•  Точка запущенных окон";
+                    checked: root.show-running-dot;
+                    clicked => { ctx-menu.close(); root.menu-action("toggle_running_dot", 0); }
+                }
+
+                if (root.vis-lock) : Rectangle { height: 1px; background: Theme.divider-color; }
+                if (root.vis-lock) : DockMenuBtn {
+                    label: "🔒  Закрепить положение";
+                    checked: root.locked;
+                    clicked => { ctx-menu.close(); root.menu-action("toggle_lock", 0); }
+                }
+                if (root.vis-lock) : DockMenuBtn {
+                    label: "🛡  Защита значков от удаления";
+                    checked: root.lock-items;
+                    clicked => { ctx-menu.close(); root.menu-action("toggle_lock_items", 0); }
+                }
+
+                if (root.vis-dock-mgmt) : Rectangle { height: 1px; background: Theme.divider-color; }
+                if (root.vis-dock-mgmt) : DockMenuBtn {
+                    label: "⚙  Настройки док-панелей";
+                    clicked => { ctx-menu.close(); root.open-settings(); }
+                }
+                if (root.vis-dock-mgmt) : DockMenuBtn {
+                    label: "➕  Добавить новую панель";
+                    clicked => { ctx-menu.close(); root.menu-action("add_dock", 0); }
+                }
+                if (root.vis-dock-mgmt && root.can-remove-dock) : DockMenuBtn {
+                    label: "✕  Удалить эту панель";
+                    danger: true;
+                    clicked => { ctx-menu.close(); root.menu-action("remove_dock", 0); }
+                }
+            }
+        }
+    }
+}

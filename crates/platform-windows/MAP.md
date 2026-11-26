@@ -3,7 +3,7 @@
 Единственный крейт workspace с `unsafe` (каждый блок снабжён комментарием `// SAFETY:`). Реализует контракты `crates/platform-api` через `windows` (`0.61`).
 
 ## Файлы
-- `src/lib.rs` — экспорт `WindowsDockHost`, `WindowsIconProvider`, `SingleInstanceGuard`, `JobObject`, `is_process_alive`, `wake_host_window`, `present_layered_bgra`, `query_primary_work_area`.
+- `src/lib.rs` — экспорт `WindowsDockHost`, `WindowsIconProvider`, `SingleInstanceGuard`, `JobObject`, `SysTelemetryCollector`, `winhttp_fetch`, `cred_load`, `pick_icon_file`, `activate_or_launch_target`, `query_running_exe_names`, `resolve_target_exe_name`, `launch_system_tool`, `open_item_location`, `open_in_notepad`, `open_url_str`, `query_local_time`, `primary_work_area`.
 - `src/app_icon.rs` — DPI-aware загрузка встроенной многоразмерной иконки PE (`LoadImageW` + `RT_GROUP_ICON #1`) с bottom-up фолбэком `CreateIconIndirect`, кэшем и `WM_SETICON`.
 - `src/autostart.rs` — автозагрузка Windows (`HKCU\...\Run\asrbox`) и Windows Credential Manager (`CredWriteW`/`CredReadW`/`CredDeleteW`).
 - `src/fluent_menu.rs` — точка входа и цикл кастомного слоистого Fluent-меню (`show_fluent_popup_menu`), защита от повторного входа и сброс по внешнему клику/фокусу.
@@ -37,11 +37,11 @@
 - `src/widget_text.rs` — диспетчер рендера текста (`GDI ClearType` / `DirectWrite`) на BGRA-кадр, стеклянный капсульный тултип (`radius: 6 px`, `26 px`) и локальное время.
 - `src/overlay_game.rs` — детектор активных игр (D3D fullscreen / borderless покрытие монитора, чёрный список, `extra_games`, rect монитора).
 - `src/overlay_telemetry.rs` — фоновый поток телеметрии игрового оверлея (`WM_OVERLAY_DONE`, DWM FPS + 1% low / Гц, GPU/VRAM, CPU, RAM, ICMP-пинг и % потерь).
-- `src/sys_telemetry.rs` — фоновый поток сбора телеметрии (`WM_TELEMETRY_DONE`, uptime, план питания, `NtQueryTimerResolution`).
+- `src/sys_telemetry.rs` — `SysTelemetryCollector` (`sample()`) и фоновый поток телеметрии (`WM_TELEMETRY_DONE`, uptime, план питания, `NtQueryTimerResolution`).
 - `src/sys_procs.rs` — телеметрия CPU/частоты (`CallNtPowerInformation`), ОЗУ/кэша/PF, топ-5 процессов и дисков (`IOCTL_DISK_PERFORMANCE`).
 - `src/sys_gpu.rs` — телеметрия GPU (DXGI VRAM, частота экрана Гц, динамическая загрузка `nvml.dll`).
 - `src/sys_net.rs` — телеметрия сети (IPv4, VPN, трафик `GetIfTable2`, ICMP-пинг шлюза и `1.1.1.1` с джиттером и потерями).
-- `src/http.rs` — фоновый WinHTTP GET-клиент с `WM_HTTP_DONE`.
+- `src/http.rs` — синхронный `fetch_blocking` (для Slint-воркеров) и фоновый WinHTTP GET-клиент с `WM_HTTP_DONE`.
 - `src/github_http.rs` — фоновый WinHTTP загрузчик исходного кода GitHub (`zipball`, потоковая запись, `WM_GITHUB_DONE`).
 - `src/icons.rs` — извлечение иконок (`IShellItemImageFactory`, WIC, `PrivateExtractIconsW`/`ExtractIconExW`, восстановление альфы legacy `HICON`).
 - `src/icons_lnk.rs` — разрешение `.lnk` (`IShellLinkW::GetIconLocation`/`GetPath`, `ExpandEnvironmentStringsW`), `SHGetFileInfoW` и `has_explorer_frame_box`.
