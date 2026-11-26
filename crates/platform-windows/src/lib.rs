@@ -173,6 +173,78 @@ pub fn primary_work_area() -> Result<PixelRect, String> {
 }
 
 #[cfg(windows)]
+pub fn apply_dwm_frameless_style(hwnd_raw: isize, dark: bool, round_small: bool) -> bool {
+    if hwnd_raw == 0 {
+        return false;
+    }
+    let hwnd = HWND(hwnd_raw as *mut c_void);
+    let dark_val: i32 = if dark { 1 } else { 0 };
+    let corner_val: i32 = if round_small { 3 } else { 2 };
+    let border_none: u32 = 0xFFFF_FFFE;
+    // SAFETY: `hwnd_raw` is a live Win32 HWND obtained from winit's HasWindowHandle.
+    unsafe {
+        let _ = DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_USE_IMMERSIVE_DARK_MODE,
+            (&dark_val as *const i32).cast::<c_void>(),
+            std::mem::size_of::<i32>() as u32,
+        );
+        let rounded = DwmSetWindowAttribute(
+            hwnd,
+            DWMWINDOWATTRIBUTE(33),
+            (&corner_val as *const i32).cast::<c_void>(),
+            std::mem::size_of::<i32>() as u32,
+        )
+        .is_ok();
+        let _ = DwmSetWindowAttribute(
+            hwnd,
+            DWMWINDOWATTRIBUTE(34),
+            (&border_none as *const u32).cast::<c_void>(),
+            std::mem::size_of::<u32>() as u32,
+        );
+        rounded
+    }
+}
+
+#[cfg(windows)]
+pub fn set_window_opacity_alpha(hwnd_raw: isize, opacity_percent: u8) {
+    if hwnd_raw == 0 {
+        return;
+    }
+    let hwnd = HWND(hwnd_raw as *mut c_void);
+    let pct = opacity_percent.clamp(25, 100);
+    // SAFETY: `hwnd_raw` is a valid Win32 HWND; toggling WS_EX_LAYERED + LWA_ALPHA is safe.
+    unsafe {
+        let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        let layered_bit = WS_EX_LAYERED.0 as isize;
+        if pct >= 100 {
+            if (ex & layered_bit) != 0 {
+                let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), 255, LWA_ALPHA);
+                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex & !layered_bit);
+            }
+        } else {
+            if (ex & layered_bit) == 0 {
+                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex | layered_bit);
+            }
+            let alpha = ((u32::from(pct) * 255) / 100) as u8;
+            let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), alpha, LWA_ALPHA);
+        }
+    }
+}
+
+#[cfg(windows)]
+pub fn force_redraw_hwnd(hwnd_raw: isize) {
+    if hwnd_raw == 0 {
+        return;
+    }
+    let hwnd = HWND(hwnd_raw as *mut c_void);
+    // SAFETY: `hwnd_raw` is a live Win32 HWND; InvalidateRect schedules a full client repaint.
+    unsafe {
+        let _ = InvalidateRect(Some(hwnd), None, false);
+    }
+}
+
+#[cfg(windows)]
 use std::ffi::c_void;
 
 #[cfg(windows)]
@@ -184,16 +256,21 @@ use windows::Win32::Foundation::{
     CloseHandle, GetLastError, COLORREF, ERROR_ALREADY_EXISTS, HANDLE, HWND, POINT, RECT, SIZE,
 };
 #[cfg(windows)]
+use windows::Win32::Graphics::Dwm::{
+    DwmSetWindowAttribute, DWMWA_USE_IMMERSIVE_DARK_MODE, DWMWINDOWATTRIBUTE,
+};
+#[cfg(windows)]
 use windows::Win32::Graphics::Gdi::{
-    CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GetDC, ReleaseDC, SelectObject,
-    AC_SRC_ALPHA, AC_SRC_OVER, BLENDFUNCTION, DIB_RGB_COLORS,
+    CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GetDC, InvalidateRect, ReleaseDC,
+    SelectObject, AC_SRC_ALPHA, AC_SRC_OVER, BLENDFUNCTION, DIB_RGB_COLORS,
 };
 #[cfg(windows)]
 use windows::Win32::System::Threading::CreateMutexW;
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{
-    SystemParametersInfoW, UpdateLayeredWindow, SPI_GETWORKAREA,
-    SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, ULW_ALPHA,
+    GetWindowLongPtrW, SetLayeredWindowAttributes, SetWindowLongPtrW, SystemParametersInfoW,
+    UpdateLayeredWindow, GWL_EXSTYLE, LWA_ALPHA, SPI_GETWORKAREA,
+    SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, ULW_ALPHA, WS_EX_LAYERED,
 };
 
 #[cfg(windows)]

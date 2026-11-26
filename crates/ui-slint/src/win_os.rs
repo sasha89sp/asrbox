@@ -152,6 +152,16 @@ pub fn launch_system_tool(_cmd: &str, _args: &str) -> Result<(), String> {
 }
 
 #[cfg(windows)]
+pub fn open_in_explorer(path: &Path) -> Result<(), String> {
+    asrbox_platform_windows::open_in_explorer(path)
+}
+
+#[cfg(not(windows))]
+pub fn open_in_explorer(_path: &Path) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(windows)]
 pub fn open_item_location(path: &Path) -> Result<(), String> {
     asrbox_platform_windows::open_item_location(path)
 }

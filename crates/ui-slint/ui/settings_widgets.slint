@@ -153,7 +153,7 @@ export component SettingsWidgetsView inherits VerticalLayout {
 
         SettingRow {
             title: Theme.is-ru ? "Показывать виджет календаря" : "Show Calendar Widget";
-            GlassButton { label: "↻"; compact: true; clicked => { root.refresh-cal(); } }
+            GlassButton { label: "Обн."; compact: true; clicked => { root.refresh-cal(); } }
             GlassButton { label: "widgets.cfg"; compact: true; clicked => { root.open-cal-cfg(); } }
             GlassSwitch { checked: root.cal-visible; toggled(v) => { root.set-cal-visible(v); } }
         }
@@ -221,7 +221,7 @@ export component SettingsWidgetsView inherits VerticalLayout {
         for src in root.cal-sources : SettingRow {
             title: src.id;
             subtitle: src.url;
-            GlassButton { label: "✕"; variant: "danger"; compact: true; clicked => { root.remove-cal-source(src.index); } }
+            GlassButton { label: "×"; variant: "danger"; compact: true; clicked => { root.remove-cal-source(src.index); } }
         }
     }
 
@@ -234,7 +234,7 @@ export component SettingsWidgetsView inherits VerticalLayout {
 
         SettingRow {
             title: Theme.is-ru ? "Показывать Системный монитор" : "Show System Monitor";
-            GlassButton { label: "↻"; compact: true; clicked => { root.refresh-sys(); } }
+            GlassButton { label: "Обн."; compact: true; clicked => { root.refresh-sys(); } }
             GlassButton { label: "sysmon.cfg"; compact: true; clicked => { root.open-sys-cfg(); } }
             GlassSwitch { checked: root.sys-visible; toggled(v) => { root.set-sys-visible(v); } }
         }
@@ -280,7 +280,7 @@ export component SettingsWidgetsView inherits VerticalLayout {
 
         SettingRow {
             title: Theme.is-ru ? "Показывать виджет погоды" : "Show Weather Widget";
-            GlassButton { label: "↻"; compact: true; clicked => { root.refresh-weather(); } }
+            GlassButton { label: "Обн."; compact: true; clicked => { root.refresh-weather(); } }
             GlassButton { label: "weather.cfg"; compact: true; clicked => { root.open-weather-cfg(); } }
             GlassSwitch { checked: root.weather-visible; toggled(v) => { root.set-weather-visible(v); } }
         }
@@ -339,7 +339,7 @@ export component SettingsWidgetsView inherits VerticalLayout {
                 }
             }
             if (root.weather-has-yandex-key) : GlassButton {
-                label: "✕";
+                label: "×";
                 variant: "danger";
                 compact: true;
                 clicked => { root.clear-yandex-key(); }

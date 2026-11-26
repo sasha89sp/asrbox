@@ -1,4 +1,9 @@
 import { Theme, SlintWeatherHourRow, SlintWeatherDayRow } from "theme.slint";
+import {
+    VectorIconGear,
+    VectorIconRefresh,
+    WindowResizeHandles,
+} from "components/window_chrome.slint";
 
 component WMenuBtn inherits Rectangle {
     in property <string> label;
@@ -114,7 +119,7 @@ export component WeatherWindow inherits Window {
     in property <bool> vis-hide: true;
 
     callback drag-window();
-    callback start-resize();
+    callback resize-window(int);
     callback open-settings();
     callback refresh-now();
     callback set-forecast-days(int);
@@ -130,12 +135,10 @@ export component WeatherWindow inherits Window {
     shell := Rectangle {
         width: 100%;
         height: 100%;
-        border-radius: 14px;
-        background: Theme.dark-mode
-            ? #181B20.with-alpha(Math.clamp((root.opacity-pct * 1.0) / 100.0, 0.25, 0.98))
-            : #F3F5F8.with-alpha(Math.clamp((root.opacity-pct * 1.0) / 100.0, 0.30, 0.98));
+        border-radius: 8px;
+        background: Theme.window-bg;
         border-width: 1px;
-        border-color: Theme.border-color;
+        border-color: Theme.border-strong;
         clip: true;
 
         // Top specular glass highlight
@@ -158,6 +161,10 @@ export component WeatherWindow inherits Window {
         }
 
         VerticalLayout {
+            x: 0px;
+            y: 0px;
+            width: 100%;
+            height: 100%;
             padding: 12px;
             spacing: 8px;
 
@@ -184,10 +191,12 @@ export component WeatherWindow inherits Window {
 
                     VerticalLayout {
                         horizontal-stretch: 1;
+                        min-width: 0px;
                         alignment: center;
                         spacing: 1px;
 
                         Text {
+                            min-width: 0px;
                             text: root.city-name;
                             color: Theme.text-primary;
                             font-size: 14px;
@@ -196,6 +205,7 @@ export component WeatherWindow inherits Window {
                         }
 
                         if (root.date-subtitle != "") : Text {
+                            min-width: 0px;
                             text: root.date-subtitle;
                             color: Theme.text-secondary;
                             font-size: 10.5px;
@@ -208,14 +218,11 @@ export component WeatherWindow inherits Window {
                         height: 26px;
                         border-radius: 6px;
                         background: set-ta.has-hover ? Theme.hover-bg : transparent;
-                        Text {
-                            width: 100%;
-                            height: 100%;
-                            text: "⚙";
-                            color: Theme.text-secondary;
-                            font-size: 13px;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
+                        VectorIconGear {
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            size: 14px;
+                            icon-color: set-ta.has-hover ? Theme.text-primary : Theme.text-secondary;
                         }
                         set-ta := TouchArea {
                             mouse-cursor: pointer;
@@ -228,14 +235,12 @@ export component WeatherWindow inherits Window {
                         height: 26px;
                         border-radius: 6px;
                         background: ref-ta.has-hover ? Theme.hover-bg : transparent;
-                        Text {
-                            width: 100%;
-                            height: 100%;
-                            text: root.loading ? "…" : "↻";
-                            color: Theme.text-secondary;
-                            font-size: 13px;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
+                        VectorIconRefresh {
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            size: 14px;
+                            icon-color: root.loading ? Theme.accent
+                                : (ref-ta.has-hover ? Theme.text-primary : Theme.text-secondary);
                         }
                         ref-ta := TouchArea {
                             mouse-cursor: pointer;
@@ -261,10 +266,12 @@ export component WeatherWindow inherits Window {
 
                 VerticalLayout {
                     horizontal-stretch: 1;
+                    min-width: 0px;
                     alignment: center;
                     spacing: 2px;
 
                     Text {
+                        min-width: 0px;
                         text: root.condition-text;
                         color: Theme.text-primary;
                         font-size: 13px;
@@ -273,6 +280,7 @@ export component WeatherWindow inherits Window {
                     }
 
                     Text {
+                        min-width: 0px;
                         text: root.feels-like-text;
                         color: Theme.text-secondary;
                         font-size: 11px;
@@ -499,38 +507,19 @@ export component WeatherWindow inherits Window {
 
                 Text {
                     horizontal-stretch: 1;
+                    min-width: 0px;
                     text: root.footer-text;
                     color: Theme.text-muted;
                     font-size: 10px;
                     vertical-alignment: center;
                     overflow: elide;
                 }
-
-                Rectangle {
-                    width: 16px;
-                    height: 16px;
-                    background: transparent;
-
-                    Text {
-                        width: 100%;
-                        height: 100%;
-                        text: "◢";
-                        color: res-ta.has-hover ? Theme.accent : Theme.text-muted;
-                        font-size: 9px;
-                        horizontal-alignment: right;
-                        vertical-alignment: bottom;
-                    }
-
-                    res-ta := TouchArea {
-                        mouse-cursor: nwse-resize;
-                        pointer-event(ev) => {
-                            if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
-                                root.start-resize();
-                            }
-                        }
-                    }
-                }
             }
+        }
+
+        WindowResizeHandles {
+            show-se-grip: true;
+            resize-window(dir) => { root.resize-window(dir); }
         }
     }
 
@@ -555,15 +544,15 @@ export component WeatherWindow inherits Window {
                 spacing: 2px;
 
                 if (root.vis-refresh) : WMenuBtn {
-                    label: "↻  Обновить прогноз";
+                    label: "Обновить прогноз";
                     clicked => { ctx-menu.close(); root.refresh-now(); }
                 }
                 WMenuBtn {
-                    label: "⚙  Настройки погоды";
+                    label: "Настройки погоды";
                     clicked => { ctx-menu.close(); root.open-settings(); }
                 }
                 if (root.vis-open-config) : WMenuBtn {
-                    label: "📄  Открыть weather.cfg";
+                    label: "Открыть weather.cfg";
                     clicked => { ctx-menu.close(); root.open-config(); }
                 }
 
@@ -637,7 +626,7 @@ export component WeatherWindow inherits Window {
 
                 if (root.vis-hide) : Rectangle { height: 1px; background: Theme.divider-color; }
                 if (root.vis-hide) : WMenuBtn {
-                    label: "✕  Скрыть виджет";
+                    label: "Скрыть виджет";
                     danger: true;
                     clicked => { ctx-menu.close(); root.hide-widget(); }
                 }

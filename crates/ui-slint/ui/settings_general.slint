@@ -276,7 +276,7 @@ export component SettingsGeneralView inherits VerticalLayout {
         }
 
         SettingRow {
-            badge-icon: "❖";
+            badge-icon: "•";
             badge-bg: Theme.accent;
             title: Theme.is-ru ? "Изоляция модулей" : "Module Isolation";
             subtitle: Theme.is-ru
@@ -425,7 +425,7 @@ export component SettingsGeneralView inherits VerticalLayout {
                 }
             }
             if (root.backup-has-zip-pw) : GlassButton {
-                label: "✕";
+                label: "×";
                 variant: "danger";
                 compact: true;
                 clicked => { root.clear-zip-password(); }
@@ -451,7 +451,7 @@ export component SettingsGeneralView inherits VerticalLayout {
                 clicked => { root.test-webdav-server(srv.id); }
             }
             GlassButton {
-                label: "✕";
+                label: "×";
                 variant: "danger";
                 compact: true;
                 clicked => { root.delete-webdav-server(srv.id); }
@@ -643,7 +643,7 @@ export component SettingsGeneralView inherits VerticalLayout {
             title: item.local-path;
             subtitle: item.kind-label;
             GlassButton {
-                label: "✕";
+                label: "×";
                 variant: "danger";
                 compact: true;
                 clicked => { root.remove-sync-item(item.id); }

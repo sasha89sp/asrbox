@@ -12,17 +12,21 @@ use crate::generated::ui::{SlintTrayDockRow, TrayMenuWindow};
 use crate::ipc_proto::{decode_tray_show, encode_ui_cmd, TrayShowPayload};
 use crate::settings_state::apply_theme_to_window;
 use crate::vibrancy::{
-    configure_popup_window, install_focus_lost_hook, select_winit_backend, set_window_visible,
+    configure_popup_window, force_window_repaint, install_focus_lost_hook, move_window_to,
+    resize_window_to, select_winit_backend,
 };
 use crate::win_os::{is_parent_alive, primary_work_area};
 
 const TRAY_MENU_W: u32 = 284;
-const TRAY_MENU_H: u32 = 410;
 
 struct TrayHostState {
     ui: TrayMenuWindow,
     paths: AppPaths,
     visible: bool,
+    anchor_x: i32,
+    anchor_y: i32,
+    base_height: u32,
+    dock_count: usize,
     last_shown_at: Instant,
 }
 
@@ -47,6 +51,10 @@ pub fn run_tray_menu_host(
             ui,
             paths,
             visible: false,
+            anchor_x: 0,
+            anchor_y: 0,
+            base_height: 360,
+            dock_count: 1,
             last_shown_at: Instant::now(),
         });
     });
@@ -76,10 +84,11 @@ fn wire_tray_callbacks(ui: &TrayMenuWindow) {
         hide_tray_popup();
         emit_ui_cmd("tray_action", &format!("{}|{id}", act.as_str()));
     });
+    ui.on_section_changed(|section| resize_tray_for_section(section));
     install_focus_lost_hook(ui.window(), || {
         let should_hide = TRAY_HOST.with(|slot| {
             slot.borrow().as_ref().is_some_and(|s| {
-                s.visible && s.last_shown_at.elapsed() > Duration::from_millis(180)
+                s.visible && s.last_shown_at.elapsed() > Duration::from_millis(220)
             })
         });
         if should_hide {
@@ -113,29 +122,102 @@ fn spawn_stdin_listener() {
     });
 }
 
-fn show_tray_popup(payload: TrayShowPayload) {
+fn compute_base_height(p: &TrayShowPayload) -> u32 {
+    let mv = &p.flags.menu_vis;
+    let mut rows = 2u32; // Settings + Exit
+    if mv.show_docks {
+        rows += 1;
+    }
+    if mv.show_widgets {
+        rows += 1;
+    }
+    if mv.show_overlay {
+        rows += 1;
+    }
+    if mv.show_backup {
+        rows += 1;
+    }
+    if mv.show_autostart {
+        rows += 1;
+    }
+    if mv.show_debug {
+        rows += 1;
+    }
+    if mv.show_about {
+        rows += 1;
+    }
+    // 16px pad + 36px header + 3 dividers + rows * 33px + bottom breathing room
+    (74 + rows * 33).clamp(210, 420)
+}
+
+fn compute_popup_rect(anchor_x: i32, anchor_y: i32, h: u32) -> (i32, i32) {
+    let wa = primary_work_area();
+    let max_x = (wa.x + wa.width as i32 - TRAY_MENU_W as i32 - 8).max(wa.x + 8);
+    let max_y = (wa.y + wa.height as i32 - h as i32 - 8).max(wa.y + 8);
+    let x = (anchor_x - TRAY_MENU_W as i32 + 24).clamp(wa.x + 8, max_x);
+    let y = (anchor_y - h as i32 - 8).clamp(wa.y + 8, max_y);
+    (x, y)
+}
+
+fn resize_tray_for_section(section: i32) {
     TRAY_HOST.with(|slot| {
         let mut guard = slot.borrow_mut();
         let Some(s) = guard.as_mut() else {
             return;
         };
+        if !s.visible {
+            return;
+        }
+        let extra = match section {
+            1 => (3 + s.dock_count as u32) * 28,
+            2 => 5 * 28,
+            3 => 3 * 28,
+            4 => 3 * 28,
+            _ => 0,
+        };
+        let target_h = (s.base_height + extra).min(520);
+        let (x, y) = compute_popup_rect(s.anchor_x, s.anchor_y, target_h);
+        resize_window_to(s.ui.window(), TRAY_MENU_W, target_h);
+        move_window_to(s.ui.window(), x, y);
+        force_window_repaint(s.ui.window());
+    });
+}
+
+fn show_tray_popup(payload: TrayShowPayload) {
+    let weak = TRAY_HOST.with(|slot| {
+        let mut guard = slot.borrow_mut();
+        let Some(s) = guard.as_mut() else {
+            return None;
+        };
+        if s.visible {
+            let _ = s.ui.hide();
+        }
         let appearance = load_appearance_config(&s.paths.appearance_cfg);
         let dark = apply_theme_to_window(&s.ui, appearance);
         apply_tray_payload(&s.ui, &payload);
 
-        let wa = primary_work_area();
-        let x = (payload.x - TRAY_MENU_W as i32 + 24)
-            .clamp(wa.x + 6, wa.x + wa.width as i32 - TRAY_MENU_W as i32 - 6);
-        let y = (payload.y - TRAY_MENU_H as i32 - 8)
-            .clamp(wa.y + 6, wa.y + wa.height as i32 - TRAY_MENU_H as i32 - 6);
+        let base_h = compute_base_height(&payload);
+        s.anchor_x = payload.x;
+        s.anchor_y = payload.y;
+        s.base_height = base_h;
+        s.dock_count = payload.docks.len();
+        let (x, y) = compute_popup_rect(payload.x, payload.y, base_h);
 
-        if !s.visible {
-            let _ = s.ui.show();
-        }
-        configure_popup_window(s.ui.window(), x, y, TRAY_MENU_W, TRAY_MENU_H, dark);
+        let _ = s.ui.show();
+        configure_popup_window(s.ui.window(), x, y, TRAY_MENU_W, base_h, dark);
         s.visible = true;
         s.last_shown_at = Instant::now();
+        Some(s.ui.as_weak())
     });
+
+    // Guarantee a full software-renderer present once Windows finishes mapping the popup.
+    if let Some(w) = weak {
+        Timer::single_shot(Duration::from_millis(20), move || {
+            if let Some(u) = w.upgrade() {
+                force_window_repaint(u.window());
+            }
+        });
+    }
 }
 
 fn apply_tray_payload(ui: &TrayMenuWindow, p: &TrayShowPayload) {
@@ -174,7 +256,7 @@ fn hide_tray_popup() {
     TRAY_HOST.with(|slot| {
         if let Some(s) = slot.borrow_mut().as_mut() {
             if s.visible {
-                set_window_visible(s.ui.window(), false);
+                let _ = s.ui.hide();
                 s.visible = false;
             }
         }

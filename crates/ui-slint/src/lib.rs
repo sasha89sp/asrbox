@@ -1,3 +1,4 @@
+mod dock_icons;
 mod dock_runner;
 mod dock_view;
 mod generated;

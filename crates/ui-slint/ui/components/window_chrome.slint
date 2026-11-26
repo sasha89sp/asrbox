@@ -1,29 +1,307 @@
 import { Theme } from "../theme.slint";
 import { AsrGlassLogo } from "asr_logo.slint";
 
+export component VectorIconClose inherits Rectangle {
+    in property <length> size: 12px;
+    in property <color> icon-color: Theme.text-secondary;
+    width: root.size;
+    height: root.size;
+    background: transparent;
+
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: 12;
+        viewbox-height: 12;
+        stroke: root.icon-color;
+        stroke-width: 1.5px;
+        fill: transparent;
+        commands: "M 2.2 2.2 L 9.8 9.8 M 9.8 2.2 L 2.2 9.8";
+    }
+}
+
+export component VectorIconChevron inherits Rectangle {
+    in property <length> size: 12px;
+    in property <bool> up: false;
+    in property <bool> right: false;
+    in property <color> icon-color: Theme.text-secondary;
+    width: root.size;
+    height: root.size;
+    background: transparent;
+
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: 12;
+        viewbox-height: 12;
+        stroke: root.icon-color;
+        stroke-width: 1.5px;
+        fill: transparent;
+        commands: root.right
+            ? "M 4 2.5 L 8 6 L 4 9.5"
+            : (root.up ? "M 2.5 8 L 6 4 L 9.5 8" : "M 2.5 4 L 6 8 L 9.5 4");
+    }
+}
+
+export component VectorIconGear inherits Rectangle {
+    in property <length> size: 14px;
+    in property <color> icon-color: Theme.text-secondary;
+    width: root.size;
+    height: root.size;
+    background: transparent;
+
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: 16;
+        viewbox-height: 16;
+        stroke: root.icon-color;
+        stroke-width: 1.4px;
+        fill: transparent;
+        commands: "M 8 5.4 A 2.6 2.6 0 1 0 8 10.6 A 2.6 2.6 0 1 0 8 5.4 M 8 1.5 L 8 3.3 M 8 12.7 L 8 14.5 M 1.5 8 L 3.3 8 M 12.7 8 L 14.5 8 M 3.4 3.4 L 4.7 4.7 M 11.3 11.3 L 12.6 12.6 M 12.6 3.4 L 11.3 4.7 M 4.7 11.3 L 3.4 12.6";
+    }
+}
+
+export component VectorIconRefresh inherits Rectangle {
+    in property <length> size: 14px;
+    in property <color> icon-color: Theme.text-secondary;
+    width: root.size;
+    height: root.size;
+    background: transparent;
+
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: 16;
+        viewbox-height: 16;
+        stroke: root.icon-color;
+        stroke-width: 1.5px;
+        fill: transparent;
+        commands: "M 13.2 7.5 A 5.2 5.2 0 1 1 11.7 3.8 M 12.8 1.8 L 12.8 4.8 L 9.8 4.8";
+    }
+}
+
+export component VectorIconSearch inherits Rectangle {
+    in property <length> size: 13px;
+    in property <color> icon-color: Theme.text-muted;
+    width: root.size;
+    height: root.size;
+    background: transparent;
+
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: 16;
+        viewbox-height: 16;
+        stroke: root.icon-color;
+        stroke-width: 1.5px;
+        fill: transparent;
+        commands: "M 7 2.5 A 4.5 4.5 0 1 0 7 11.5 A 4.5 4.5 0 1 0 7 2.5 M 10.4 10.4 L 14 14";
+    }
+}
+
+export component VectorIconPlus inherits Rectangle {
+    in property <length> size: 13px;
+    in property <color> icon-color: Theme.accent;
+    width: root.size;
+    height: root.size;
+    background: transparent;
+
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: 12;
+        viewbox-height: 12;
+        stroke: root.icon-color;
+        stroke-width: 1.7px;
+        fill: transparent;
+        commands: "M 6 2 L 6 10 M 2 6 L 10 6";
+    }
+}
+
+export component VectorIconCheck inherits Rectangle {
+    in property <length> size: 11px;
+    in property <color> icon-color: #FFFFFF;
+    width: root.size;
+    height: root.size;
+    background: transparent;
+
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: 12;
+        viewbox-height: 12;
+        stroke: root.icon-color;
+        stroke-width: 1.8px;
+        fill: transparent;
+        commands: "M 2 6.3 L 4.8 9.2 L 10.2 3";
+    }
+}
+
+export component VectorIconTheme inherits Rectangle {
+    in property <length> size: 14px;
+    in property <bool> dark-mode: true;
+    in property <color> icon-color: Theme.text-primary;
+    width: root.size;
+    height: root.size;
+    background: transparent;
+
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: 16;
+        viewbox-height: 16;
+        stroke: root.icon-color;
+        stroke-width: 1.4px;
+        fill: transparent;
+        commands: root.dark-mode
+            ? "M 8 5.2 A 2.8 2.8 0 1 0 8 10.8 A 2.8 2.8 0 1 0 8 5.2 M 8 1.5 L 8 3.2 M 8 12.8 L 8 14.5 M 1.5 8 L 3.2 8 M 12.8 8 L 14.5 8 M 3.4 3.4 L 4.6 4.6 M 11.4 11.4 L 12.6 12.6 M 12.6 3.4 L 11.4 4.6 M 4.6 11.4 L 3.4 12.6"
+            : "M 10.8 2.4 A 5.6 5.6 0 1 0 13.6 10.5 A 4.4 4.4 0 0 1 10.8 2.4 Z";
+    }
+}
+
+export component VectorIconFolder inherits Rectangle {
+    in property <length> size: 14px;
+    in property <color> icon-color: Theme.accent;
+    width: root.size;
+    height: root.size;
+    background: transparent;
+
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: 16;
+        viewbox-height: 16;
+        stroke: root.icon-color;
+        stroke-width: 1.4px;
+        fill: transparent;
+        commands: "M 1.8 4.2 L 1.8 12.6 L 14.2 12.6 L 14.2 5.6 L 7.8 5.6 L 6.2 3.8 L 2.2 3.8 Z";
+    }
+}
+
+export component VectorIconFile inherits Rectangle {
+    in property <length> size: 13px;
+    in property <color> icon-color: Theme.text-secondary;
+    width: root.size;
+    height: root.size;
+    background: transparent;
+
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: 16;
+        viewbox-height: 16;
+        stroke: root.icon-color;
+        stroke-width: 1.4px;
+        fill: transparent;
+        commands: "M 3.5 2 L 10 2 L 13 5 L 13 14 L 3.5 14 Z M 9.8 2 L 9.8 5.2 L 13 5.2";
+    }
+}
+
+export component VectorIconNav inherits Rectangle {
+    in property <int> kind: 0; // 0=gear, 1=dock, 2=widgets, 3=overlay, 4=cloud, 5=bolt, 6=diag, 7=info, 8=power
+    in property <length> size: 14px;
+    in property <color> icon-color: Theme.text-secondary;
+    width: root.size;
+    height: root.size;
+    background: transparent;
+
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: 16;
+        viewbox-height: 16;
+        stroke: root.icon-color;
+        stroke-width: 1.4px;
+        fill: transparent;
+        commands:
+            root.kind == 1 ? "M 2 10.5 L 14 10.5 L 14 13.8 L 2 13.8 Z M 4.5 7 L 6.5 7 M 9.5 7 L 11.5 7" :
+            root.kind == 2 ? "M 2.2 2.2 L 7 2.2 L 7 7 L 2.2 7 Z M 9 2.2 L 13.8 2.2 L 13.8 7 L 9 7 Z M 2.2 9 L 7 9 L 7 13.8 L 2.2 13.8 Z M 9 9 L 13.8 9 L 13.8 13.8 L 9 13.8 Z" :
+            root.kind == 3 ? "M 8 2.2 A 5.8 5.8 0 1 0 8 13.8 A 5.8 5.8 0 1 0 8 2.2 M 8 5.6 L 8 10.4 M 5.6 8 L 10.4 8" :
+            root.kind == 4 ? "M 4.4 12.4 L 12.2 12.4 A 2.6 2.6 0 0 0 12.5 7.3 A 3.8 3.8 0 0 0 5.2 6.2 A 3.0 3.0 0 0 0 4.4 12.4 Z" :
+            root.kind == 5 ? "M 9.2 1.8 L 4 8.8 L 8 8.8 L 6.8 14.2 L 12 7.2 L 8 7.2 Z" :
+            root.kind == 6 ? "M 2.5 3.5 L 13.5 3.5 L 13.5 12.5 L 2.5 12.5 Z M 4.8 7 L 6.8 8.5 L 4.8 10 M 8.2 10 L 11 10" :
+            root.kind == 7 ? "M 8 2.2 A 5.8 5.8 0 1 0 8 13.8 A 5.8 5.8 0 1 0 8 2.2 M 8 7.2 L 8 11.2 M 8 4.8 L 8 5.5" :
+            root.kind == 8 ? "M 8 2.2 L 8 7.6 M 4.8 4.2 A 5.0 5.0 0 1 0 11.2 4.2" :
+            "M 8 5.4 A 2.6 2.6 0 1 0 8 10.6 A 2.6 2.6 0 1 0 8 5.4 M 8 1.5 L 8 3.3 M 8 12.7 L 8 14.5 M 1.5 8 L 3.3 8 M 12.7 8 L 14.5 8 M 3.4 3.4 L 4.7 4.7 M 11.3 11.3 L 12.6 12.6 M 12.6 3.4 L 11.3 4.7 M 4.7 11.3 L 3.4 12.6";
+    }
+}
+
 component WindowControlButton inherits Rectangle {
-    in property <string> glyph;
-    in property <bool> is-close: false;
+    in property <int> kind: 0; // 0=minimize, 1=maximize, 2=close
     callback clicked();
 
-    width: 42px;
-    height: 32px;
+    private property <bool> is-close: root.kind == 2;
+
+    width: 38px;
+    height: 28px;
     border-radius: 6px;
     background: ta.pressed
         ? (root.is-close ? #C42B1C : Theme.press-bg)
-        : (ta.has-hover ? (root.is-close ? Theme.danger : Theme.hover-bg) : transparent);
+        : (ta.has-hover
+            ? (root.is-close ? Theme.danger : Theme.hover-bg)
+            : (root.is-close
+                ? (Theme.dark-mode ? rgba(232, 17, 35, 0.22) : rgba(232, 17, 35, 0.14))
+                : transparent));
+    border-width: root.is-close ? 1px : 0px;
+    border-color: (root.is-close && (ta.has-hover || ta.pressed))
+        ? Theme.danger
+        : (root.is-close ? rgba(232, 17, 35, 0.36) : transparent);
 
     animate background { duration: 120ms; easing: ease-out; }
 
-    Text {
-        width: 100%;
-        height: 100%;
-        text: root.glyph;
-        color: (root.is-close && (ta.has-hover || ta.pressed)) ? #FFFFFF : Theme.text-secondary;
-        font-size: root.is-close ? 12px : 13px;
-        font-weight: 500;
-        horizontal-alignment: center;
-        vertical-alignment: center;
+    // Minimize bar
+    if (root.kind == 0) : Rectangle {
+        x: (parent.width - 10px) / 2;
+        y: (parent.height - 1.5px) / 2 + 1px;
+        width: 10px;
+        height: 1.5px;
+        border-radius: 0.75px;
+        background: ta.has-hover ? Theme.text-primary : Theme.text-secondary;
+    }
+
+    // Maximize square
+    if (root.kind == 1) : Rectangle {
+        x: (parent.width - 9px) / 2;
+        y: (parent.height - 9px) / 2;
+        width: 9px;
+        height: 9px;
+        border-radius: 1.5px;
+        background: transparent;
+        border-width: 1.3px;
+        border-color: ta.has-hover ? Theme.text-primary : Theme.text-secondary;
+    }
+
+    // Close X (crisp vector path, always red-accented)
+    if (root.kind == 2) : VectorIconClose {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        size: 11px;
+        icon-color: (ta.has-hover || ta.pressed)
+            ? #FFFFFF
+            : (Theme.dark-mode ? #FCA5A5 : #DC2626);
     }
 
     ta := TouchArea {
@@ -44,14 +322,16 @@ export component FramelessTitleBar inherits Rectangle {
 
     HorizontalLayout {
         padding-left: 12px;
-        padding-right: 4px;
+        padding-right: 6px;
         spacing: 8px;
         alignment: stretch;
 
         // Draggable left header region
         Rectangle {
             horizontal-stretch: 1;
+            min-width: 0px;
             background: transparent;
+            clip: true;
 
             TouchArea {
                 pointer-event(ev) => {
@@ -71,6 +351,8 @@ export component FramelessTitleBar inherits Rectangle {
                 }
 
                 Text {
+                    horizontal-stretch: 1;
+                    min-width: 0px;
                     text: root.title;
                     color: Theme.text-secondary;
                     font-size: 12px;
@@ -88,15 +370,15 @@ export component FramelessTitleBar inherits Rectangle {
             @children
         }
 
-        // Right window controls (-, [], X)
+        // Right window controls (-, [], red X)
         HorizontalLayout {
-            spacing: 2px;
+            spacing: 3px;
             alignment: end;
 
             VerticalLayout {
                 alignment: center;
                 WindowControlButton {
-                    glyph: "—";
+                    kind: 0;
                     clicked => { root.minimize-clicked(); }
                 }
             }
@@ -104,7 +386,7 @@ export component FramelessTitleBar inherits Rectangle {
             VerticalLayout {
                 alignment: center;
                 WindowControlButton {
-                    glyph: "□";
+                    kind: 1;
                     clicked => { root.maximize-clicked(); }
                 }
             }
@@ -112,8 +394,7 @@ export component FramelessTitleBar inherits Rectangle {
             VerticalLayout {
                 alignment: center;
                 WindowControlButton {
-                    glyph: "✕";
-                    is-close: true;
+                    kind: 2;
                     clicked => { root.close-clicked(); }
                 }
             }
@@ -126,5 +407,146 @@ export component FramelessTitleBar inherits Rectangle {
         width: 100%;
         height: 1px;
         background: Theme.divider-color;
+    }
+}
+
+// 8-direction invisible edge/corner resize overlay (0=N, 1=S, 2=W, 3=E, 4=NW, 5=NE, 6=SW, 7=SE)
+export component WindowResizeHandles inherits Rectangle {
+    in property <bool> show-se-grip: false;
+    callback resize-window(int);
+
+    width: 100%;
+    height: 100%;
+    background: transparent;
+
+    // Top edge (N=0)
+    TouchArea {
+        x: 10px;
+        y: 0px;
+        width: Math.max(0px, parent.width - 20px);
+        height: 4px;
+        mouse-cursor: ns-resize;
+        pointer-event(ev) => {
+            if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
+                root.resize-window(0);
+            }
+        }
+    }
+
+    // Bottom edge (S=1)
+    TouchArea {
+        x: 10px;
+        y: parent.height - 5px;
+        width: Math.max(0px, parent.width - 20px);
+        height: 5px;
+        mouse-cursor: ns-resize;
+        pointer-event(ev) => {
+            if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
+                root.resize-window(1);
+            }
+        }
+    }
+
+    // Left edge (W=2)
+    TouchArea {
+        x: 0px;
+        y: 10px;
+        width: 5px;
+        height: Math.max(0px, parent.height - 20px);
+        mouse-cursor: ew-resize;
+        pointer-event(ev) => {
+            if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
+                root.resize-window(2);
+            }
+        }
+    }
+
+    // Right edge (E=3)
+    TouchArea {
+        x: parent.width - 5px;
+        y: 10px;
+        width: 5px;
+        height: Math.max(0px, parent.height - 20px);
+        mouse-cursor: ew-resize;
+        pointer-event(ev) => {
+            if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
+                root.resize-window(3);
+            }
+        }
+    }
+
+    // Top-left corner (NW=4)
+    TouchArea {
+        x: 0px;
+        y: 0px;
+        width: 10px;
+        height: 10px;
+        mouse-cursor: nwse-resize;
+        pointer-event(ev) => {
+            if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
+                root.resize-window(4);
+            }
+        }
+    }
+
+    // Top-right corner (NE=5)
+    TouchArea {
+        x: parent.width - 10px;
+        y: 0px;
+        width: 10px;
+        height: 10px;
+        mouse-cursor: nesw-resize;
+        pointer-event(ev) => {
+            if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
+                root.resize-window(5);
+            }
+        }
+    }
+
+    // Bottom-left corner (SW=6)
+    TouchArea {
+        x: 0px;
+        y: parent.height - 10px;
+        width: 10px;
+        height: 10px;
+        mouse-cursor: nesw-resize;
+        pointer-event(ev) => {
+            if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
+                root.resize-window(6);
+            }
+        }
+    }
+
+    // Bottom-right corner (SE=7) with optional subtle Fluent grip
+    Rectangle {
+        x: parent.width - 14px;
+        y: parent.height - 14px;
+        width: 14px;
+        height: 14px;
+        background: transparent;
+
+        if (root.show-se-grip) : Path {
+            x: 3px;
+            y: 3px;
+            width: 8px;
+            height: 8px;
+            viewbox-x: 0;
+            viewbox-y: 0;
+            viewbox-width: 8;
+            viewbox-height: 8;
+            stroke: se-ta.has-hover ? Theme.accent : Theme.text-muted;
+            stroke-width: 1.2px;
+            fill: transparent;
+            commands: "M 7 2 L 2 7 M 7 5 L 5 7";
+        }
+
+        se-ta := TouchArea {
+            mouse-cursor: nwse-resize;
+            pointer-event(ev) => {
+                if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
+                    root.resize-window(7);
+                }
+            }
+        }
     }
 }

@@ -1,31 +1,62 @@
 import { Theme, SlintTrayDockRow } from "theme.slint";
 import { AsrGlassLogo } from "components/asr_logo.slint";
+import {
+    VectorIconChevron,
+    VectorIconClose,
+    VectorIconGear,
+    VectorIconNav,
+    VectorIconRefresh,
+    VectorIconTheme,
+} from "components/window_chrome.slint";
 
 component TrayQuickBtn inherits Rectangle {
-    in property <string> glyph;
+    in property <int> icon-kind: 0; // 0=gear, 1=refresh, 2=theme, 3=close
     in property <bool> danger: false;
     callback clicked();
 
     width: 28px;
     height: 28px;
     border-radius: 7px;
-    background: ta.has-hover
-        ? (root.danger ? Theme.danger : Theme.hover-bg)
-        : Theme.card-bg;
+    background: ta.pressed
+        ? (root.danger ? #C42B1C : Theme.press-bg)
+        : (ta.has-hover
+            ? (root.danger ? Theme.danger : Theme.hover-bg)
+            : (root.danger ? rgba(232, 17, 35, 0.16) : Theme.card-bg));
     border-width: 1px;
     border-color: ta.has-hover
         ? (root.danger ? Theme.danger : Theme.border-strong)
-        : Theme.border-color;
+        : (root.danger ? rgba(232, 17, 35, 0.36) : Theme.border-color);
     animate background { duration: 120ms; }
 
-    Text {
-        width: 100%;
-        height: 100%;
-        text: root.glyph;
-        color: (ta.has-hover && root.danger) ? #FFFFFF : Theme.text-primary;
-        font-size: 13px;
-        horizontal-alignment: center;
-        vertical-alignment: center;
+    if (root.icon-kind == 0) : VectorIconGear {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        size: 14px;
+        icon-color: Theme.text-primary;
+    }
+
+    if (root.icon-kind == 1) : VectorIconRefresh {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        size: 14px;
+        icon-color: Theme.text-primary;
+    }
+
+    if (root.icon-kind == 2) : VectorIconTheme {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        size: 14px;
+        dark-mode: Theme.dark-mode;
+        icon-color: Theme.text-primary;
+    }
+
+    if (root.icon-kind == 3) : VectorIconClose {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        size: 11px;
+        icon-color: (ta.has-hover || ta.pressed)
+            ? #FFFFFF
+            : (Theme.dark-mode ? #FCA5A5 : #DC2626);
     }
 
     ta := TouchArea {
@@ -35,15 +66,16 @@ component TrayQuickBtn inherits Rectangle {
 }
 
 component TrayRowBtn inherits Rectangle {
-    in property <string> icon;
+    in property <int> icon-kind: -1; // -1=none, 0..8=VectorIconNav
     in property <string> label;
-    in property <string> trailing: "";
+    in property <bool> expandable: false;
+    in property <bool> expanded: false;
     in property <bool> active-dot: false;
     in property <bool> danger: false;
     in property <bool> indent: false;
     callback clicked();
 
-    height: root.indent ? 28px : 32px;
+    height: root.indent ? 27px : 31px;
     border-radius: 7px;
     background: ta.has-hover
         ? (root.danger ? Theme.danger : Theme.hover-bg)
@@ -51,22 +83,26 @@ component TrayRowBtn inherits Rectangle {
     animate background { duration: 110ms; }
 
     HorizontalLayout {
-        padding-left: root.indent ? 22px : 10px;
+        padding-left: root.indent ? 24px : 10px;
         padding-right: 10px;
         spacing: 9px;
         alignment: stretch;
 
-        if (root.icon != "") : Text {
+        if (root.icon-kind >= 0) : VerticalLayout {
             width: 16px;
-            text: root.icon;
-            color: (ta.has-hover && root.danger) ? #FFFFFF : Theme.accent;
-            font-size: 12.5px;
-            horizontal-alignment: center;
-            vertical-alignment: center;
+            alignment: center;
+            VectorIconNav {
+                kind: root.icon-kind;
+                size: 14px;
+                icon-color: (ta.has-hover && root.danger)
+                    ? #FFFFFF
+                    : (root.danger ? Theme.danger : Theme.accent);
+            }
         }
 
         Text {
             horizontal-stretch: 1;
+            min-width: 0px;
             text: root.label;
             color: (ta.has-hover && root.danger) ? #FFFFFF : Theme.text-primary;
             font-size: root.indent ? 11.5px : 12.5px;
@@ -85,11 +121,13 @@ component TrayRowBtn inherits Rectangle {
             }
         }
 
-        if (root.trailing != "") : Text {
-            text: root.trailing;
-            color: Theme.text-muted;
-            font-size: 11px;
-            vertical-alignment: center;
+        if (root.expandable) : VerticalLayout {
+            alignment: center;
+            VectorIconChevron {
+                size: 11px;
+                up: root.expanded;
+                icon-color: Theme.text-muted;
+            }
         }
     }
 
@@ -103,8 +141,9 @@ export component TrayMenuWindow inherits Window {
     title: "asrbox — Трей";
     no-frame: true;
     background: transparent;
+    default-font-family: "Segoe UI";
     preferred-width: 284px;
-    preferred-height: 410px;
+    preferred-height: 360px;
 
     in property <string> app-version: "0.2.0";
     in property <bool> dock-module-enabled: true;
@@ -131,6 +170,7 @@ export component TrayMenuWindow inherits Window {
 
     callback trigger-action(string, int);
     callback toggle-theme();
+    callback section-changed(int);
     callback hide-menu();
 
     FocusScope {
@@ -147,7 +187,7 @@ export component TrayMenuWindow inherits Window {
         Rectangle {
             width: 100%;
             height: 100%;
-            border-radius: 12px;
+            border-radius: 8px;
             background: Theme.popup-bg;
             border-width: 1px;
             border-color: Theme.border-strong;
@@ -161,8 +201,12 @@ export component TrayMenuWindow inherits Window {
             }
 
             VerticalLayout {
+                x: 0px;
+                y: 0px;
+                width: 100%;
+                height: 100%;
                 padding: 8px;
-                spacing: 4px;
+                spacing: 5px;
 
                 // Top Quick-Action Bar (matches Concentric Fluent Glass spec)
                 HorizontalLayout {
@@ -179,6 +223,7 @@ export component TrayMenuWindow inherits Window {
 
                     VerticalLayout {
                         horizontal-stretch: 1;
+                        min-width: 0px;
                         alignment: center;
                         spacing: 0px;
                         Text {
@@ -197,28 +242,28 @@ export component TrayMenuWindow inherits Window {
                     VerticalLayout {
                         alignment: center;
                         TrayQuickBtn {
-                            glyph: "⚙";
+                            icon-kind: 0;
                             clicked => { root.trigger-action("open_settings", 0); }
                         }
                     }
                     VerticalLayout {
                         alignment: center;
                         TrayQuickBtn {
-                            glyph: "↻";
+                            icon-kind: 1;
                             clicked => { root.trigger-action("refresh_all", 0); }
                         }
                     }
                     VerticalLayout {
                         alignment: center;
                         TrayQuickBtn {
-                            glyph: Theme.dark-mode ? "☀" : "🌙";
+                            icon-kind: 2;
                             clicked => { root.toggle-theme(); }
                         }
                     }
                     VerticalLayout {
                         alignment: center;
                         TrayQuickBtn {
-                            glyph: "✕";
+                            icon-kind: 3;
                             danger: true;
                             clicked => { root.trigger-action("exit", 0); }
                         }
@@ -238,19 +283,21 @@ export component TrayMenuWindow inherits Window {
                         spacing: 2px;
 
                         TrayRowBtn {
-                            icon: "⚙";
+                            icon-kind: 0;
                             label: "Настройки";
                             clicked => { root.trigger-action("open_settings", 0); }
                         }
 
                         // Docks expandable section
                         if (root.vis-docks) : TrayRowBtn {
-                            icon: "▦";
+                            icon-kind: 1;
                             label: "Док-панели";
                             active-dot: root.dock-module-enabled;
-                            trailing: root.expanded-section == 1 ? "⌃" : "⌄";
+                            expandable: true;
+                            expanded: root.expanded-section == 1;
                             clicked => {
                                 root.expanded-section = root.expanded-section == 1 ? 0 : 1;
+                                root.section-changed(root.expanded-section);
                             }
                         }
                         if (root.vis-docks && root.expanded-section == 1) : VerticalLayout {
@@ -269,7 +316,7 @@ export component TrayMenuWindow inherits Window {
                             }
                             TrayRowBtn {
                                 indent: true;
-                                label: "＋ Добавить док-панель";
+                                label: "+ Добавить док-панель";
                                 clicked => { root.trigger-action("add_dock", 0); }
                             }
                             TrayRowBtn {
@@ -281,12 +328,14 @@ export component TrayMenuWindow inherits Window {
 
                         // Widgets expandable section
                         if (root.vis-widgets) : TrayRowBtn {
-                            icon: "⊞";
+                            icon-kind: 2;
                             label: "Виджеты";
                             active-dot: root.widgets-module-enabled;
-                            trailing: root.expanded-section == 2 ? "⌃" : "⌄";
+                            expandable: true;
+                            expanded: root.expanded-section == 2;
                             clicked => {
                                 root.expanded-section = root.expanded-section == 2 ? 0 : 2;
+                                root.section-changed(root.expanded-section);
                             }
                         }
                         if (root.vis-widgets && root.expanded-section == 2) : VerticalLayout {
@@ -325,12 +374,14 @@ export component TrayMenuWindow inherits Window {
 
                         // Overlay expandable section
                         if (root.vis-overlay) : TrayRowBtn {
-                            icon: "◈";
+                            icon-kind: 3;
                             label: "Игровой оверлей";
                             active-dot: root.overlay-module-enabled;
-                            trailing: root.expanded-section == 3 ? "⌃" : "⌄";
+                            expandable: true;
+                            expanded: root.expanded-section == 3;
                             clicked => {
                                 root.expanded-section = root.expanded-section == 3 ? 0 : 3;
+                                root.section-changed(root.expanded-section);
                             }
                         }
                         if (root.vis-overlay && root.expanded-section == 3) : VerticalLayout {
@@ -356,11 +407,13 @@ export component TrayMenuWindow inherits Window {
 
                         // Backup expandable section
                         if (root.vis-backup) : TrayRowBtn {
-                            icon: "☁";
+                            icon-kind: 4;
                             label: "Бэкап и облако";
-                            trailing: root.expanded-section == 4 ? "⌃" : "⌄";
+                            expandable: true;
+                            expanded: root.expanded-section == 4;
                             clicked => {
                                 root.expanded-section = root.expanded-section == 4 ? 0 : 4;
+                                root.section-changed(root.expanded-section);
                             }
                         }
                         if (root.vis-backup && root.expanded-section == 4) : VerticalLayout {
@@ -385,20 +438,20 @@ export component TrayMenuWindow inherits Window {
                         Rectangle { height: 1px; background: Theme.divider-color; }
 
                         if (root.vis-autostart) : TrayRowBtn {
-                            icon: "⚡";
+                            icon-kind: 5;
                             label: "Автозагрузка с Windows";
                             active-dot: root.autostart-enabled;
                             clicked => { root.trigger-action("toggle_autostart", 0); }
                         }
 
                         if (root.vis-debug) : TrayRowBtn {
-                            icon: "🛠";
+                            icon-kind: 6;
                             label: "Диагностика и логи";
                             clicked => { root.trigger-action("open_debug", 0); }
                         }
 
                         if (root.vis-about) : TrayRowBtn {
-                            icon: "ℹ";
+                            icon-kind: 7;
                             label: "О программе";
                             clicked => { root.trigger-action("open_about", 0); }
                         }
@@ -406,7 +459,7 @@ export component TrayMenuWindow inherits Window {
                         Rectangle { height: 1px; background: Theme.divider-color; }
 
                         TrayRowBtn {
-                            icon: "⏻";
+                            icon-kind: 8;
                             label: "Выход";
                             danger: true;
                             clicked => { root.trigger-action("exit", 0); }

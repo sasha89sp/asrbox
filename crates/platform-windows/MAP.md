@@ -3,7 +3,7 @@
 Единственный крейт workspace с `unsafe` (каждый блок снабжён комментарием `// SAFETY:`). Реализует контракты `crates/platform-api` через `windows` (`0.61`).
 
 ## Файлы
-- `src/lib.rs` — экспорт `WindowsDockHost`, `WindowsIconProvider`, `SingleInstanceGuard`, `JobObject`, `SysTelemetryCollector`, `winhttp_fetch`, `cred_load`, `pick_icon_file`, `activate_or_launch_target`, `query_running_exe_names`, `resolve_target_exe_name`, `launch_system_tool`, `open_item_location`, `open_in_notepad`, `open_url_str`, `query_local_time`, `primary_work_area`.
+- `src/lib.rs` — экспорт `WindowsDockHost`, `WindowsIconProvider`, `SingleInstanceGuard`, `JobObject`, `SysTelemetryCollector`, `winhttp_fetch`, `cred_load`, `pick_icon_file`, `activate_or_launch_target`, `query_running_exe_names`, `resolve_target_exe_name`, `launch_system_tool`, `open_item_location`, `open_in_notepad`, `open_url_str`, `query_local_time`, `primary_work_area`, `apply_dwm_frameless_style`, `set_window_opacity_alpha`, `force_redraw_hwnd`.
 - `src/app_icon.rs` — DPI-aware загрузка встроенной многоразмерной иконки PE (`LoadImageW` + `RT_GROUP_ICON #1`) с bottom-up фолбэком `CreateIconIndirect`, кэшем и `WM_SETICON`.
 - `src/autostart.rs` — автозагрузка Windows (`HKCU\...\Run\asrbox`) и Windows Credential Manager (`CredWriteW`/`CredReadW`/`CredDeleteW`).
 - `src/fluent_menu.rs` — точка входа и цикл кастомного слоистого Fluent-меню (`show_fluent_popup_menu`), защита от повторного входа и сброс по внешнему клику/фокусу.
@@ -44,7 +44,7 @@
 - `src/http.rs` — синхронный `fetch_blocking` (для Slint-воркеров) и фоновый WinHTTP GET-клиент с `WM_HTTP_DONE`.
 - `src/github_http.rs` — фоновый WinHTTP загрузчик исходного кода GitHub (`zipball`, потоковая запись, `WM_GITHUB_DONE`).
 - `src/icons.rs` — извлечение иконок (`IShellItemImageFactory`, WIC, `PrivateExtractIconsW`/`ExtractIconExW`, восстановление альфы legacy `HICON`).
-- `src/icons_lnk.rs` — разрешение `.lnk` (`IShellLinkW::GetIconLocation`/`GetPath`, `ExpandEnvironmentStringsW`), `SHGetFileInfoW` и `has_explorer_frame_box`.
+- `src/icons_lnk.rs` — разрешение `.lnk` (`IShellLinkW::GetIconLocation`/`GetPath`, `ExpandEnvironmentStringsW`), `SHGetFileInfoW` (включая фолбэк `SHGFI_USEFILEATTRIBUTES` для офлайн/отсутствующих путей) и `has_explorer_frame_box`.
 - `src/tray.rs` — Fluent-иконка в трее и показ кастомного Fluent-меню.
 - `src/tray_menu.rs` — сборка `FluentMenuSpec` системного трея (быстрый ряд, Погода/Заметки, фильтр `TrayMenuVisibility`) и декодирование `TrayAction`.
 - `src/shell.rs` — диалоги выбора иконки/файлов/папки, буфер обмена, CSPRNG (`BCryptGenRandom`), запуск системных утилит, открытие расположения файла (`explorer /select`).

@@ -15,9 +15,11 @@ use crate::generated::ui::NotesWindow;
 use crate::notes_view::{build_note_rows, emit_notes_cmd, LocalNotesState};
 use crate::settings_state::apply_theme_to_window;
 use crate::vibrancy::{
-    apply_window_vibrancy, minimize_window, select_winit_backend, start_window_drag,
+    apply_window_opacity, apply_window_vibrancy, center_window_in_work_area, minimize_window,
+    select_winit_backend, set_window_layer, start_window_drag, start_window_resize,
     toggle_maximize_window,
 };
+use crate::win_os::primary_work_area;
 
 pub fn run_notes_window(paths: AppPaths, app_version: &str) -> Result<(), String> {
     select_winit_backend()?;
@@ -54,9 +56,15 @@ pub fn run_notes_window(paths: AppPaths, app_version: &str) -> Result<(), String
     spawn_notes_stdin_listener(ui.as_weak(), &state);
 
     let weak_vib = ui.as_weak();
+    let initial_opacity = state.borrow().cfg.opacity_percent;
+    let initial_layer = state.borrow().cfg.layer;
     Timer::single_shot(Duration::from_millis(24), move || {
         if let Some(win) = weak_vib.upgrade() {
+            let wa = primary_work_area();
+            center_window_in_work_area(win.window(), wa, 780, 520, 340, 320);
             apply_window_vibrancy(win.window(), initial_dark);
+            apply_window_opacity(win.window(), initial_opacity);
+            set_window_layer(win.window(), initial_layer);
         }
     });
 
@@ -68,6 +76,12 @@ fn wire_notes_chrome(ui: &NotesWindow, state: &Rc<RefCell<LocalNotesState>>) {
     ui.on_drag_window(move || {
         if let Some(u) = w.upgrade() {
             start_window_drag(u.window());
+        }
+    });
+    let w = ui.as_weak();
+    ui.on_resize_window(move |dir| {
+        if let Some(u) = w.upgrade() {
+            start_window_resize(u.window(), dir);
         }
     });
     let w = ui.as_weak();
@@ -367,6 +381,8 @@ fn refresh_notes_from_disk(weak: &Weak<NotesWindow>) {
             g.cfg.layer = fresh.layer;
             g.cfg.opacity_percent = fresh.opacity_percent;
             g.cfg.ensure_at_least_one_pane();
+            apply_window_opacity(ui.window(), g.cfg.opacity_percent);
+            set_window_layer(ui.window(), g.cfg.layer);
         }
         g.sync_ui(&ui, false);
     });

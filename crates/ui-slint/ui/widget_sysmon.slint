@@ -1,4 +1,9 @@
 import { Theme, SlintSysDriveRow, SlintSysProcRow } from "theme.slint";
+import {
+    VectorIconGear,
+    VectorIconRefresh,
+    WindowResizeHandles,
+} from "components/window_chrome.slint";
 
 component SysGlowBar inherits Rectangle {
     in property <int> percent: 0;
@@ -135,8 +140,8 @@ export component SysMonitorWindow inherits Window {
     background: transparent;
     preferred-width: 560px;
     preferred-height: 492px;
-    min-width: 440px;
-    min-height: 380px;
+    min-width: 380px;
+    min-height: 360px;
 
     in property <string> header-meta: "";
     in property <int> cpu-pct: 0;
@@ -179,7 +184,7 @@ export component SysMonitorWindow inherits Window {
     in property <bool> vis-hide: true;
 
     callback drag-window();
-    callback start-resize();
+    callback resize-window(int);
     callback open-settings();
     callback refresh-now();
     callback open-section-tool(int);
@@ -195,12 +200,10 @@ export component SysMonitorWindow inherits Window {
     Rectangle {
         width: 100%;
         height: 100%;
-        border-radius: 14px;
-        background: Theme.dark-mode
-            ? #181B20.with-alpha(Math.clamp((root.opacity-pct * 1.0) / 100.0, 0.25, 0.98))
-            : #F3F5F8.with-alpha(Math.clamp((root.opacity-pct * 1.0) / 100.0, 0.30, 0.98));
+        border-radius: 8px;
+        background: Theme.window-bg;
         border-width: 1px;
-        border-color: Theme.border-color;
+        border-color: Theme.border-strong;
         clip: true;
 
         Rectangle {
@@ -221,6 +224,10 @@ export component SysMonitorWindow inherits Window {
         }
 
         VerticalLayout {
+            x: 0px;
+            y: 0px;
+            width: 100%;
+            height: 100%;
             padding: 12px;
             spacing: 7px;
 
@@ -247,10 +254,12 @@ export component SysMonitorWindow inherits Window {
 
                     VerticalLayout {
                         horizontal-stretch: 1;
+                        min-width: 0px;
                         alignment: center;
                         spacing: 1px;
 
                         Text {
+                            min-width: 0px;
                             text: "Системный монитор";
                             color: Theme.text-primary;
                             font-size: 14px;
@@ -259,6 +268,7 @@ export component SysMonitorWindow inherits Window {
                         }
 
                         Text {
+                            min-width: 0px;
                             text: root.header-meta;
                             color: Theme.text-secondary;
                             font-size: 10px;
@@ -271,14 +281,11 @@ export component SysMonitorWindow inherits Window {
                         height: 26px;
                         border-radius: 6px;
                         background: set-ta.has-hover ? Theme.hover-bg : transparent;
-                        Text {
-                            width: 100%;
-                            height: 100%;
-                            text: "⚙";
-                            color: Theme.text-secondary;
-                            font-size: 13px;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
+                        VectorIconGear {
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            size: 14px;
+                            icon-color: set-ta.has-hover ? Theme.text-primary : Theme.text-secondary;
                         }
                         set-ta := TouchArea {
                             mouse-cursor: pointer;
@@ -291,14 +298,11 @@ export component SysMonitorWindow inherits Window {
                         height: 26px;
                         border-radius: 6px;
                         background: ref-ta.has-hover ? Theme.hover-bg : transparent;
-                        Text {
-                            width: 100%;
-                            height: 100%;
-                            text: "↻";
-                            color: Theme.text-secondary;
-                            font-size: 13px;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
+                        VectorIconRefresh {
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            size: 14px;
+                            icon-color: ref-ta.has-hover ? Theme.text-primary : Theme.text-secondary;
                         }
                         ref-ta := TouchArea {
                             mouse-cursor: pointer;
@@ -577,32 +581,9 @@ export component SysMonitorWindow inherits Window {
             }
         }
 
-        // Bottom-right SE resize grip
-        Rectangle {
-            x: parent.width - 18px;
-            y: parent.height - 18px;
-            width: 16px;
-            height: 16px;
-            background: transparent;
-
-            Text {
-                width: 100%;
-                height: 100%;
-                text: "◢";
-                color: res-ta.has-hover ? Theme.accent : Theme.text-muted;
-                font-size: 9px;
-                horizontal-alignment: right;
-                vertical-alignment: bottom;
-            }
-
-            res-ta := TouchArea {
-                mouse-cursor: nwse-resize;
-                pointer-event(ev) => {
-                    if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
-                        root.start-resize();
-                    }
-                }
-            }
+        WindowResizeHandles {
+            show-se-grip: true;
+            resize-window(dir) => { root.resize-window(dir); }
         }
     }
 
@@ -626,15 +607,15 @@ export component SysMonitorWindow inherits Window {
                 spacing: 2px;
 
                 if (root.vis-refresh) : SMenuBtn {
-                    label: "↻  Обновить датчики";
+                    label: "Обновить датчики";
                     clicked => { ctx-menu.close(); root.refresh-now(); }
                 }
                 SMenuBtn {
-                    label: "⚙  Настройки монитора";
+                    label: "Настройки монитора";
                     clicked => { ctx-menu.close(); root.open-settings(); }
                 }
                 if (root.vis-open-config) : SMenuBtn {
-                    label: "📄  Открыть sysmon.cfg";
+                    label: "Открыть sysmon.cfg";
                     clicked => { ctx-menu.close(); root.open-config(); }
                 }
 
@@ -708,7 +689,7 @@ export component SysMonitorWindow inherits Window {
 
                 if (root.vis-hide) : Rectangle { height: 1px; background: Theme.divider-color; }
                 if (root.vis-hide) : SMenuBtn {
-                    label: "✕  Скрыть виджет";
+                    label: "Скрыть виджет";
                     danger: true;
                     clicked => { ctx-menu.close(); root.hide-widget(); }
                 }

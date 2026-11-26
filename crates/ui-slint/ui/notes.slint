@@ -6,7 +6,14 @@ import {
     SlintTaskRow,
 } from "theme.slint";
 import { AsrGlassLogo } from "components/asr_logo.slint";
-import { FramelessTitleBar } from "components/window_chrome.slint";
+import {
+    FramelessTitleBar,
+    VectorIconCheck,
+    VectorIconChevron,
+    VectorIconFile,
+    VectorIconFolder,
+    WindowResizeHandles,
+} from "components/window_chrome.slint";
 import { GlassButton, GlassInput } from "components/controls.slint";
 
 export component NotesWindow inherits Window {
@@ -40,6 +47,7 @@ export component NotesWindow inherits Window {
     in-out property <string> new-task-text: "";
 
     callback drag-window();
+    callback resize-window(int);
     callback minimize-window();
     callback maximize-window();
     callback close-window();
@@ -86,13 +94,17 @@ export component NotesWindow inherits Window {
         Rectangle {
             width: 100%;
             height: 100%;
-            border-radius: 12px;
+            border-radius: 8px;
             background: Theme.window-bg;
             border-width: 1px;
             border-color: Theme.border-color;
             clip: true;
 
             VerticalLayout {
+                x: 0px;
+                y: 0px;
+                width: 100%;
+                height: 100%;
                 spacing: 0px;
 
                 FramelessTitleBar {
@@ -177,7 +189,7 @@ export component NotesWindow inherits Window {
                                     }
                                 }
                                 GlassButton {
-                                    label: "✓";
+                                    label: "OK";
                                     variant: "primary";
                                     compact: true;
                                     clicked => {
@@ -223,14 +235,13 @@ export component NotesWindow inherits Window {
                                             if (!f.is-note-child) : Rectangle {
                                                 width: 14px;
                                                 background: transparent;
-                                                Text {
-                                                    width: 100%;
-                                                    height: 100%;
-                                                    text: f.expanded ? "⌄" : "›";
-                                                    color: Theme.text-muted;
-                                                    font-size: 12px;
-                                                    horizontal-alignment: center;
-                                                    vertical-alignment: center;
+                                                VectorIconChevron {
+                                                    x: (parent.width - self.width) / 2;
+                                                    y: (parent.height - self.height) / 2;
+                                                    size: 10px;
+                                                    up: false;
+                                                    right: !f.expanded;
+                                                    icon-color: Theme.text-muted;
                                                 }
                                                 TouchArea {
                                                     mouse-cursor: pointer;
@@ -238,11 +249,20 @@ export component NotesWindow inherits Window {
                                                 }
                                             }
 
-                                            Text {
-                                                text: f.is-note-child ? "📄" : "📁";
-                                                color: f.active ? Theme.accent : Theme.text-secondary;
-                                                font-size: 11.5px;
-                                                vertical-alignment: center;
+                                            if (f.is-note-child) : VerticalLayout {
+                                                alignment: center;
+                                                VectorIconFile {
+                                                    size: 12px;
+                                                    icon-color: f.active ? Theme.accent : Theme.text-secondary;
+                                                }
+                                            }
+
+                                            if (!f.is-note-child) : VerticalLayout {
+                                                alignment: center;
+                                                VectorIconFolder {
+                                                    size: 13px;
+                                                    icon-color: f.active ? Theme.accent : Theme.text-secondary;
+                                                }
                                             }
 
                                             Text {
@@ -335,7 +355,7 @@ export component NotesWindow inherits Window {
                                                     overflow: elide;
                                                 }
                                                 if (n.active) : GlassButton {
-                                                    label: "✕";
+                                                    label: "×";
                                                     variant: "danger";
                                                     compact: true;
                                                     clicked => { root.delete-note(n.id); }
@@ -352,7 +372,7 @@ export component NotesWindow inherits Window {
                                                     vertical-alignment: center;
                                                 }
                                                 if (n.has-tasks) : Text {
-                                                    text: "☑ " + n.task-badge;
+                                                    text: "[" + n.task-badge + "]";
                                                     color: Theme.accent;
                                                     font-size: 11px;
                                                     font-weight: 600;
@@ -465,7 +485,7 @@ export component NotesWindow inherits Window {
                                         }
                                     }
                                     GlassButton {
-                                        label: "✓";
+                                        label: "OK";
                                         variant: "primary";
                                         compact: true;
                                         clicked => {
@@ -492,15 +512,11 @@ export component NotesWindow inherits Window {
                                             border-width: 1.5px;
                                             border-color: t.done ? Theme.accent : Theme.text-muted;
 
-                                            if (t.done) : Text {
-                                                width: 100%;
-                                                height: 100%;
-                                                text: "✓";
-                                                color: #FFFFFF;
-                                                font-size: 11px;
-                                                font-weight: 700;
-                                                horizontal-alignment: center;
-                                                vertical-alignment: center;
+                                            if (t.done) : VectorIconCheck {
+                                                x: (parent.width - self.width) / 2;
+                                                y: (parent.height - self.height) / 2;
+                                                size: 11px;
+                                                icon-color: #FFFFFF;
                                             }
 
                                             TouchArea {
@@ -538,7 +554,7 @@ export component NotesWindow inherits Window {
                                         }
 
                                         GlassButton {
-                                            label: "✕";
+                                            label: "×";
                                             variant: "danger";
                                             compact: true;
                                             clicked => { root.delete-task(t.id); }
@@ -592,6 +608,10 @@ export component NotesWindow inherits Window {
                         }
                     }
                 }
+            }
+
+            WindowResizeHandles {
+                resize-window(dir) => { root.resize-window(dir); }
             }
         }
     }

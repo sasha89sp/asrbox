@@ -64,7 +64,7 @@ pub(crate) fn load_shgetfileinfo_icon(path: &Path, size_px: u32) -> Result<RgbaI
     let mut info = SHFILEINFOW::default();
     let cb = u32::try_from(mem::size_of::<SHFILEINFOW>()).unwrap_or(0);
     // SAFETY: `wide` is NUL-terminated; returned HICON is destroyed after rasterization.
-    let ok = unsafe {
+    let mut ok = unsafe {
         SHGetFileInfoW(
             PCWSTR(wide.as_ptr()),
             FILE_FLAGS_AND_ATTRIBUTES(0),
@@ -73,6 +73,23 @@ pub(crate) fn load_shgetfileinfo_icon(path: &Path, size_px: u32) -> Result<RgbaI
             SHGFI_ICON | SHGFI_LARGEICON,
         )
     };
+    if ok == 0 || info.hIcon.is_invalid() {
+        let is_dir_like = path.extension().is_none() || path.is_dir();
+        let attrs = FILE_FLAGS_AND_ATTRIBUTES(if is_dir_like { 0x0010 } else { 0x0080 });
+        let flags = SHGFI_ICON
+            | SHGFI_LARGEICON
+            | windows::Win32::UI::Shell::SHGFI_FLAGS(0x0000_0010);
+        // SAFETY: `wide` is NUL-terminated; fallback uses SHGFI_USEFILEATTRIBUTES.
+        ok = unsafe {
+            SHGetFileInfoW(
+                PCWSTR(wide.as_ptr()),
+                attrs,
+                Some(&mut info as *mut SHFILEINFOW),
+                cb,
+                flags,
+            )
+        };
+    }
     if ok == 0 || info.hIcon.is_invalid() {
         return Err("SHGetFileInfoW returned no icon".to_owned());
     }

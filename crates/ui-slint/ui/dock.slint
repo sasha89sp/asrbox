@@ -1,5 +1,6 @@
-import { Theme, SlintDockIconRow } from "theme.slint";
+import { Theme, SlintDockIconRow, SlintFolderEntryRow } from "theme.slint";
 import { AsrGlassLogo } from "components/asr_logo.slint";
+import { VectorIconFolder, VectorIconFile } from "components/window_chrome.slint";
 
 component DockMenuBtn inherits Rectangle {
     in property <string> label;
@@ -20,6 +21,7 @@ component DockMenuBtn inherits Rectangle {
 
         Text {
             horizontal-stretch: 1;
+            min-width: 0px;
             text: root.label;
             color: (ta.has-hover && root.danger) ? #FFFFFF : Theme.text-primary;
             font-size: 11.5px;
@@ -28,17 +30,74 @@ component DockMenuBtn inherits Rectangle {
             overflow: elide;
         }
 
-        if (root.checked) : Text {
-            text: "●";
-            color: Theme.accent;
-            font-size: 9px;
-            vertical-alignment: center;
+        if (root.checked) : Rectangle {
+            width: 6px;
+            height: 6px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 3px;
+            background: Theme.accent;
         }
     }
 
     ta := TouchArea {
         mouse-cursor: pointer;
         clicked => { root.clicked(); }
+    }
+}
+
+component DockFallbackBadge inherits Rectangle {
+    in property <bool> is-folder: false;
+    in property <length> size: 44px;
+
+    width: root.size;
+    height: root.size;
+    border-radius: 9px;
+    background: root.is-folder ? Theme.accent-tint : Theme.card-bg;
+    border-width: 1px;
+    border-color: root.is-folder ? Theme.accent : Theme.border-strong;
+
+    if (root.is-folder) : VectorIconFolder {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        size: root.size * 0.56;
+        icon-color: Theme.accent;
+    }
+
+    if (!root.is-folder) : VectorIconFile {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        size: root.size * 0.54;
+        icon-color: Theme.accent;
+    }
+}
+
+component DockDragGrip inherits Rectangle {
+    in property <bool> vertical-dots: true;
+    in property <color> dot-color: Theme.text-muted;
+    width: root.vertical-dots ? 8px : 14px;
+    height: root.vertical-dots ? 14px : 8px;
+    background: transparent;
+
+    if (root.vertical-dots) : VerticalLayout {
+        spacing: 3px;
+        alignment: center;
+        for _row in [0, 1, 2] : HorizontalLayout {
+            spacing: 3px;
+            alignment: center;
+            Rectangle { width: 2px; height: 2px; border-radius: 1px; background: root.dot-color; }
+            Rectangle { width: 2px; height: 2px; border-radius: 1px; background: root.dot-color; }
+        }
+    }
+
+    if (!root.vertical-dots) : HorizontalLayout {
+        spacing: 3px;
+        alignment: center;
+        for _col in [0, 1, 2] : VerticalLayout {
+            spacing: 3px;
+            alignment: center;
+            Rectangle { width: 2px; height: 2px; border-radius: 1px; background: root.dot-color; }
+            Rectangle { width: 2px; height: 2px; border-radius: 1px; background: root.dot-color; }
+        }
     }
 }
 
@@ -58,7 +117,7 @@ component DockTile inherits Rectangle {
 
     width: root.label-mode == 2 ? (root.icon-size + 96px) : (root.icon-size + 12px);
     height: root.label-mode == 1 ? (root.icon-size + 24px) : (root.icon-size + 12px);
-    border-radius: 10px;
+    border-radius: 9px;
     background: ta.pressed
         ? Theme.press-bg
         : (ta.has-hover ? Theme.hover-bg : transparent);
@@ -91,7 +150,6 @@ component DockTile inherits Rectangle {
         }
     }
 
-    // Horizontal layout when label is Right (mode 2), otherwise icon centered (+ optional bottom label)
     if (root.label-mode == 2) : HorizontalLayout {
         padding-left: 6px;
         padding-right: 8px;
@@ -103,8 +161,7 @@ component DockTile inherits Rectangle {
             Rectangle {
                 width: root.icon-size;
                 height: root.icon-size;
-                border-radius: 9px;
-                background: root.item.has-icon ? transparent : Theme.card-bg;
+                background: transparent;
 
                 if (root.item.has-icon) : Image {
                     width: (ta.has-hover && root.hover-zoom) ? root.icon-size * 1.06 : root.icon-size * 0.90;
@@ -116,20 +173,18 @@ component DockTile inherits Rectangle {
                     animate width, height, y { duration: 120ms; easing: ease-out; }
                 }
 
-                if (!root.item.has-icon) : Text {
-                    width: 100%;
-                    height: 100%;
-                    text: root.item.is-folder ? "📁" : "◈";
-                    color: Theme.accent;
-                    font-size: 20px;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+                if (!root.item.has-icon) : DockFallbackBadge {
+                    is-folder: root.item.is-folder;
+                    size: root.icon-size * 0.88;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2 + (root.bouncing ? -3px : 0px);
                 }
             }
         }
 
         Text {
             horizontal-stretch: 1;
+            min-width: 0px;
             text: root.item.label;
             color: Theme.text-primary;
             font-size: 11.5px;
@@ -147,8 +202,7 @@ component DockTile inherits Rectangle {
         Rectangle {
             width: root.icon-size;
             height: root.icon-size;
-            border-radius: 9px;
-            background: root.item.has-icon ? transparent : Theme.card-bg;
+            background: transparent;
 
             if (root.item.has-icon) : Image {
                 width: (ta.has-hover && root.hover-zoom) ? root.icon-size * 1.08 : root.icon-size * 0.90;
@@ -161,14 +215,12 @@ component DockTile inherits Rectangle {
                 animate width, height, y { duration: 120ms; easing: ease-out; }
             }
 
-            if (!root.item.has-icon) : Text {
-                width: 100%;
-                height: 100%;
-                text: root.item.is-folder ? "📁" : "◈";
-                color: Theme.accent;
-                font-size: 20px;
-                horizontal-alignment: center;
-                vertical-alignment: center;
+            if (!root.item.has-icon) : DockFallbackBadge {
+                is-folder: root.item.is-folder;
+                size: root.icon-size * 0.88;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2
+                    + (root.bouncing ? -4px : (ta.has-hover && root.hover-zoom ? -2px : 0px));
             }
         }
 
@@ -182,7 +234,7 @@ component DockTile inherits Rectangle {
         }
     }
 
-    // Running-app indicator dot
+    // Running-app indicator bar
     if (root.show-running-dot && root.item.is-running) : Rectangle {
         x: (parent.width - 12px) / 2;
         y: parent.height - 4px;
@@ -205,7 +257,7 @@ export component DockWindow inherits Window {
     in property <length> icon-size: 44px;
     in property <length> item-spacing: 6px;
     in property <length> dock-padding: 8px;
-    in property <length> corner-radius: 16px;
+    in property <length> corner-radius: 8px;
     in property <int> opacity-pct: 85;
     in property <int> edge-index: 3; // 0=Left, 1=Right, 2=Top, 3=Bottom
     in property <int> layer-index: 0; // 0=Wallpaper, 1=Normal, 2=Topmost
@@ -220,6 +272,11 @@ export component DockWindow inherits Window {
     in property <bool> can-remove-dock: false;
     in property <[SlintDockIconRow]> items: [];
 
+    // Folder Fan-Out popup state
+    in property <string> folder-title: "";
+    in property <string> folder-path: "";
+    in property <[SlintFolderEntryRow]> folder-entries: [];
+
     // Menu visibility flags (from menus.cfg)
     in property <bool> vis-item-actions: true;
     in property <bool> vis-add-separator: true;
@@ -231,8 +288,14 @@ export component DockWindow inherits Window {
 
     callback drag-window();
     callback launch-item(int);
+    callback launch-folder-entry(string);
+    callback open-folder-explorer(string);
     callback open-settings();
     callback menu-action(string, int);
+
+    public function open-folder-popup() {
+        folder-popup.show();
+    }
 
     private property <int> ctx-item-id: -1;
     private property <bool> ctx-item-is-sep: false;
@@ -243,10 +306,8 @@ export component DockWindow inherits Window {
     Rectangle {
         width: 100%;
         height: 100%;
-        border-radius: root.corner-radius;
-        background: Theme.dark-mode
-            ? #181B20.with-alpha(Math.clamp((root.opacity-pct * 1.0) / 100.0, 0.22, 0.98))
-            : #F3F5F8.with-alpha(Math.clamp((root.opacity-pct * 1.0) / 100.0, 0.28, 0.98));
+        border-radius: 8px;
+        background: Theme.window-bg;
         border-width: 1px;
         border-color: Theme.border-strong;
         clip: true;
@@ -276,6 +337,10 @@ export component DockWindow inherits Window {
 
         // Horizontal capsule layout
         if (root.is-horizontal) : HorizontalLayout {
+            x: 0px;
+            y: 0px;
+            width: 100%;
+            height: 100%;
             padding: root.dock-padding;
             spacing: root.item-spacing;
             alignment: center;
@@ -286,14 +351,11 @@ export component DockWindow inherits Window {
                 border-radius: 6px;
                 background: drag-ta.has-hover ? Theme.hover-bg : transparent;
 
-                Text {
-                    width: 100%;
-                    height: 100%;
-                    text: "⋮⋮";
-                    color: Theme.text-muted;
-                    font-size: 13px;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+                DockDragGrip {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    vertical-dots: true;
+                    dot-color: drag-ta.has-hover ? Theme.text-primary : Theme.text-muted;
                 }
 
                 drag-ta := TouchArea {
@@ -356,7 +418,7 @@ export component DockWindow inherits Window {
             if (root.show-settings-button) : Rectangle {
                 width: root.icon-size + 12px;
                 height: root.icon-size + 12px;
-                border-radius: 10px;
+                border-radius: 9px;
                 background: set-ta.has-hover ? Theme.hover-bg : transparent;
                 border-width: 1px;
                 border-color: set-ta.has-hover ? Theme.border-strong : transparent;
@@ -385,6 +447,10 @@ export component DockWindow inherits Window {
 
         // Vertical capsule layout
         if (!root.is-horizontal) : VerticalLayout {
+            x: 0px;
+            y: 0px;
+            width: 100%;
+            height: 100%;
             padding: root.dock-padding;
             spacing: root.item-spacing;
             alignment: center;
@@ -395,14 +461,11 @@ export component DockWindow inherits Window {
                 border-radius: 6px;
                 background: vdrag-ta.has-hover ? Theme.hover-bg : transparent;
 
-                Text {
-                    width: 100%;
-                    height: 100%;
-                    text: "⋯";
-                    color: Theme.text-muted;
-                    font-size: 13px;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+                DockDragGrip {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    vertical-dots: false;
+                    dot-color: vdrag-ta.has-hover ? Theme.text-primary : Theme.text-muted;
                 }
 
                 vdrag-ta := TouchArea {
@@ -465,7 +528,7 @@ export component DockWindow inherits Window {
             if (root.show-settings-button) : Rectangle {
                 width: root.icon-size + 12px;
                 height: root.icon-size + 12px;
-                border-radius: 10px;
+                border-radius: 9px;
                 background: vset-ta.has-hover ? Theme.hover-bg : transparent;
 
                 AsrGlassLogo {
@@ -489,9 +552,187 @@ export component DockWindow inherits Window {
                 }
             }
         }
+
+        // Glass Hover Tooltip overlay (active in IconsOnly=0 and Tooltip=3 modes)
+        if ((root.label-mode == 3 || root.label-mode == 0) && root.hover-tip != "") : Rectangle {
+            x: (parent.width - self.width) / 2;
+            y: 3px;
+            height: 19px;
+            max-width: parent.width - 16px;
+            border-radius: 5px;
+            background: Theme.popup-bg;
+            border-width: 1px;
+            border-color: Theme.border-strong;
+
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                Text {
+                    text: root.hover-tip;
+                    color: Theme.text-primary;
+                    font-size: 10.5px;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
     }
 
-    // Slint PopupWindow context menu (auto-closes on outside click / Esc, never hangs)
+    // Concentric Fluent Glass Folder Fan-Out Popup
+    folder-popup := PopupWindow {
+        x: Math.clamp((root.width - 300px) / 2, 4px, Math.max(4px, root.width - 304px));
+        y: root.edge-index == 2 ? root.height + 4px : 4px;
+        width: 300px;
+        close-policy: PopupClosePolicy.close-on-click-outside;
+
+        Rectangle {
+            border-radius: 10px;
+            background: Theme.popup-bg;
+            border-width: 1px;
+            border-color: Theme.border-strong;
+            drop-shadow-blur: 20px;
+            drop-shadow-color: rgba(0, 0, 0, 0.48);
+            drop-shadow-offset-y: 8px;
+
+            VerticalLayout {
+                padding: 8px;
+                spacing: 6px;
+
+                HorizontalLayout {
+                    height: 26px;
+                    spacing: 6px;
+                    alignment: stretch;
+
+                    VerticalLayout {
+                        alignment: center;
+                        VectorIconFolder { size: 14px; icon-color: Theme.accent; }
+                    }
+
+                    Text {
+                        horizontal-stretch: 1;
+                        min-width: 0px;
+                        text: root.folder-title;
+                        color: Theme.text-primary;
+                        font-size: 12px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+
+                    Rectangle {
+                        height: 22px;
+                        border-radius: 5px;
+                        background: exp-ta.has-hover ? Theme.accent-hover : Theme.accent-tint;
+                        border-width: 1px;
+                        border-color: Theme.accent;
+
+                        HorizontalLayout {
+                            padding-left: 8px;
+                            padding-right: 8px;
+                            Text {
+                                text: "Проводник";
+                                color: exp-ta.has-hover ? #FFFFFF : Theme.accent;
+                                font-size: 10.5px;
+                                font-weight: 600;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        exp-ta := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                folder-popup.close();
+                                root.open-folder-explorer(root.folder-path);
+                            }
+                        }
+                    }
+                }
+
+                Rectangle { height: 1px; background: Theme.divider-color; }
+
+                if (root.folder-entries.length == 0) : Rectangle {
+                    height: 36px;
+                    background: transparent;
+                    Text {
+                        width: 100%;
+                        height: 100%;
+                        text: "Папка пуста";
+                        color: Theme.text-muted;
+                        font-size: 11.5px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                if (root.folder-entries.length > 0) : Flickable {
+                    height: Math.min(264px, root.folder-entries.length * 32px);
+                    content-width: self.width;
+                    content-height: f-col.preferred-height;
+
+                    f-col := VerticalLayout {
+                        width: parent.width;
+                        spacing: 2px;
+
+                        for entry in root.folder-entries : Rectangle {
+                            height: 30px;
+                            border-radius: 6px;
+                            background: fe-ta.has-hover ? Theme.hover-bg : transparent;
+
+                            HorizontalLayout {
+                                padding-left: 6px;
+                                padding-right: 8px;
+                                spacing: 8px;
+                                alignment: stretch;
+
+                                VerticalLayout {
+                                    alignment: center;
+                                    width: 20px;
+
+                                    if (entry.has-icon) : Image {
+                                        width: 18px;
+                                        height: 18px;
+                                        source: entry.icon-img;
+                                        image-fit: contain;
+                                    }
+
+                                    if (!entry.has-icon && entry.is-dir) : VectorIconFolder {
+                                        size: 15px;
+                                        icon-color: Theme.accent;
+                                    }
+
+                                    if (!entry.has-icon && !entry.is-dir) : VectorIconFile {
+                                        size: 14px;
+                                        icon-color: Theme.text-secondary;
+                                    }
+                                }
+
+                                Text {
+                                    horizontal-stretch: 1;
+                                    min-width: 0px;
+                                    text: entry.name;
+                                    color: Theme.text-primary;
+                                    font-size: 11.5px;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
+                            }
+
+                            fe-ta := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    folder-popup.close();
+                                    root.launch-folder-entry(entry.path);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Slint PopupWindow context menu (auto-closes on outside click / Esc)
     ctx-menu := PopupWindow {
         x: root.ctx-x;
         y: root.ctx-y;
@@ -512,15 +753,15 @@ export component DockWindow inherits Window {
                 spacing: 2px;
 
                 if (root.ctx-item-id >= 0 && root.vis-item-actions && !root.ctx-item-is-sep) : DockMenuBtn {
-                    label: "📂  Открыть расположение";
+                    label: "Открыть расположение";
                     clicked => { ctx-menu.close(); root.menu-action("open_item_folder", root.ctx-item-id); }
                 }
                 if (root.ctx-item-id >= 0 && root.vis-item-actions && !root.ctx-item-is-sep) : DockMenuBtn {
-                    label: "🖼  Выбрать иконку…";
+                    label: "Выбрать иконку…";
                     clicked => { ctx-menu.close(); root.menu-action("choose_icon", root.ctx-item-id); }
                 }
                 if (root.ctx-item-id >= 0 && root.vis-item-actions && !root.ctx-item-is-sep) : DockMenuBtn {
-                    label: "↺  Сбросить иконку";
+                    label: "Сбросить иконку";
                     clicked => { ctx-menu.close(); root.menu-action("reset_icon", root.ctx-item-id); }
                 }
                 if (root.ctx-item-id >= 0 && root.vis-item-actions && !root.lock-items) : HorizontalLayout {
@@ -528,17 +769,17 @@ export component DockWindow inherits Window {
                     spacing: 4px;
                     DockMenuBtn {
                         horizontal-stretch: 1;
-                        label: "◀ Сдвинуть";
+                        label: "< Сдвинуть";
                         clicked => { ctx-menu.close(); root.menu-action("move_prev", root.ctx-item-id); }
                     }
                     DockMenuBtn {
                         horizontal-stretch: 1;
-                        label: "Сдвинуть ▶";
+                        label: "Сдвинуть >";
                         clicked => { ctx-menu.close(); root.menu-action("move_next", root.ctx-item-id); }
                     }
                 }
                 if (root.ctx-item-id >= 0 && root.vis-item-actions && !root.lock-items) : DockMenuBtn {
-                    label: root.ctx-item-is-sep ? "🗑  Удалить разделитель" : "🗑  Удалить значок";
+                    label: root.ctx-item-is-sep ? "Удалить разделитель" : "Удалить значок";
                     danger: true;
                     clicked => { ctx-menu.close(); root.menu-action("remove_item", root.ctx-item-id); }
                 }
@@ -548,7 +789,7 @@ export component DockWindow inherits Window {
                 }
 
                 if (root.vis-add-separator && !root.lock-items) : DockMenuBtn {
-                    label: "➕  Добавить разделитель";
+                    label: "Добавить разделитель";
                     clicked => { ctx-menu.close(); root.menu-action("add_separator", 0); }
                 }
 
@@ -626,44 +867,44 @@ export component DockWindow inherits Window {
                     }
                 }
                 if (root.vis-appearance) : DockMenuBtn {
-                    label: "🏷  Режим подписей (цикл)";
+                    label: "Режим подписей (цикл)";
                     clicked => { ctx-menu.close(); root.menu-action("cycle_labels", 0); }
                 }
 
                 if (root.vis-behavior) : DockMenuBtn {
-                    label: "🔍  Увеличение при наведении";
+                    label: "Увеличение при наведении";
                     checked: root.hover-zoom;
                     clicked => { ctx-menu.close(); root.menu-action("toggle_hover_zoom", 0); }
                 }
                 if (root.vis-behavior) : DockMenuBtn {
-                    label: "•  Точка запущенных окон";
+                    label: "Точка запущенных окон";
                     checked: root.show-running-dot;
                     clicked => { ctx-menu.close(); root.menu-action("toggle_running_dot", 0); }
                 }
 
                 if (root.vis-lock) : Rectangle { height: 1px; background: Theme.divider-color; }
                 if (root.vis-lock) : DockMenuBtn {
-                    label: "🔒  Закрепить положение";
+                    label: "Закрепить положение";
                     checked: root.locked;
                     clicked => { ctx-menu.close(); root.menu-action("toggle_lock", 0); }
                 }
                 if (root.vis-lock) : DockMenuBtn {
-                    label: "🛡  Защита значков от удаления";
+                    label: "Защита значков от удаления";
                     checked: root.lock-items;
                     clicked => { ctx-menu.close(); root.menu-action("toggle_lock_items", 0); }
                 }
 
                 if (root.vis-dock-mgmt) : Rectangle { height: 1px; background: Theme.divider-color; }
                 if (root.vis-dock-mgmt) : DockMenuBtn {
-                    label: "⚙  Настройки док-панелей";
+                    label: "Настройки док-панелей";
                     clicked => { ctx-menu.close(); root.open-settings(); }
                 }
                 if (root.vis-dock-mgmt) : DockMenuBtn {
-                    label: "➕  Добавить новую панель";
+                    label: "Добавить новую панель";
                     clicked => { ctx-menu.close(); root.menu-action("add_dock", 0); }
                 }
                 if (root.vis-dock-mgmt && root.can-remove-dock) : DockMenuBtn {
-                    label: "✕  Удалить эту панель";
+                    label: "Удалить эту панель";
                     danger: true;
                     clicked => { ctx-menu.close(); root.menu-action("remove_dock", 0); }
                 }

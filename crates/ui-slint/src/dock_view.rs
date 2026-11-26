@@ -1,64 +1,14 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
+use std::path::Path;
 use std::rc::Rc;
 
-use asrbox_mod_dock::{
-    icon_request_for_item, DockAlignment, DockConfig, DockEdge, DockItem, DockLabelMode, IconSource,
-};
+use asrbox_mod_dock::{DockAlignment, DockConfig, DockEdge, DockItem, DockLabelMode, IconSource};
 use asrbox_platform_api::{DockMenuVisibility, PixelRect};
-use slint::{Image, ModelRc, Rgba8Pixel, SharedPixelBuffer, SharedString, VecModel};
+use slint::{ModelRc, SharedString, VecModel};
 
+use crate::dock_icons::{is_folder_target, resolve_dock_target, scan_folder_entries, DockIconCache};
 use crate::generated::ui::{DockWindow, SlintDockIconRow};
-use crate::win_os::{idx_to_layer, layer_to_idx, load_shell_icon, resolve_exe_name};
-
-pub struct DockIconCache {
-    icons: HashMap<String, Image>,
-}
-
-impl DockIconCache {
-    pub fn new() -> Self {
-        Self {
-            icons: HashMap::new(),
-        }
-    }
-
-    pub fn invalidate_item(&mut self, item: &DockItem) {
-        let prefix = format!("{}|", item.id);
-        self.icons.retain(|k, _| !k.starts_with(&prefix));
-    }
-
-    pub fn get_or_load(&mut self, item: &DockItem, icon_size_px: u16) -> Option<Image> {
-        if item.is_separator() {
-            return None;
-        }
-        let target_px = u32::from(icon_size_px.clamp(24, 128));
-        let key = cache_key(item, target_px);
-        if let Some(img) = self.icons.get(&key) {
-            return Some(img.clone());
-        }
-        let req = icon_request_for_item(item);
-        let rgba = load_shell_icon(&req, target_px).ok()?;
-        if rgba.width == 0 || rgba.height == 0 {
-            return None;
-        }
-        let buf = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(
-            &rgba.pixels,
-            rgba.width,
-            rgba.height,
-        );
-        let img = Image::from_rgba8(buf);
-        self.icons.insert(key, img.clone());
-        Some(img)
-    }
-}
-
-fn cache_key(item: &DockItem, px: u32) -> String {
-    let src = match &item.icon {
-        IconSource::AutoShell => format!("auto:{}", item.target.display()),
-        IconSource::CustomFile(p) => format!("file:{}", p.display()),
-        IconSource::ExeResource { path, index } => format!("res:{}:{index}", path.display()),
-    };
-    format!("{}|{px}|{src}", item.id)
-}
+use crate::win_os::{idx_to_layer, layer_to_idx, resolve_exe_name};
 
 fn compute_dock_size(cfg: &DockConfig) -> (u32, u32) {
     let icon = u32::from(cfg.icon_size_px.clamp(24, 128));
@@ -101,7 +51,6 @@ fn compute_dock_size(cfg: &DockConfig) -> (u32, u32) {
 
 pub fn compute_dock_rect(cfg: &DockConfig, work_area: PixelRect) -> (i32, i32, u32, u32) {
     let (w, h) = compute_dock_size(cfg);
-    // Preserve user-dragged free_pos WITHOUT snapping back to screen edges
     if let Some((fx, fy)) = cfg.free_pos {
         let min_x = work_area.x - (w as i32 / 2);
         let max_x = work_area.x + work_area.width as i32 - 32;
@@ -182,18 +131,20 @@ fn build_dock_icon_rows(
     running_exes: &HashSet<String>,
     icons: &mut DockIconCache,
 ) -> Vec<SlintDockIconRow> {
+    let base_dir = icons.base_dir().to_path_buf();
     cfg.items
         .iter()
         .map(|it| {
-            let img = icons.get_or_load(it, cfg.icon_size_px);
+            let resolved = resolve_dock_target(&it.target, &base_dir);
+            let img = icons.get_or_load(it);
             let is_running = !it.is_separator()
                 && cfg.show_running_indicator
-                && resolve_exe_name(&it.target).is_some_and(|exe| running_exes.contains(&exe));
+                && resolve_exe_name(&resolved).is_some_and(|exe| running_exes.contains(&exe));
             SlintDockIconRow {
                 id: it.id as i32,
                 label: SharedString::from(it.label.as_str()),
                 is_separator: it.is_separator(),
-                is_folder: !it.is_separator() && it.target.is_dir(),
+                is_folder: !it.is_separator() && is_folder_target(&resolved),
                 is_running,
                 has_icon: img.is_some(),
                 icon_img: img.unwrap_or_default(),
@@ -271,25 +222,19 @@ fn apply_dock_item_mutation(
             }
         }
         "move_prev" if !cfg.lock_items => {
-            if let Some(pos) = cfg.items.iter().position(|i| i.id == id) {
-                if pos > 0 {
-                    cfg.items.swap(pos, pos - 1);
-                    true
-                } else {
-                    false
-                }
+            let pos = cfg.items.iter().position(|i| i.id == id);
+            if let Some(p) = pos.filter(|&p| p > 0) {
+                cfg.items.swap(p, p - 1);
+                true
             } else {
                 false
             }
         }
         "move_next" if !cfg.lock_items => {
-            if let Some(pos) = cfg.items.iter().position(|i| i.id == id) {
-                if pos + 1 < cfg.items.len() {
-                    cfg.items.swap(pos, pos + 1);
-                    true
-                } else {
-                    false
-                }
+            let pos = cfg.items.iter().position(|i| i.id == id);
+            if let Some(p) = pos.filter(|&p| p + 1 < cfg.items.len()) {
+                cfg.items.swap(p, p + 1);
+                true
             } else {
                 false
             }
@@ -306,4 +251,66 @@ fn apply_dock_item_mutation(
         }
         _ => return None,
     })
+}
+
+pub fn add_dock_config(configs: &mut Vec<DockConfig>) {
+    let next_id = configs.iter().map(|c| c.id).max().unwrap_or(0) + 1;
+    let mut cfg = DockConfig::new(next_id, format!("Док {next_id}"));
+    cfg.edge = match next_id % 4 {
+        0 => DockEdge::Right,
+        2 => DockEdge::Top,
+        3 => DockEdge::Left,
+        _ => DockEdge::Bottom,
+    };
+    configs.push(cfg);
+}
+
+pub fn toggle_dock_config(configs: &mut [DockConfig], dock_id: u64) -> bool {
+    configs
+        .iter_mut()
+        .find(|c| c.id == dock_id)
+        .is_some_and(|cfg| {
+            cfg.enabled = !cfg.enabled;
+            true
+        })
+}
+
+pub fn remove_dock_config(configs: &mut Vec<DockConfig>, dock_id: u64) -> bool {
+    if configs.len() <= 1 {
+        return false;
+    }
+    configs.retain(|c| c.id != dock_id);
+    true
+}
+
+pub fn set_custom_icon_config(
+    configs: &mut [DockConfig],
+    icons: &mut DockIconCache,
+    dock_id: u64,
+    item_id: u64,
+    picked: std::path::PathBuf,
+) -> bool {
+    let Some(it) = configs
+        .iter_mut()
+        .find(|c| c.id == dock_id)
+        .and_then(|c| c.items.iter_mut().find(|i| i.id == item_id))
+    else {
+        return false;
+    };
+    it.icon = IconSource::CustomFile(picked);
+    icons.invalidate_item(it);
+    true
+}
+
+pub fn open_folder_popup_ui(
+    win: &DockWindow,
+    label: &str,
+    dir: &Path,
+    icons: &mut DockIconCache,
+) {
+    let entries = scan_folder_entries(dir, icons);
+    win.set_folder_title(SharedString::from(label));
+    win.set_folder_path(SharedString::from(dir.to_string_lossy().as_ref()));
+    win.set_folder_entries(ModelRc::from(Rc::new(VecModel::from(entries))));
+    win.invoke_open_folder_popup();
 }

@@ -370,13 +370,13 @@ export component SettingsDockView inherits VerticalLayout {
                 alignment: stretch;
 
                 Text {
-                    text: "⋮⋮";
+                    text: "=";
                     color: Theme.text-muted;
                     font-size: 12px;
                     vertical-alignment: center;
                 }
 
-                // 32x32 squircle icon badge
+                // 30x30 squircle icon badge
                 VerticalLayout {
                     alignment: center;
                     Rectangle {
@@ -392,9 +392,10 @@ export component SettingsDockView inherits VerticalLayout {
                         Text {
                             width: 100%;
                             height: 100%;
-                            text: item.is-separator ? "│" : (item.is-folder ? "📁" : "▪");
+                            text: item.is-separator ? "|" : (item.is-folder ? "D" : "A");
                             color: item.is-folder ? #F59E0B : Theme.accent;
-                            font-size: 13px;
+                            font-size: 12px;
+                            font-weight: 700;
                             horizontal-alignment: center;
                             vertical-alignment: center;
                         }
@@ -464,7 +465,7 @@ export component SettingsDockView inherits VerticalLayout {
                         clicked => { root.open-dock-item-folder(item.id); }
                     }
                     GlassButton {
-                        label: "✕";
+                        label: "×";
                         variant: "danger";
                         compact: true;
                         clicked => { root.remove-dock-item(item.id); }

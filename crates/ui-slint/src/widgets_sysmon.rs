@@ -16,8 +16,9 @@ use slint::ComponentHandle;
 use crate::generated::ui::SysMonitorWindow;
 use crate::settings_state::apply_theme_to_window;
 use crate::vibrancy::{
-    apply_acrylic_vibrancy, configure_desktop_window, install_bounds_tracker, resize_window_to,
-    set_window_layer, set_window_visible, start_resize_se, start_window_drag,
+    apply_acrylic_vibrancy, apply_window_opacity, configure_desktop_window,
+    install_bounds_tracker, resize_window_to, set_window_layer, set_window_visible,
+    start_window_drag, start_window_resize, DesktopWindowSpec,
 };
 use crate::widgets_sysmon_view::sync_sysmon_ui;
 use crate::win_os::{
@@ -132,17 +133,24 @@ fn apply_sysmon_window_state(state: &SharedSysMon, safe_mode: bool) {
             let _ = s.ui.show();
             configure_desktop_window(
                 s.ui.window(),
-                s.cfg.x,
-                s.cfg.y,
-                s.cfg.width,
-                s.cfg.height,
-                s.cfg.layer,
-                s.dark,
+                DesktopWindowSpec {
+                    x: s.cfg.x,
+                    y: s.cfg.y,
+                    width: s.cfg.width,
+                    height: s.cfg.height,
+                    min_w: MIN_SYSMON_WIDTH.min(380),
+                    min_h: MIN_SYSMON_HEIGHT.min(360),
+                    resizable: true,
+                    layer: s.cfg.layer,
+                    dark: s.dark,
+                    opacity_percent: s.cfg.opacity_percent,
+                },
             );
             s.window_shown = true;
         } else {
             set_window_visible(s.ui.window(), true);
             set_window_layer(s.ui.window(), s.cfg.layer);
+            apply_window_opacity(s.ui.window(), s.cfg.opacity_percent);
             resize_window_to(s.ui.window(), s.cfg.width, s.cfg.height);
         }
         s.sampler_kick.store(true, Ordering::Relaxed);
@@ -209,9 +217,9 @@ fn wire_sysmon_callbacks(state: &SharedSysMon) {
         }
     });
     let w = ui.as_weak();
-    ui.on_start_resize(move || {
+    ui.on_resize_window(move |dir| {
         if let Some(u) = w.upgrade() {
-            start_resize_se(u.window());
+            start_window_resize(u.window(), dir);
         }
     });
     ui.on_open_settings(|| emit_open_settings("sysmon"));
@@ -267,6 +275,7 @@ fn wire_sysmon_menu_callbacks(state: &SharedSysMon) {
     ui.on_set_opacity(move |pct| {
         let mut s = st.borrow_mut();
         s.cfg.opacity_percent = pct.clamp(20, 100) as u8;
+        apply_window_opacity(s.ui.window(), s.cfg.opacity_percent);
         let _ = save_sysmon_config(&s.cfg_path, &s.cfg);
         sync_sysmon_ui(&s);
         emit_config_changed("widgets");

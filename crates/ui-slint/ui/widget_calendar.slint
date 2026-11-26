@@ -1,4 +1,11 @@
 import { Theme, SlintCalEventRow } from "theme.slint";
+import {
+    VectorIconClose,
+    VectorIconGear,
+    VectorIconPlus,
+    VectorIconRefresh,
+    WindowResizeHandles,
+} from "components/window_chrome.slint";
 
 component CMenuBtn inherits Rectangle {
     in property <string> label;
@@ -44,7 +51,7 @@ export component CalendarWindow inherits Window {
     background: transparent;
     preferred-width: 336px;
     preferred-height: 416px;
-    min-width: 280px;
+    min-width: 260px;
     min-height: 220px;
 
     in property <string> widget-title: "Google Календарь";
@@ -67,7 +74,7 @@ export component CalendarWindow inherits Window {
     in property <bool> vis-hide: true;
 
     callback drag-window();
-    callback start-resize();
+    callback resize-window(int);
     callback open-settings();
     callback refresh-now();
     callback select-period(int);
@@ -86,12 +93,10 @@ export component CalendarWindow inherits Window {
     Rectangle {
         width: 100%;
         height: 100%;
-        border-radius: 14px;
-        background: Theme.dark-mode
-            ? #181B20.with-alpha(Math.clamp((root.opacity-pct * 1.0) / 100.0, 0.25, 0.98))
-            : #F3F5F8.with-alpha(Math.clamp((root.opacity-pct * 1.0) / 100.0, 0.30, 0.98));
+        border-radius: 8px;
+        background: Theme.window-bg;
         border-width: 1px;
-        border-color: Theme.border-color;
+        border-color: Theme.border-strong;
         clip: true;
 
         Rectangle {
@@ -112,6 +117,10 @@ export component CalendarWindow inherits Window {
         }
 
         VerticalLayout {
+            x: 0px;
+            y: 0px;
+            width: 100%;
+            height: 100%;
             padding: 12px;
             spacing: 8px;
 
@@ -138,6 +147,7 @@ export component CalendarWindow inherits Window {
 
                     Text {
                         horizontal-stretch: 1;
+                        min-width: 0px;
                         text: root.widget-title;
                         color: Theme.text-primary;
                         font-size: 14px;
@@ -151,15 +161,11 @@ export component CalendarWindow inherits Window {
                         height: 24px;
                         border-radius: 6px;
                         background: add-ta.has-hover ? Theme.hover-bg : transparent;
-                        Text {
-                            width: 100%;
-                            height: 100%;
-                            text: "+";
-                            color: Theme.accent;
-                            font-size: 15px;
-                            font-weight: 700;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
+                        VectorIconPlus {
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            size: 12px;
+                            icon-color: Theme.accent;
                         }
                         add-ta := TouchArea {
                             mouse-cursor: pointer;
@@ -172,14 +178,11 @@ export component CalendarWindow inherits Window {
                         height: 24px;
                         border-radius: 6px;
                         background: set-ta.has-hover ? Theme.hover-bg : transparent;
-                        Text {
-                            width: 100%;
-                            height: 100%;
-                            text: "⚙";
-                            color: Theme.text-secondary;
-                            font-size: 13px;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
+                        VectorIconGear {
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            size: 13px;
+                            icon-color: set-ta.has-hover ? Theme.text-primary : Theme.text-secondary;
                         }
                         set-ta := TouchArea {
                             mouse-cursor: pointer;
@@ -192,14 +195,12 @@ export component CalendarWindow inherits Window {
                         height: 24px;
                         border-radius: 6px;
                         background: ref-ta.has-hover ? Theme.hover-bg : transparent;
-                        Text {
-                            width: 100%;
-                            height: 100%;
-                            text: root.loading ? "…" : "↻";
-                            color: Theme.text-secondary;
-                            font-size: 13px;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
+                        VectorIconRefresh {
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            size: 13px;
+                            icon-color: root.loading ? Theme.accent
+                                : (ref-ta.has-hover ? Theme.text-primary : Theme.text-secondary);
                         }
                         ref-ta := TouchArea {
                             mouse-cursor: pointer;
@@ -382,14 +383,11 @@ export component CalendarWindow inherits Window {
                         width: 18px;
                         height: 18px;
                         background: transparent;
-                        Text {
-                            width: 100%;
-                            height: 100%;
-                            text: "✕";
-                            color: #FCA5A5;
-                            font-size: 10px;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
+                        VectorIconClose {
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            size: 10px;
+                            icon-color: #FCA5A5;
                         }
                         TouchArea {
                             mouse-cursor: pointer;
@@ -400,32 +398,9 @@ export component CalendarWindow inherits Window {
             }
         }
 
-        // Bottom-right SE resize grip
-        Rectangle {
-            x: parent.width - 18px;
-            y: parent.height - 18px;
-            width: 16px;
-            height: 16px;
-            background: transparent;
-
-            Text {
-                width: 100%;
-                height: 100%;
-                text: "◢";
-                color: res-ta.has-hover ? Theme.accent : Theme.text-muted;
-                font-size: 9px;
-                horizontal-alignment: right;
-                vertical-alignment: bottom;
-            }
-
-            res-ta := TouchArea {
-                mouse-cursor: nwse-resize;
-                pointer-event(ev) => {
-                    if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
-                        root.start-resize();
-                    }
-                }
-            }
+        WindowResizeHandles {
+            show-se-grip: true;
+            resize-window(dir) => { root.resize-window(dir); }
         }
     }
 
@@ -449,15 +424,15 @@ export component CalendarWindow inherits Window {
                 spacing: 2px;
 
                 if (root.vis-refresh) : CMenuBtn {
-                    label: "↻  Обновить календарь";
+                    label: "Обновить календарь";
                     clicked => { ctx-menu.close(); root.refresh-now(); }
                 }
                 CMenuBtn {
-                    label: "⚙  Настройки календаря";
+                    label: "Настройки календаря";
                     clicked => { ctx-menu.close(); root.open-settings(); }
                 }
                 if (root.vis-open-config) : CMenuBtn {
-                    label: "📄  Открыть widgets.cfg";
+                    label: "Открыть widgets.cfg";
                     clicked => { ctx-menu.close(); root.open-config(); }
                 }
 
@@ -531,7 +506,7 @@ export component CalendarWindow inherits Window {
 
                 if (root.vis-hide) : Rectangle { height: 1px; background: Theme.divider-color; }
                 if (root.vis-hide) : CMenuBtn {
-                    label: "✕  Скрыть виджет";
+                    label: "Скрыть виджет";
                     danger: true;
                     clicked => { ctx-menu.close(); root.hide-widget(); }
                 }

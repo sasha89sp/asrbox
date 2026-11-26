@@ -1,4 +1,5 @@
 import { Theme } from "../theme.slint";
+import { VectorIconChevron, VectorIconSearch } from "window_chrome.slint";
 
 export component GlassSwitch inherits Rectangle {
     in-out property <bool> checked: false;
@@ -136,7 +137,15 @@ export component GlassInput inherits Rectangle {
             }
         }
 
-        if (root.trailing-icon != "") : Text {
+        if (root.trailing-icon == "🔍" || root.trailing-icon == "search") : VerticalLayout {
+            alignment: center;
+            VectorIconSearch {
+                size: 13px;
+                icon-color: Theme.text-muted;
+            }
+        }
+
+        if (root.trailing-icon != "" && root.trailing-icon != "🔍" && root.trailing-icon != "search") : Text {
             text: root.trailing-icon;
             color: Theme.text-muted;
             font-size: 12px;
@@ -294,11 +303,13 @@ export component CustomComboBox inherits Rectangle {
             overflow: elide;
         }
 
-        Text {
-            text: "⌄";
-            color: Theme.text-secondary;
-            font-size: 12px;
-            vertical-alignment: center;
+        VerticalLayout {
+            alignment: center;
+            VectorIconChevron {
+                size: 11px;
+                up: false;
+                icon-color: Theme.text-secondary;
+            }
         }
     }
 
@@ -500,11 +511,13 @@ export component AccordionCard inherits Rectangle {
                     vertical-alignment: center;
                 }
 
-                Text {
-                    text: root.expanded ? "⌃" : "⌄";
-                    color: Theme.text-secondary;
-                    font-size: 13px;
-                    vertical-alignment: center;
+                VerticalLayout {
+                    alignment: center;
+                    VectorIconChevron {
+                        size: 12px;
+                        up: root.expanded;
+                        icon-color: Theme.text-secondary;
+                    }
                 }
             }
 

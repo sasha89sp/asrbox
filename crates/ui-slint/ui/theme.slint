@@ -114,6 +114,14 @@ export struct SlintDockIconRow {
     is-folder: bool,
 }
 
+export struct SlintFolderEntryRow {
+    name: string,
+    path: string,
+    is-dir: bool,
+    has-icon: bool,
+    icon-img: image,
+}
+
 export struct SlintTrayDockRow {
     id: int,
     title: string,
@@ -126,14 +134,14 @@ export global Theme {
     in-out property <bool> glass-mode: true;
     in-out property <bool> is-ru: true;
 
-    // Concentric Fluent Glass surfaces (exact spec tokens)
-    out property <color> window-bg: dark-mode ? rgba(24, 27, 32, 0.88) : rgba(243, 245, 248, 0.92);
-    out property <color> sidebar-bg: dark-mode ? rgba(18, 20, 24, 0.92) : rgba(232, 236, 242, 0.95);
-    out property <color> card-bg: dark-mode ? rgba(34, 38, 46, 0.76) : rgba(255, 255, 255, 0.86);
-    out property <color> input-bg: dark-mode ? rgba(22, 25, 30, 0.90) : #FFFFFF;
-    out property <color> popup-bg: dark-mode ? rgba(26, 30, 38, 0.96) : rgba(255, 255, 255, 0.97);
-    out property <color> hover-bg: dark-mode ? rgba(48, 54, 66, 0.85) : rgba(226, 232, 240, 0.90);
-    out property <color> press-bg: dark-mode ? rgba(62, 70, 84, 0.92) : rgba(203, 213, 225, 0.95);
+    // Concentric Fluent Glass surfaces (solid-backed for software renderer + DWM DWMWCP_ROUND)
+    out property <color> window-bg: dark-mode ? #181B20 : #F3F5F8;
+    out property <color> sidebar-bg: dark-mode ? #121418 : #E8ECF2;
+    out property <color> card-bg: dark-mode ? rgba(34, 38, 46, 0.82) : rgba(255, 255, 255, 0.90);
+    out property <color> input-bg: dark-mode ? rgba(22, 25, 30, 0.94) : #FFFFFF;
+    out property <color> popup-bg: dark-mode ? #1B1F27 : #F8FAFC;
+    out property <color> hover-bg: dark-mode ? rgba(48, 54, 66, 0.88) : rgba(226, 232, 240, 0.92);
+    out property <color> press-bg: dark-mode ? rgba(62, 70, 84, 0.95) : rgba(203, 213, 225, 0.96);
 
     // Borders & hairline dividers
     out property <color> border-color: dark-mode ? rgba(255, 255, 255, 0.08) : rgba(15, 23, 42, 0.08);
