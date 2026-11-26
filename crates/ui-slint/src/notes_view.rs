@@ -24,10 +24,17 @@ pub struct LocalNotesState {
 
 impl LocalNotesState {
     pub fn ensure_selection(&mut self) {
-        if !self.db.folders.iter().any(|f| f.id == self.cfg.active_folder_id) {
+        if !self
+            .db
+            .folders
+            .iter()
+            .any(|f| f.id == self.cfg.active_folder_id)
+        {
             self.cfg.active_folder_id = self.db.folders.first().map_or(1, |f| f.id);
         }
-        let visible = self.db.filtered_notes(self.cfg.active_folder_id, &self.search);
+        let visible = self
+            .db
+            .filtered_notes(self.cfg.active_folder_id, &self.search);
         if !visible.iter().any(|n| n.id == self.cfg.active_note_id) {
             self.cfg.active_note_id = visible.first().map_or(0, |n| n.id);
         }
@@ -50,15 +57,18 @@ impl LocalNotesState {
     pub fn schedule_autosave(&mut self, rc: &Rc<RefCell<Self>>) {
         self.dirty = true;
         let weak_st = Rc::downgrade(rc);
-        self.autosave_timer
-            .start(TimerMode::SingleShot, Duration::from_millis(450), move || {
+        self.autosave_timer.start(
+            TimerMode::SingleShot,
+            Duration::from_millis(450),
+            move || {
                 if let Some(st) = weak_st.upgrade() {
                     let mut g = st.borrow_mut();
                     if g.dirty {
                         g.persist_db();
                     }
                 }
-            });
+            },
+        );
     }
 }
 

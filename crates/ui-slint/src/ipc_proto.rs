@@ -73,8 +73,7 @@ pub fn decode_runtime_status(line: &str) -> Option<UiRuntimeStatus> {
     let mut modules = Vec::new();
     for entry in mods_raw.split(';').filter(|s| !s.is_empty()) {
         let mut p = entry.splitn(4, '~');
-        if let (Some(id), Some(en), Some(run), Some(txt)) =
-            (p.next(), p.next(), p.next(), p.next())
+        if let (Some(id), Some(en), Some(run), Some(txt)) = (p.next(), p.next(), p.next(), p.next())
         {
             modules.push(UiModuleStatus {
                 id: unescape_sub(id),

@@ -58,9 +58,8 @@ fn apply_search_and_accordions(ui: &SettingsWindow, exp: &HashSet<String>, searc
     let has_q = !q.is_empty();
     let hit = |keys: &str| has_q && keys.contains(q.as_str());
 
-    let h_app = hit(
-        "оформление тема темная светлая акцент цвет язык шрифт theme accent dark light",
-    );
+    let h_app =
+        hit("оформление тема темная светлая акцент цвет язык шрифт theme accent dark light");
     let h_sys = hit("система автозагрузка изоляция процессы модули сброс autostart isolation");
     let h_bkp = hit("бэкап шифрование aes zip пароль webdav облако github исходный код backup");
     let h_syn = hit("синхронизация файлы папки интервал sync folder webdav");
@@ -108,9 +107,8 @@ fn apply_search_and_accordions(ui: &SettingsWindow, exp: &HashSet<String>, searc
 }
 
 fn apply_general_state(ui: &SettingsWindow, ctx: &SettingsViewContext<'_>, lang: AppLanguage) {
-    let mod_cfg =
-        load_modules_config(&ctx.paths.data_dir.join("config").join("modules.cfg"))
-            .unwrap_or_default();
+    let mod_cfg = load_modules_config(&ctx.paths.data_dir.join("config").join("modules.cfg"))
+        .unwrap_or_default();
     ui.set_autostart_enabled(ctx.runtime.autostart);
     ui.set_isolation_index(match mod_cfg.isolation {
         IsolationMode::Process => 0,
@@ -122,9 +120,14 @@ fn apply_general_state(ui: &SettingsWindow, ctx: &SettingsViewContext<'_>, lang:
             let live = ctx.runtime.modules.iter().find(|m| m.id == id.as_str());
             let enabled = live.map_or_else(|| mod_cfg.is_enabled(id), |m| m.enabled);
             let running = live.map_or(enabled, |m| m.running);
-            let status_text = live
-                .map(|m| m.status_text.clone())
-                .unwrap_or_else(|| if enabled { "активен" } else { "выключен" }.to_owned());
+            let status_text = live.map(|m| m.status_text.clone()).unwrap_or_else(|| {
+                if enabled {
+                    "активен"
+                } else {
+                    "выключен"
+                }
+                .to_owned()
+            });
             SlintModuleRow {
                 id: SharedString::from(id.as_str()),
                 label: SharedString::from(module_label(id, lang)),

@@ -75,7 +75,11 @@ fn apply_selected_dock(
             let is_dir = !is_sep && it.target.is_dir();
             SlintDockItemRow {
                 id: it.id as i32,
-                label: SharedString::from(if is_sep { "───" } else { it.label.as_str() }),
+                label: SharedString::from(if is_sep {
+                    "───"
+                } else {
+                    it.label.as_str()
+                }),
                 target_path: SharedString::from(it.target.display().to_string()),
                 kind_label: SharedString::from(dock_item_kind(is_sep, is_dir, lang)),
                 is_folder: is_dir,
@@ -184,9 +188,8 @@ fn apply_weather_and_notes_state(ui: &SettingsWindow, ctx: &SettingsViewContext<
 }
 
 pub fn apply_overlay_state(ui: &SettingsWindow, ctx: &SettingsViewContext<'_>) {
-    let mod_cfg =
-        load_modules_config(&ctx.paths.data_dir.join("config").join("modules.cfg"))
-            .unwrap_or_default();
+    let mod_cfg = load_modules_config(&ctx.paths.data_dir.join("config").join("modules.cfg"))
+        .unwrap_or_default();
     let ov = load_overlay_config(&ctx.paths.overlay_cfg).unwrap_or_default();
     ui.set_ov_module_enabled(mod_cfg.overlay_enabled);
     ui.set_ov_auto_games_only(ov.auto_games_only);

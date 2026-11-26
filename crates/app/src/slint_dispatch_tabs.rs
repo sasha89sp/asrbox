@@ -6,9 +6,7 @@ use asrbox_mod_widgets::{
     load_weather_config, load_widget_config, save_weather_config, save_widget_config,
     CalendarSource, YANDEX_WEATHER_CRED_TARGET,
 };
-use asrbox_platform_api::{
-    DockPlatform, IconProvider, ToolsPlatform, WidgetLayer, WidgetPlatform,
-};
+use asrbox_platform_api::{DockPlatform, IconProvider, ToolsPlatform, WidgetLayer, WidgetPlatform};
 
 use crate::AppController;
 
