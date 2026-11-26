@@ -144,7 +144,7 @@ pub fn install_bounds_tracker<FMove, FResize>(
     FMove: FnMut(i32, i32) + 'static,
     FResize: FnMut(u32, u32) + 'static,
 {
-    let _ = window.on_winit_window_event(move |w, ev| {
+    window.on_winit_window_event(move |w, ev| {
         match ev {
             WindowEvent::Moved(pos) => on_move(pos.x, pos.y),
             WindowEvent::Resized(size) => {
@@ -163,7 +163,7 @@ pub fn install_focus_lost_hook<F>(window: &slint::Window, mut on_blur: F)
 where
     F: FnMut() + 'static,
 {
-    let _ = window.on_winit_window_event(move |_w, ev| {
+    window.on_winit_window_event(move |_w, ev| {
         if let WindowEvent::Focused(false) = ev {
             on_blur();
         }
@@ -179,7 +179,7 @@ pub fn install_dock_window_hooks<FMove, FDrop>(
     FMove: FnMut(i32, i32) + 'static,
     FDrop: FnMut(std::path::PathBuf) + 'static,
 {
-    let _ = window.on_winit_window_event(move |_w, ev| {
+    window.on_winit_window_event(move |_w, ev| {
         match ev {
             WindowEvent::Moved(pos) => on_move(pos.x, pos.y),
             WindowEvent::DroppedFile(path) => on_drop(path.clone()),
