@@ -151,9 +151,8 @@ fn load_all_cached_calendars(state: &SharedCalendar) {
     let sources = s.cfg.sources.clone();
     for src in &sources {
         if let Some(bytes) = load_cached_ics(&s.cache_dir, &src.id) {
-            if let Ok(parsed) = parse_ics_bytes(&bytes, &src.id, src.color_rgb, &opts) {
-                s.events_by_src.insert(src.id.clone(), parsed.events);
-            }
+            let parsed = parse_ics_bytes(&bytes, &src.id, src.color_rgb, opts);
+            s.events_by_src.insert(src.id.clone(), parsed.events);
         }
     }
 }
@@ -323,28 +322,21 @@ fn fetch_sources_blocking(
             error = Some(format!("HTTP {}", res.status_code));
         } else {
             let _ = save_cached_ics(cache_dir, &src.id, &res.body);
-            match parse_ics_bytes(&res.body, &src.id, src.color_rgb, &opts) {
-                Ok(p) => {
-                    let msg = format!("Календарь {}: событий {}", src.id, p.events.len());
-                    emit_worker_log("INFO", "http", msg);
-                    per_source.insert(src.id.clone(), p.events);
-                }
-                Err(e) => error = Some(format!("ICS: {e}")),
-            }
+            let parsed = parse_ics_bytes(&res.body, &src.id, src.color_rgb, opts);
+            let msg = format!("Календарь {}: событий {}", src.id, parsed.events.len());
+            emit_worker_log("INFO", "http", msg);
+            per_source.insert(src.id.clone(), parsed.events);
         }
     }
     (per_source, error)
 }
 
 fn make_parse_opts(now: asrbox_platform_api::LocalDateTime, lookahead_days: u16) -> ParseOptions {
-    let today = asrbox_mod_widgets::rrule::days_from_civil(now.year, now.month, now.day);
-    let (ey, em, ed) =
-        asrbox_mod_widgets::rrule::civil_from_days(today + i64::from(lookahead_days.max(7)));
+    let now_ics = asrbox_mod_widgets::format::local_now_as_ics(now);
     ParseOptions {
-        window_start: asrbox_mod_widgets::IcsDateTime::date_only(now.year, now.month, now.day),
-        window_end: asrbox_mod_widgets::IcsDateTime::date_only(ey, em, ed),
+        window_start_min: now_ics.to_epoch_min() - 1440,
+        window_end_min: now_ics.to_epoch_min() + i64::from(lookahead_days.max(7)) * 1440,
         local_utc_offset_min: now.utc_offset_min,
-        max_events: 400,
     }
 }
 

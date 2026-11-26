@@ -148,7 +148,7 @@ pub fn install_bounds_tracker<FMove, FResize>(
         match ev {
             WindowEvent::Moved(pos) => on_move(pos.x, pos.y),
             WindowEvent::Resized(size) => {
-                let sf = w.scale_factor().max(1.0);
+                let sf = f64::from(w.scale_factor().max(1.0));
                 let lw = (f64::from(size.width) / sf).round().max(64.0) as u32;
                 let lh = (f64::from(size.height) / sf).round().max(48.0) as u32;
                 on_resize(lw, lh);

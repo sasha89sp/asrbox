@@ -230,8 +230,8 @@ export component TrayMenuWindow inherits Window {
                 // Scrollable menu body
                 Flickable {
                     vertical-stretch: 1;
-                    viewport-width: self.width;
-                    viewport-height: body-col.preferred-height;
+                    content-width: self.width;
+                    content-height: body-col.preferred-height;
 
                     body-col := VerticalLayout {
                         width: parent.width;

@@ -269,8 +269,8 @@ export component CalendarWindow inherits Window {
             // Scrollable events list
             Flickable {
                 vertical-stretch: 1;
-                viewport-width: self.width;
-                viewport-height: ev-col.preferred-height;
+                content-width: self.width;
+                content-height: ev-col.preferred-height;
 
                 ev-col := VerticalLayout {
                     width: parent.width;

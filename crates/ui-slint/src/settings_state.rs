@@ -24,7 +24,10 @@ pub struct SettingsViewContext<'a> {
     pub refresh_inputs: bool,
 }
 
-pub fn apply_theme_to_window<C: ComponentHandle>(ui: &C, app: AppearanceConfig) -> bool {
+pub fn apply_theme_to_window<C: ComponentHandle>(ui: &C, app: AppearanceConfig) -> bool
+where
+    for<'a> Theme<'a>: slint::Global<'a, C>,
+{
     let dark = app.theme.is_dark();
     let theme = ui.global::<Theme>();
     theme.set_dark_mode(dark);
