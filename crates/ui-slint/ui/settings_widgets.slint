@@ -147,7 +147,7 @@ export component SettingsWidgetsView inherits VerticalLayout {
     // Subtab 0: Google Calendar
     if (root.selected-widget == 0) : AccordionCard {
         title: "Google Календарь (.ics)";
-        summary: root.cal-visible ? "\(root.cal-width) px · \(root.cal-rows) стр." : "Скрыт";
+        summary: root.cal-visible ? "\{root.cal-width} px · \{root.cal-rows} стр." : "Скрыт";
         expanded: root.exp-cal;
         toggled => { root.toggle-section("cal_main"); }
 
@@ -228,7 +228,7 @@ export component SettingsWidgetsView inherits VerticalLayout {
     // Subtab 1: SysMonitor
     if (root.selected-widget == 1) : AccordionCard {
         title: Theme.is-ru ? "Системный монитор (CPU / GPU / RAM / Сеть)" : "System Monitor";
-        summary: root.sys-visible ? "\(root.sys-width)×\(root.sys-height)" : "Скрыт";
+        summary: root.sys-visible ? "\{root.sys-width}×\{root.sys-height}" : "Скрыт";
         expanded: root.exp-sys;
         toggled => { root.toggle-section("sys_main"); }
 

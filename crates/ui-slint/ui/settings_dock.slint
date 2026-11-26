@@ -123,7 +123,7 @@ export component SettingsDockView inherits VerticalLayout {
     // 1. Геометрия и внешний вид
     AccordionCard {
         title: Theme.is-ru ? "Геометрия и внешний вид" : "Geometry & Appearance";
-        summary: "\(root.icon-size-px) px · \(root.opacity-percent)%";
+        summary: "\{root.icon-size-px} px · \{root.opacity-percent}%";
         expanded: root.exp-appearance;
         highlighted: root.hi-appearance;
         toggled => { root.toggle-section("dock_appearance"); }
@@ -288,7 +288,7 @@ export component SettingsDockView inherits VerticalLayout {
     // 3. Элементы док-панели (46px rows, exact Concentric Fluent Glass spec)
     AccordionCard {
         title: Theme.is-ru ? "Ярлыки и папки дока" : "Dock Shortcuts & Folders";
-        summary: "\(root.items.length)";
+        summary: "\{root.items.length}";
         expanded: root.exp-items;
         highlighted: root.hi-items;
         toggled => { root.toggle-section("dock_items"); }

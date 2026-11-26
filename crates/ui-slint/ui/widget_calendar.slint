@@ -491,7 +491,7 @@ export component CalendarWindow inherits Window {
                         Text {
                             width: 100%;
                             height: 100%;
-                            text: "\(pct)%";
+                            text: "\{pct}%";
                             color: root.opacity-pct == pct ? #FFFFFF : Theme.text-primary;
                             font-size: 10.5px;
                             horizontal-alignment: center;
@@ -516,7 +516,7 @@ export component CalendarWindow inherits Window {
                         Text {
                             width: 100%;
                             height: 100%;
-                            text: sec == 3600 ? "1ч" : "\(Math.round((sec * 1.0) / 60.0))м";
+                            text: sec == 3600 ? "1ч" : "\{Math.round((sec * 1.0) / 60.0)}м";
                             color: root.sync-interval-sec == sec ? #FFFFFF : Theme.text-primary;
                             font-size: 10.5px;
                             horizontal-alignment: center;

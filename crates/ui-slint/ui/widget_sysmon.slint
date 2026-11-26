@@ -319,7 +319,7 @@ export component SysMonitorWindow inherits Window {
                     spacing: 8px;
                     Text {
                         width: 84px;
-                        text: "Нагрузка: \(root.cpu-pct)%";
+                        text: "Нагрузка: \{root.cpu-pct}%";
                         color: Theme.text-primary;
                         font-size: 11.5px;
                         vertical-alignment: center;
@@ -668,7 +668,7 @@ export component SysMonitorWindow inherits Window {
                         Text {
                             width: 100%;
                             height: 100%;
-                            text: "\(pct)%";
+                            text: "\{pct}%";
                             color: root.opacity-pct == pct ? #FFFFFF : Theme.text-primary;
                             font-size: 10.5px;
                             horizontal-alignment: center;
@@ -693,7 +693,7 @@ export component SysMonitorWindow inherits Window {
                         Text {
                             width: 100%;
                             height: 100%;
-                            text: "\(Math.round((ms * 1.0) / 1000.0))с";
+                            text: "\{Math.round((ms * 1.0) / 1000.0)}с";
                             color: root.refresh-ms == ms ? #FFFFFF : Theme.text-primary;
                             font-size: 10.5px;
                             horizontal-alignment: center;

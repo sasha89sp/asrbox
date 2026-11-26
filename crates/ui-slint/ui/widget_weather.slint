@@ -377,7 +377,7 @@ export component WeatherWindow inherits Window {
                     Text {
                         width: 100%;
                         height: 100%;
-                        text: "\(d)д";
+                        text: "\{d}д";
                         color: root.forecast-days == d ? #FFFFFF : Theme.text-primary;
                         font-size: 10.5px;
                         font-weight: 600;
@@ -597,7 +597,7 @@ export component WeatherWindow inherits Window {
                         Text {
                             width: 100%;
                             height: 100%;
-                            text: "\(pct)%";
+                            text: "\{pct}%";
                             color: root.opacity-pct == pct ? #FFFFFF : Theme.text-primary;
                             font-size: 10.5px;
                             horizontal-alignment: center;
@@ -622,7 +622,7 @@ export component WeatherWindow inherits Window {
                         Text {
                             width: 100%;
                             height: 100%;
-                            text: "\(mins)м";
+                            text: "\{mins}м";
                             color: root.interval-min == mins ? #FFFFFF : Theme.text-primary;
                             font-size: 10.5px;
                             horizontal-alignment: center;

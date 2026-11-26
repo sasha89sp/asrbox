@@ -90,7 +90,7 @@ export component SettingsOverlayView inherits VerticalLayout {
 
     AccordionCard {
         title: Theme.is-ru ? "Размеры и частота обновления" : "Size & Refresh Rate";
-        summary: "\(root.width-px)×\(root.height-px) · \(root.refresh-ms) мс";
+        summary: "\{root.width-px}×\{root.height-px} · \{root.refresh-ms} мс";
         expanded: root.exp-layout;
         highlighted: root.hi-layout;
         toggled => { root.toggle-section("overlay_layout"); }

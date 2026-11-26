@@ -436,8 +436,8 @@ export component SettingsGeneralView inherits VerticalLayout {
         for srv in root.webdav-servers : SettingRow {
             badge-icon: "☁";
             badge-bg: srv.has-password ? Theme.accent : Theme.text-muted;
-            title: "\(srv.name) · \(srv.provider-label)";
-            subtitle: srv.status-text != "" ? "\(srv.remote-dir) · \(srv.status-text)" : srv.remote-dir;
+            title: "\{srv.name} · \{srv.provider-label}";
+            subtitle: srv.status-text != "" ? "\{srv.remote-dir} · \{srv.status-text}" : srv.remote-dir;
 
             GlassButton {
                 label: srv.is-backup-target ? "✓ Бэкап" : "Бэкап";
@@ -654,13 +654,13 @@ export component SettingsGeneralView inherits VerticalLayout {
     // 5. Диагностика и О программе
     if (root.show-tools) : AccordionCard {
         title: Theme.is-ru ? "Диагностика и О программе" : "Diagnostics & About";
-        summary: "v\(root.app-version)";
+        summary: "v\{root.app-version}";
         expanded: root.exp-tools;
         highlighted: root.hi-tools;
         toggled => { root.toggle-section("tools"); }
 
         SettingRow {
-            title: "asrbox v\(root.app-version) · Portable";
+            title: "asrbox v\{root.app-version} · Portable";
             subtitle: root.diag-summary != "" ? root.diag-summary : root.data-dir-text;
             GlassButton {
                 label: Theme.is-ru ? "Папка data" : "Data Folder";

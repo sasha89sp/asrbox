@@ -440,13 +440,13 @@ export component SettingsWindow inherits Window {
 
                                 toggle-section(id) => { root.dispatch("toggle_section", id); }
                                 set-dark-mode(v) => { root.dispatch("set_dark_mode", v ? "1" : "0"); }
-                                set-accent(i) => { root.dispatch("set_accent", "\(i)"); }
-                                set-design-theme(i) => { root.dispatch("set_design_theme", "\(i)"); }
-                                set-language(i) => { root.dispatch("set_language", "\(i)"); }
-                                set-font-renderer(i) => { root.dispatch("set_font_renderer", "\(i)"); }
+                                set-accent(i) => { root.dispatch("set_accent", "\{i}"); }
+                                set-design-theme(i) => { root.dispatch("set_design_theme", "\{i}"); }
+                                set-language(i) => { root.dispatch("set_language", "\{i}"); }
+                                set-font-renderer(i) => { root.dispatch("set_font_renderer", "\{i}"); }
                                 set-autostart(v) => { root.dispatch("set_autostart", v ? "1" : "0"); }
-                                set-isolation(i) => { root.dispatch("set_isolation", "\(i)"); }
-                                set-module-enabled(id, v) => { root.dispatch("set_module_enabled", "\(id)|\(v ? 1 : 0)"); }
+                                set-isolation(i) => { root.dispatch("set_isolation", "\{i}"); }
+                                set-module-enabled(id, v) => { root.dispatch("set_module_enabled", "\{id}|\{v ? 1 : 0}"); }
                                 restart-module(id) => { root.dispatch("restart_module", id); }
                                 restart-all-modules => { root.dispatch("restart_all", ""); }
                                 confirm-reset-all => { root.dispatch("reset_all", ""); }
@@ -467,7 +467,7 @@ export component SettingsWindow inherits Window {
                                 save-gh-settings(r, b, t) => { root.save-gh-settings(r, b, t); }
                                 clear-gh-token => { root.dispatch("clear_gh_token", ""); }
                                 download-gh-now => { root.dispatch("download_gh_now", ""); }
-                                set-sync-interval(i) => { root.dispatch("set_sync_interval", "\(i)"); }
+                                set-sync-interval(i) => { root.dispatch("set_sync_interval", "\{i}"); }
                                 pick-sync-files => { root.dispatch("pick_sync_files", ""); }
                                 pick-sync-folder => { root.dispatch("pick_sync_folder", ""); }
                                 remove-sync-item(id) => { root.dispatch("remove_sync_item", id); }
@@ -515,17 +515,17 @@ export component SettingsWindow inherits Window {
                                 menu-add-dock: root.dock-menu-add-dock;
 
                                 toggle-section(id) => { root.dispatch("toggle_section", id); }
-                                select-dock(i) => { root.dispatch("select_dock", "\(i)"); }
+                                select-dock(i) => { root.dispatch("select_dock", "\{i}"); }
                                 add-dock => { root.dispatch("add_dock", ""); }
                                 remove-current-dock => { root.dispatch("remove_dock", ""); }
                                 open-docks-config => { root.dispatch("open_docks_cfg", ""); }
-                                set-edge(i) => { root.dispatch("dock_edge", "\(i)"); }
-                                set-layer(i) => { root.dispatch("dock_layer", "\(i)"); }
-                                set-label-mode(i) => { root.dispatch("dock_label_mode", "\(i)"); }
-                                set-icon-size(v) => { root.dispatch("dock_icon_size", "\(v)"); }
-                                set-opacity(v) => { root.dispatch("dock_opacity", "\(v)"); }
-                                set-edge-margin(v) => { root.dispatch("dock_edge_margin", "\(v)"); }
-                                set-corner-radius(v) => { root.dispatch("dock_corner_radius", "\(v)"); }
+                                set-edge(i) => { root.dispatch("dock_edge", "\{i}"); }
+                                set-layer(i) => { root.dispatch("dock_layer", "\{i}"); }
+                                set-label-mode(i) => { root.dispatch("dock_label_mode", "\{i}"); }
+                                set-icon-size(v) => { root.dispatch("dock_icon_size", "\{v}"); }
+                                set-opacity(v) => { root.dispatch("dock_opacity", "\{v}"); }
+                                set-edge-margin(v) => { root.dispatch("dock_edge_margin", "\{v}"); }
+                                set-corner-radius(v) => { root.dispatch("dock_corner_radius", "\{v}"); }
                                 set-blur(v) => { root.dispatch("dock_blur", v ? "1" : "0"); }
                                 set-locked(v) => { root.dispatch("dock_locked", v ? "1" : "0"); }
                                 set-lock-items(v) => { root.dispatch("dock_lock_items", v ? "1" : "0"); }
@@ -538,14 +538,14 @@ export component SettingsWindow inherits Window {
                                 select-dock-item(id, lbl) => {
                                     root.dock-selected-item-id = id;
                                     root.dock-rename-input = lbl;
-                                    root.dispatch("dock_select_item", "\(id)");
+                                    root.dispatch("dock_select_item", "\{id}");
                                 }
-                                rename-dock-item(id, lbl) => { root.dispatch("dock_rename_item", "\(id)|\(lbl)"); }
-                                reset-dock-item-label(id) => { root.dispatch("dock_reset_item", "\(id)"); }
-                                move-dock-item(id, d) => { root.dispatch("dock_move_item", "\(id)|\(d)"); }
-                                open-dock-item-folder(id) => { root.dispatch("dock_open_item_folder", "\(id)"); }
-                                remove-dock-item(id) => { root.dispatch("dock_remove_item", "\(id)"); }
-                                toggle-dock-menu-vis(idx, v) => { root.dispatch("dock_menu_vis", "\(idx)|\(v ? 1 : 0)"); }
+                                rename-dock-item(id, lbl) => { root.dispatch("dock_rename_item", "\{id}|\{lbl}"); }
+                                reset-dock-item-label(id) => { root.dispatch("dock_reset_item", "\{id}"); }
+                                move-dock-item(id, d) => { root.dispatch("dock_move_item", "\{id}|\{d}"); }
+                                open-dock-item-folder(id) => { root.dispatch("dock_open_item_folder", "\{id}"); }
+                                remove-dock-item(id) => { root.dispatch("dock_remove_item", "\{id}"); }
+                                toggle-dock-menu-vis(idx, v) => { root.dispatch("dock_menu_vis", "\{idx}|\{v ? 1 : 0}"); }
                             }
 
                             if (root.active-tab == 2) : SettingsWidgetsView {
@@ -589,44 +589,44 @@ export component SettingsWindow inherits Window {
                                 toggle-section(id) => { root.dispatch("toggle_section", id); }
                                 select-widget(i) => { root.selected-widget = i; }
                                 set-cal-visible(v) => { root.dispatch("cal_visible", v ? "1" : "0"); }
-                                set-cal-layer(i) => { root.dispatch("cal_layer", "\(i)"); }
-                                set-cal-period(i) => { root.dispatch("cal_period", "\(i)"); }
-                                set-cal-sync(i) => { root.dispatch("cal_sync", "\(i)"); }
-                                set-cal-opacity(v) => { root.dispatch("cal_opacity", "\(v)"); }
-                                set-cal-width(v) => { root.dispatch("cal_width", "\(v)"); }
-                                set-cal-rows(v) => { root.dispatch("cal_rows", "\(v)"); }
+                                set-cal-layer(i) => { root.dispatch("cal_layer", "\{i}"); }
+                                set-cal-period(i) => { root.dispatch("cal_period", "\{i}"); }
+                                set-cal-sync(i) => { root.dispatch("cal_sync", "\{i}"); }
+                                set-cal-opacity(v) => { root.dispatch("cal_opacity", "\{v}"); }
+                                set-cal-width(v) => { root.dispatch("cal_width", "\{v}"); }
+                                set-cal-rows(v) => { root.dispatch("cal_rows", "\{v}"); }
                                 refresh-cal => { root.dispatch("cal_refresh", ""); }
                                 match-cal-to-sys => { root.dispatch("cal_match_sys", ""); }
                                 add-cal-url(u) => { root.dispatch("cal_add_url", u); }
-                                remove-cal-source(i) => { root.dispatch("cal_remove_src", "\(i)"); }
+                                remove-cal-source(i) => { root.dispatch("cal_remove_src", "\{i}"); }
                                 uncomment-cal => { root.dispatch("cal_uncomment", ""); }
                                 open-cal-cfg => { root.dispatch("open_widgets_cfg", ""); }
                                 set-sys-visible(v) => { root.dispatch("sys_visible", v ? "1" : "0"); }
-                                set-sys-layer(i) => { root.dispatch("sys_layer", "\(i)"); }
-                                set-sys-refresh(i) => { root.dispatch("sys_refresh", "\(i)"); }
-                                set-sys-opacity(v) => { root.dispatch("sys_opacity", "\(v)"); }
-                                set-sys-width(v) => { root.dispatch("sys_width", "\(v)"); }
-                                set-sys-height(v) => { root.dispatch("sys_height", "\(v)"); }
+                                set-sys-layer(i) => { root.dispatch("sys_layer", "\{i}"); }
+                                set-sys-refresh(i) => { root.dispatch("sys_refresh", "\{i}"); }
+                                set-sys-opacity(v) => { root.dispatch("sys_opacity", "\{v}"); }
+                                set-sys-width(v) => { root.dispatch("sys_width", "\{v}"); }
+                                set-sys-height(v) => { root.dispatch("sys_height", "\{v}"); }
                                 refresh-sys => { root.dispatch("sys_refresh_now", ""); }
                                 match-sys-to-cal => { root.dispatch("sys_match_cal", ""); }
                                 open-sys-cfg => { root.dispatch("open_sysmon_cfg", ""); }
                                 set-weather-visible(v) => { root.dispatch("weather_visible", v ? "1" : "0"); }
-                                set-weather-provider(i) => { root.dispatch("weather_provider", "\(i)"); }
-                                set-weather-days(i) => { root.dispatch("weather_days", "\(i)"); }
+                                set-weather-provider(i) => { root.dispatch("weather_provider", "\{i}"); }
+                                set-weather-days(i) => { root.dispatch("weather_days", "\{i}"); }
                                 apply-weather-city(c) => { root.dispatch("weather_city", c); }
                                 save-yandex-key(k) => { root.dispatch("weather_save_key", k); }
                                 clear-yandex-key => { root.dispatch("weather_clear_key", ""); }
-                                set-weather-layer(i) => { root.dispatch("weather_layer", "\(i)"); }
-                                set-weather-opacity(v) => { root.dispatch("weather_opacity", "\(v)"); }
-                                set-weather-refresh(v) => { root.dispatch("weather_refresh_min", "\(v)"); }
-                                set-weather-width(v) => { root.dispatch("weather_width", "\(v)"); }
-                                set-weather-height(v) => { root.dispatch("weather_height", "\(v)"); }
+                                set-weather-layer(i) => { root.dispatch("weather_layer", "\{i}"); }
+                                set-weather-opacity(v) => { root.dispatch("weather_opacity", "\{v}"); }
+                                set-weather-refresh(v) => { root.dispatch("weather_refresh_min", "\{v}"); }
+                                set-weather-width(v) => { root.dispatch("weather_width", "\{v}"); }
+                                set-weather-height(v) => { root.dispatch("weather_height", "\{v}"); }
                                 refresh-weather => { root.dispatch("weather_refresh_now", ""); }
                                 open-weather-cfg => { root.dispatch("open_weather_cfg", ""); }
                                 set-notes-visible(v) => { root.dispatch("notes_visible", v ? "1" : "0"); }
-                                set-notes-layer(i) => { root.dispatch("notes_layer", "\(i)"); }
-                                set-notes-opacity(v) => { root.dispatch("notes_opacity", "\(v)"); }
-                                toggle-notes-pane(i) => { root.dispatch("notes_toggle_pane", "\(i)"); }
+                                set-notes-layer(i) => { root.dispatch("notes_layer", "\{i}"); }
+                                set-notes-opacity(v) => { root.dispatch("notes_opacity", "\{v}"); }
+                                toggle-notes-pane(i) => { root.dispatch("notes_toggle_pane", "\{i}"); }
                                 open-notes-folder => { root.dispatch("open_notes_folder", ""); }
                             }
 
@@ -646,16 +646,16 @@ export component SettingsWindow inherits Window {
                                 refresh-ms: root.ov-refresh-ms;
 
                                 toggle-section(id) => { root.dispatch("toggle_section", id); }
-                                set-module-enabled(v) => { root.dispatch("set_module_enabled", "overlay|\(v ? 1 : 0)"); }
+                                set-module-enabled(v) => { root.dispatch("set_module_enabled", "overlay|\{v ? 1 : 0}"); }
                                 set-auto-games-only(v) => { root.dispatch("ov_auto_games", v ? "1" : "0"); }
                                 set-force-topmost(v) => { root.dispatch("ov_force_topmost", v ? "1" : "0"); }
                                 set-setup-mode(v) => { root.dispatch("ov_setup_mode", v ? "1" : "0"); }
-                                set-anchor(i) => { root.dispatch("ov_anchor", "\(i)"); }
-                                set-opacity(v) => { root.dispatch("ov_opacity", "\(v)"); }
-                                set-width(v) => { root.dispatch("ov_width", "\(v)"); }
-                                set-height(v) => { root.dispatch("ov_height", "\(v)"); }
-                                set-refresh-ms(v) => { root.dispatch("ov_refresh_ms", "\(v)"); }
-                                apply-size-preset(w, h) => { root.dispatch("ov_preset", "\(w)|\(h)"); }
+                                set-anchor(i) => { root.dispatch("ov_anchor", "\{i}"); }
+                                set-opacity(v) => { root.dispatch("ov_opacity", "\{v}"); }
+                                set-width(v) => { root.dispatch("ov_width", "\{v}"); }
+                                set-height(v) => { root.dispatch("ov_height", "\{v}"); }
+                                set-refresh-ms(v) => { root.dispatch("ov_refresh_ms", "\{v}"); }
+                                apply-size-preset(w, h) => { root.dispatch("ov_preset", "\{w}|\{h}"); }
                                 open-overlay-cfg => { root.dispatch("open_overlay_cfg", ""); }
                             }
                         }
