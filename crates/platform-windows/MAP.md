@@ -3,7 +3,8 @@
 Единственный крейт workspace с `unsafe` (каждый блок снабжён комментарием `// SAFETY:`). Реализует контракты `crates/platform-api` через `windows` (`0.61`).
 
 ## Файлы
-- `src/lib.rs` — экспорт `WindowsDockHost`, `WindowsIconProvider`, `SingleInstanceGuard`, `JobObject`, `SysTelemetryCollector`, `winhttp_fetch`, `cred_load`, `pick_icon_file`, `activate_or_launch_target`, `query_running_exe_names`, `resolve_target_exe_name`, `launch_system_tool`, `open_item_location`, `open_in_notepad`, `open_url_str`, `query_local_time`, `primary_work_area`, `apply_dwm_frameless_style`, `set_window_opacity_alpha`, `force_redraw_hwnd`.
+- `src/lib.rs` — экспорт `WindowsDockHost`, `WindowsIconProvider`, `SingleInstanceGuard`, `JobObject`, `SysTelemetryCollector`, `winhttp_fetch`, `cred_load`, `pick_icon_file`, `activate_or_launch_target`, `query_running_exe_names`, `resolve_target_exe_name`, `launch_system_tool`, `open_item_location`, `open_in_notepad`, `open_url_str`, `query_local_time`, `primary_work_area`, `apply_dwm_frameless_style`, `set_window_opacity_alpha`, `force_redraw_hwnd`, а также хелперов `slint_host`.
+- `src/slint_host.rs` — Win32-интеграция для Slint-окон: `apply_window_app_icon`, `set_window_skip_taskbar` (`WS_EX_TOOLWINDOW`/`WS_EX_APPWINDOW`), `move_window_phys`, `cursor_screen_pos`, а также необрезаемые нативные попапы `show_dock_native_menu`, `show_folder_native_popup` и `show_native_fluent_menu`.
 - `src/app_icon.rs` — DPI-aware загрузка встроенной многоразмерной иконки PE (`LoadImageW` + `RT_GROUP_ICON #1`) с bottom-up фолбэком `CreateIconIndirect`, кэшем и `WM_SETICON`.
 - `src/autostart.rs` — автозагрузка Windows (`HKCU\...\Run\asrbox`) и Windows Credential Manager (`CredWriteW`/`CredReadW`/`CredDeleteW`).
 - `src/fluent_menu.rs` — точка входа и цикл кастомного слоистого Fluent-меню (`show_fluent_popup_menu`), защита от повторного входа и сброс по внешнему клику/фокусу.

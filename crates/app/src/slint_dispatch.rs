@@ -157,6 +157,10 @@ impl<I: IconProvider> AppController<I> {
                 return (false, false);
             }
             "notes_closed" | "notes_changed" => return (true, false),
+            "open_notes_settings" => {
+                self.open_slint_settings(host, SettingsTab::Widgets, WidgetSubTab::Notes);
+                return (false, false);
+            }
             "tray_action" | "tray_toggle_theme" => {
                 return self.dispatch_tray_cmd(host, act, arg);
             }

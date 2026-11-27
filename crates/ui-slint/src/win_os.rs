@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 
 use asrbox_core::{encode_worker_msg, WorkerMsg};
 use asrbox_platform_api::{
-    HttpFetchResult, IconRequest, LocalDateTime, PixelRect, RgbaImage, WidgetLayer,
+    AppearanceConfig, DockMenuAction, DockMenuState, FluentMenuSpec, HttpFetchResult, IconRequest,
+    LocalDateTime, PixelRect, RgbaImage, WidgetLayer,
 };
 
 pub fn emit_worker_msg(msg: &WorkerMsg) {
@@ -152,16 +153,6 @@ pub fn launch_system_tool(_cmd: &str, _args: &str) -> Result<(), String> {
 }
 
 #[cfg(windows)]
-pub fn open_in_explorer(path: &Path) -> Result<(), String> {
-    asrbox_platform_windows::open_in_explorer(path)
-}
-
-#[cfg(not(windows))]
-pub fn open_in_explorer(_path: &Path) -> Result<(), String> {
-    Ok(())
-}
-
-#[cfg(windows)]
 pub fn open_item_location(path: &Path) -> Result<(), String> {
     asrbox_platform_windows::open_item_location(path)
 }
@@ -221,4 +212,56 @@ pub fn load_shell_icon(request: &IconRequest, target_px: u32) -> Result<RgbaImag
 #[cfg(not(windows))]
 pub fn load_shell_icon(_request: &IconRequest, _target_px: u32) -> Result<RgbaImage, String> {
     Err("icons unavailable on non-Windows".to_owned())
+}
+
+#[cfg(windows)]
+pub fn show_dock_native_menu(
+    hwnd_raw: isize,
+    state: &DockMenuState,
+    appearance: AppearanceConfig,
+) -> Result<Option<DockMenuAction>, String> {
+    asrbox_platform_windows::show_dock_native_menu(hwnd_raw, state, appearance)
+}
+
+#[cfg(not(windows))]
+pub fn show_dock_native_menu(
+    _hwnd_raw: isize,
+    _state: &DockMenuState,
+    _appearance: AppearanceConfig,
+) -> Result<Option<DockMenuAction>, String> {
+    Ok(None)
+}
+
+#[cfg(windows)]
+pub fn show_folder_native_popup(
+    folder_path: &Path,
+    appearance: AppearanceConfig,
+) -> Result<Option<PathBuf>, String> {
+    asrbox_platform_windows::show_folder_native_popup(folder_path, appearance)
+}
+
+#[cfg(not(windows))]
+pub fn show_folder_native_popup(
+    _folder_path: &Path,
+    _appearance: AppearanceConfig,
+) -> Result<Option<PathBuf>, String> {
+    Ok(None)
+}
+
+#[cfg(windows)]
+pub fn show_native_fluent_menu(
+    hwnd_raw: isize,
+    spec: &FluentMenuSpec,
+    appearance: AppearanceConfig,
+) -> Result<Option<u32>, String> {
+    asrbox_platform_windows::show_native_fluent_menu(hwnd_raw, spec, appearance)
+}
+
+#[cfg(not(windows))]
+pub fn show_native_fluent_menu(
+    _hwnd_raw: isize,
+    _spec: &FluentMenuSpec,
+    _appearance: AppearanceConfig,
+) -> Result<Option<u32>, String> {
+    Ok(None)
 }

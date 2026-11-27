@@ -162,6 +162,7 @@ export component SettingsWindow inherits Window {
     in property <int> dock-layer-index: 0;
     in property <int> dock-label-mode-index: 0;
     in property <int> dock-icon-size-px: 48;
+    in property <int> dock-icon-frame-px: 6;
     in property <int> dock-opacity-percent: 88;
     in property <int> dock-edge-margin-px: 12;
     in property <int> dock-corner-radius-px: 16;
@@ -508,6 +509,7 @@ export component SettingsWindow inherits Window {
                                 layer-index: root.dock-layer-index;
                                 label-mode-index: root.dock-label-mode-index;
                                 icon-size-px: root.dock-icon-size-px;
+                                icon-frame-px: root.dock-icon-frame-px;
                                 opacity-percent: root.dock-opacity-percent;
                                 edge-margin-px: root.dock-edge-margin-px;
                                 corner-radius-px: root.dock-corner-radius-px;
@@ -534,6 +536,7 @@ export component SettingsWindow inherits Window {
                                 set-layer(i) => { root.dispatch("dock_layer", "\{i}"); }
                                 set-label-mode(i) => { root.dispatch("dock_label_mode", "\{i}"); }
                                 set-icon-size(v) => { root.dispatch("dock_icon_size", "\{v}"); }
+                                set-icon-frame(v) => { root.dispatch("dock_icon_frame", "\{v}"); }
                                 set-opacity(v) => { root.dispatch("dock_opacity", "\{v}"); }
                                 set-edge-margin(v) => { root.dispatch("dock_edge_margin", "\{v}"); }
                                 set-corner-radius(v) => { root.dispatch("dock_corner_radius", "\{v}"); }

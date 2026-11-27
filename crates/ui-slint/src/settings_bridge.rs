@@ -13,7 +13,7 @@ use crate::generated::ui::SettingsWindow;
 use crate::ipc_proto::{decode_runtime_status, encode_ui_cmd, escape_field, UiRuntimeStatus};
 use crate::settings_state::{apply_settings_state, SettingsViewContext};
 use crate::vibrancy::{
-    apply_window_vibrancy, center_window_in_work_area, minimize_window, select_winit_backend,
+    apply_settings_chrome, center_window_in_work_area, minimize_window, select_winit_backend,
     start_window_drag, start_window_resize, toggle_maximize_window,
 };
 use crate::win_os::primary_work_area;
@@ -45,7 +45,7 @@ impl LocalSettingsState {
         }
         if dark != self.last_dark {
             self.last_dark = dark;
-            apply_window_vibrancy(ui.window(), dark);
+            apply_settings_chrome(ui.window(), dark);
         }
     }
 }
@@ -84,7 +84,7 @@ pub fn run_settings_window(
         if let Some(win) = weak_vib.upgrade() {
             let wa = primary_work_area();
             center_window_in_work_area(win.window(), wa, 860, 560, 720, 480);
-            apply_window_vibrancy(win.window(), initial_dark);
+            apply_settings_chrome(win.window(), initial_dark);
         }
     });
 

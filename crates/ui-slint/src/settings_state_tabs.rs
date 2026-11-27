@@ -57,6 +57,7 @@ fn apply_selected_dock(
     ui.set_dock_layer_index(layer_to_idx(d.layer));
     ui.set_dock_label_mode_index(i32::from(d.label_mode.to_index()));
     ui.set_dock_icon_size_px(i32::from(d.icon_size_px));
+    ui.set_dock_icon_frame_px(i32::from(d.icon_frame_px.min(24)));
     ui.set_dock_opacity_percent(i32::from(d.opacity_percent));
     ui.set_dock_edge_margin_px(i32::from(d.edge_margin_px));
     ui.set_dock_corner_radius_px(i32::from(d.corner_radius_px));

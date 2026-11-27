@@ -51,6 +51,7 @@ export component NotesWindow inherits Window {
     callback minimize-window();
     callback maximize-window();
     callback close-window();
+    callback open-context-menu();
 
     callback toggle-pane(int);
     callback select-folder(int);
@@ -100,6 +101,15 @@ export component NotesWindow inherits Window {
             border-color: Theme.border-color;
             clip: true;
 
+            // Right-click anywhere on empty space opens native Fluent menu
+            TouchArea {
+                pointer-event(ev) => {
+                    if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
+                        root.open-context-menu();
+                    }
+                }
+            }
+
             VerticalLayout {
                 x: 0px;
                 y: 0px;
@@ -110,6 +120,7 @@ export component NotesWindow inherits Window {
                 FramelessTitleBar {
                     title: (Theme.is-ru ? "Заметки — asrbox v" : "Notes — asrbox v") + root.app-version;
                     drag-window => { root.drag-window(); }
+                    right-clicked => { root.open-context-menu(); }
                     minimize-clicked => { root.minimize-window(); }
                     maximize-clicked => { root.maximize-window(); }
                     close-clicked => { root.close-window(); }
@@ -217,6 +228,11 @@ export component NotesWindow inherits Window {
 
                                         f-ta := TouchArea {
                                             mouse-cursor: pointer;
+                                            pointer-event(ev) => {
+                                                if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
+                                                    root.open-context-menu();
+                                                }
+                                            }
                                             clicked => {
                                                 if (f.is-note-child) {
                                                     root.select-note(f.note-id);
@@ -337,6 +353,11 @@ export component NotesWindow inherits Window {
 
                                         n-ta := TouchArea {
                                             mouse-cursor: pointer;
+                                            pointer-event(ev) => {
+                                                if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
+                                                    root.open-context-menu();
+                                                }
+                                            }
                                             clicked => { root.select-note(n.id); }
                                         }
 

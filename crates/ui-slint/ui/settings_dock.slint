@@ -29,6 +29,7 @@ export component SettingsDockView inherits VerticalLayout {
     in property <int> layer-index: 0;
     in property <int> label-mode-index: 0;
     in property <int> icon-size-px: 48;
+    in property <int> icon-frame-px: 6;
     in property <int> opacity-percent: 88;
     in property <int> edge-margin-px: 12;
     in property <int> corner-radius-px: 16;
@@ -60,6 +61,7 @@ export component SettingsDockView inherits VerticalLayout {
     callback set-layer(int);
     callback set-label-mode(int);
     callback set-icon-size(int);
+    callback set-icon-frame(int);
     callback set-opacity(int);
     callback set-edge-margin(int);
     callback set-corner-radius(int);
@@ -186,6 +188,20 @@ export component SettingsDockView inherits VerticalLayout {
                 value: root.icon-size-px;
                 unit: " px";
                 changed(v) => { root.set-icon-size(v); }
+            }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Размер рамки иконок" : "Icon Frame Size";
+            subtitle: Theme.is-ru
+                ? "Единая стеклянная рамка вокруг каждой иконки (0 = без рамки)"
+                : "Uniform glass frame padding around each icon (0 = off)";
+            GlassSlider {
+                min-val: 0;
+                max-val: 24;
+                value: root.icon-frame-px;
+                unit: " px";
+                changed(v) => { root.set-icon-frame(v); }
             }
         }
 

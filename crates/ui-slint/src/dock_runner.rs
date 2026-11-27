@@ -3,19 +3,20 @@ use std::collections::{HashMap, HashSet};
 use std::io::{self, BufRead};
 use std::path::PathBuf;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use asrbox_core::{decode_supervisor_cmd, SupervisorCmd, WorkerMsg};
 use asrbox_mod_about::AppPaths;
 use asrbox_mod_dock::{load_docks_from_file, save_docks_to_file, DockConfig, DockId, DockItem};
 use asrbox_platform_api::{
-    load_appearance_config, load_menu_config, AppearanceConfig, DockMenuVisibility, PixelRect,
+    load_appearance_config, load_menu_config, AppearanceConfig, DockMenuAction, DockMenuVisibility,
+    PixelRect,
 };
 use slint::{ComponentHandle, Timer, TimerMode};
 
 use crate::dock_icons::{is_folder_target, resolve_dock_target, DockIconCache};
 use crate::dock_view::{
-    add_dock_config, apply_dock_mutation, compute_dock_rect, open_folder_popup_ui,
+    add_dock_config, apply_native_dock_action, build_dock_menu_state, compute_dock_rect,
     remove_dock_config, set_custom_icon_config, sync_dock_window, toggle_dock_config,
 };
 use crate::generated::ui::DockWindow;
@@ -23,12 +24,12 @@ use crate::settings_state::apply_theme_to_window;
 use crate::vibrancy::{
     apply_acrylic_vibrancy, apply_window_opacity, configure_desktop_window,
     install_dock_window_hooks, move_window_to, resize_window_to, select_winit_backend,
-    set_window_layer, set_window_visible, start_window_drag, DesktopWindowSpec,
+    set_window_layer, set_window_visible, start_window_drag, window_hwnd_raw, DesktopWindowSpec,
 };
 use crate::win_os::{
     activate_or_launch, emit_config_changed, emit_open_settings, emit_worker_log, emit_worker_msg,
-    is_parent_alive, open_in_explorer, open_item_location, pick_icon_file, primary_work_area,
-    running_exe_names,
+    is_parent_alive, open_item_location, open_text_file, pick_icon_file, primary_work_area,
+    running_exe_names, show_dock_native_menu, show_folder_native_popup,
 };
 
 struct DockHostState {
@@ -42,7 +43,7 @@ struct DockHostState {
     windows: HashMap<DockId, DockWindow>,
     icons: DockIconCache,
     running_exes: HashSet<String>,
-    suppress_move_save: bool,
+    ignore_bounds_until: Instant,
 }
 
 impl DockHostState {
@@ -87,7 +88,7 @@ pub fn run_dock_host(
         windows: HashMap::new(),
         icons: DockIconCache::new(base_dir),
         running_exes: running_exe_names(),
-        suppress_move_save: false,
+        ignore_bounds_until: Instant::now() + Duration::from_millis(800),
     };
     DOCK_HOST.with(|slot| *slot.borrow_mut() = Some(state));
     sync_all_docks();
@@ -123,22 +124,24 @@ fn spawn_stdin_listener() {
     });
 }
 
+fn reload_docks_from_disk() {
+    DOCK_HOST.with(|slot| {
+        if let Some(s) = slot.borrow_mut().as_mut() {
+            s.appearance = load_appearance_config(&s.paths.appearance_cfg);
+            s.vis = load_menu_config(&s.paths.menus_cfg).dock;
+            if let Ok(fresh) = load_docks_from_file(&s.paths.docks_cfg) {
+                if !fresh.is_empty() {
+                    s.configs = fresh;
+                }
+            }
+        }
+    });
+    sync_all_docks();
+}
+
 fn handle_supervisor_cmd(cmd: SupervisorCmd) {
     match cmd {
-        SupervisorCmd::ReloadConfig => {
-            DOCK_HOST.with(|slot| {
-                if let Some(s) = slot.borrow_mut().as_mut() {
-                    s.appearance = load_appearance_config(&s.paths.appearance_cfg);
-                    s.vis = load_menu_config(&s.paths.menus_cfg).dock;
-                    if let Ok(fresh) = load_docks_from_file(&s.paths.docks_cfg) {
-                        if !fresh.is_empty() {
-                            s.configs = fresh;
-                        }
-                    }
-                }
-            });
-            sync_all_docks();
-        }
+        SupervisorCmd::ReloadConfig => reload_docks_from_disk(),
         SupervisorCmd::AddDock => mutate_docks(|s| {
             add_dock_config(&mut s.configs);
             s.safe_mode = false;
@@ -166,7 +169,7 @@ fn sync_all_docks() {
         let Some(s) = guard.as_mut() else {
             return;
         };
-        s.suppress_move_save = true;
+        s.ignore_bounds_until = Instant::now() + Duration::from_millis(700);
         let work_area = primary_work_area();
         let can_remove = s.configs.len() > 1;
         let active_ids: HashSet<DockId> = s
@@ -188,7 +191,6 @@ fn sync_all_docks() {
                 sync_single_dock(s, cfg, work_area, can_remove);
             }
         }
-        s.suppress_move_save = false;
     });
 }
 
@@ -205,7 +207,7 @@ fn sync_single_dock(
             s.dark = dark;
             apply_acrylic_vibrancy(win.window(), dark);
         }
-        sync_dock_window(win, cfg, s.vis, &s.running_exes, &mut s.icons, can_remove);
+        sync_dock_window(win, cfg, &s.running_exes, &mut s.icons, can_remove);
         set_window_layer(win.window(), cfg.layer);
         apply_window_opacity(win.window(), cfg.opacity_percent);
         resize_window_to(win.window(), width, height);
@@ -214,7 +216,7 @@ fn sync_single_dock(
     } else if let Ok(win) = DockWindow::new() {
         let dark = apply_theme_to_window(&win, s.appearance);
         s.dark = dark;
-        sync_dock_window(&win, cfg, s.vis, &s.running_exes, &mut s.icons, can_remove);
+        sync_dock_window(&win, cfg, &s.running_exes, &mut s.icons, can_remove);
         wire_dock_window(&win, cfg.id);
         let _ = win.show();
         configure_desktop_window(
@@ -232,6 +234,12 @@ fn sync_single_dock(
                 opacity_percent: cfg.opacity_percent,
             },
         );
+        let weak = win.as_weak();
+        Timer::single_shot(Duration::from_millis(60), move || {
+            if let Some(u) = weak.upgrade() {
+                move_window_to(u.window(), x, y);
+            }
+        });
         s.windows.insert(cfg.id, win);
     }
 }
@@ -245,13 +253,9 @@ fn wire_dock_window(win: &DockWindow, dock_id: DockId) {
     });
     win.on_open_settings(|| emit_open_settings("dock"));
     win.on_launch_item(move |item_id| handle_launch_item(dock_id, item_id as u64));
-    win.on_launch_folder_entry(move |p| handle_launch_folder_entry(dock_id, p.as_str()));
-    win.on_open_folder_explorer(|p| {
-        if !p.is_empty() {
-            let _ = open_in_explorer(&PathBuf::from(p.as_str()));
-        }
+    win.on_open_context_menu(move |item_id, is_sep| {
+        handle_dock_context_menu(dock_id, item_id, is_sep);
     });
-    win.on_menu_action(move |action, arg| handle_menu_action(dock_id, action.as_str(), arg));
     install_dock_window_hooks(
         win.window(),
         move |x, y| handle_dock_moved(dock_id, x, y),
@@ -262,7 +266,10 @@ fn wire_dock_window(win: &DockWindow, dock_id: DockId) {
 fn handle_dock_moved(dock_id: DockId, x: i32, y: i32) {
     DOCK_HOST.with(|slot| {
         let mut g = slot.borrow_mut();
-        let Some(s) = g.as_mut().filter(|s| !s.suppress_move_save) else {
+        let Some(s) = g
+            .as_mut()
+            .filter(|s| Instant::now() >= s.ignore_bounds_until)
+        else {
             return;
         };
         if let Some(cfg) = s.configs.iter_mut().find(|c| c.id == dock_id) {
@@ -315,67 +322,77 @@ fn handle_file_dropped(dock_id: DockId, path: PathBuf) {
 
 fn handle_launch_item(dock_id: DockId, item_id: u64) {
     let info = DOCK_HOST.with(|slot| {
-        let mut g = slot.borrow_mut();
-        let s = g.as_mut()?;
+        let g = slot.borrow();
+        let s = g.as_ref()?;
         let cfg = s.configs.iter().find(|c| c.id == dock_id)?;
         let it = cfg
             .items
             .iter()
             .find(|i| i.id == item_id && !i.is_separator())?;
         let path = resolve_dock_target(&it.target, s.icons.base_dir());
-        if is_folder_target(&path) {
-            let label = it.label.clone();
-            if let Some(win) = s.windows.get(&dock_id) {
-                open_folder_popup_ui(win, &label, &path, &mut s.icons);
+        Some((path, cfg.focus_running_window, s.appearance))
+    });
+    let Some((path, focus, appearance)) = info else {
+        return;
+    };
+    if is_folder_target(&path) {
+        if let Ok(Some(chosen)) = show_folder_native_popup(&path, appearance) {
+            if let Err(err) = activate_or_launch(&chosen, focus) {
+                emit_worker_log("ERROR", "dock", format!("Запуск {}: {err}", chosen.display()));
             }
-            return None;
         }
-        Some((path, cfg.focus_running_window))
-    });
-    if let Some((path, focus)) = info {
-        if let Err(err) = activate_or_launch(&path, focus) {
-            emit_worker_log("ERROR", "dock", format!("Запуск {}: {err}", path.display()));
-        }
+        return;
     }
-}
-
-fn handle_launch_folder_entry(dock_id: DockId, path_str: &str) {
-    let focus = DOCK_HOST.with(|slot| {
-        let g = slot.borrow();
-        let cfg = g
-            .as_ref()
-            .and_then(|s| s.configs.iter().find(|c| c.id == dock_id));
-        cfg.is_none_or(|c| c.focus_running_window)
-    });
-    let path = PathBuf::from(path_str);
     if let Err(err) = activate_or_launch(&path, focus) {
         emit_worker_log("ERROR", "dock", format!("Запуск {}: {err}", path.display()));
     }
 }
 
-fn handle_menu_action(dock_id: DockId, action: &str, arg: i32) {
+fn handle_dock_context_menu(dock_id: DockId, item_id: i32, is_sep: bool) {
+    let hovered = (item_id >= 0).then_some(item_id as u64);
+    let ctx = DOCK_HOST.with(|slot| {
+        let g = slot.borrow();
+        let s = g.as_ref()?;
+        let cfg = s.configs.iter().find(|c| c.id == dock_id)?;
+        let hwnd = s
+            .windows
+            .get(&dock_id)
+            .map_or(0, |w| window_hwnd_raw(w.window()));
+        let menu_state = build_dock_menu_state(cfg, s.vis, hovered, is_sep, s.configs.len() > 1);
+        Some((hwnd, menu_state, s.appearance, s.paths.docks_cfg.clone()))
+    });
+    let Some((hwnd, menu_state, appearance, docks_cfg)) = ctx else {
+        return;
+    };
+    let Ok(Some(action)) = show_dock_native_menu(hwnd, &menu_state, appearance) else {
+        return;
+    };
     match action {
-        "add_dock" => mutate_docks(|s| {
+        DockMenuAction::OpenSettings => emit_open_settings("dock"),
+        DockMenuAction::OpenDockConfig => {
+            let _ = open_text_file(&docks_cfg);
+        }
+        DockMenuAction::ReloadDockConfig => reload_docks_from_disk(),
+        DockMenuAction::AddNewDock => mutate_docks(|s| {
             add_dock_config(&mut s.configs);
             s.safe_mode = false;
             true
         }),
-        "remove_dock" => mutate_docks(|s| remove_dock_config(&mut s.configs, dock_id)),
-        "open_item_folder" => open_dock_item_folder(dock_id, arg as u64),
-        "choose_icon" => {
+        DockMenuAction::RemoveDock => mutate_docks(|s| remove_dock_config(&mut s.configs, dock_id)),
+        DockMenuAction::OpenItemFolder(id) => open_dock_item_folder(dock_id, id),
+        DockMenuAction::ChooseItemIcon(id) => {
             if let Ok(Some(picked)) = pick_icon_file() {
-                let id = arg as u64;
                 mutate_docks(|s| {
                     set_custom_icon_config(&mut s.configs, &mut s.icons, dock_id, id, picked)
                 });
             }
         }
-        _ => mutate_docks(|s| {
+        other => mutate_docks(|s| {
             let icons = &mut s.icons;
             s.configs
                 .iter_mut()
                 .find(|c| c.id == dock_id)
-                .is_some_and(|cfg| apply_dock_mutation(cfg, icons, action, arg))
+                .is_some_and(|cfg| apply_native_dock_action(cfg, icons, other))
         }),
     }
 }
@@ -405,7 +422,7 @@ fn refresh_running_dots() {
         let configs = s.configs.clone();
         for cfg in &configs {
             if let Some(win) = s.windows.get(&cfg.id) {
-                sync_dock_window(win, cfg, s.vis, &s.running_exes, &mut s.icons, can_remove);
+                sync_dock_window(win, cfg, &s.running_exes, &mut s.icons, can_remove);
             }
         }
     });

@@ -1,28 +1,30 @@
 version: 0.2.0
-updated: 2026-11-26
+updated: 2026-11-27
 spec_ids: [NF-001, NF-002, NF-005, NF-006, NF-007, DK-018, DK-019, ST-001, WG-022]
 atlas_updated: true
 last_session:
-  goal: "Исправление живых дефектов Slint UI на Windows 11 (скругления, 8-сторонний ресайз, векторные иконки/крестик закрытия, перерисовка трей-меню, офлайн-иконки дока) + доработка нового дизайна (веерный попап папок дока и стеклянный hover-тултип)"
+  goal: "Исправление 9 живых UX-дефектов Windows 11 (перетаскивание правой части шапки, чистая панель задач, компактные вкладки Виджетов, постоянные настраиваемые рамки иконок дока, сохранение позиций, необрезаемые ПКМ-меню дока и Заметок, мгновенный трей, быстрые клики Монитора)"
   done:
-    - "В crates/platform-windows/src/{lib.rs, icons_lnk.rs} добавлены apply_dwm_frameless_style (DWMWCP_ROUND, скрытая рамка DWM), set_window_opacity_alpha (LWA_ALPHA), force_redraw_hwnd (InvalidateRect) и фолбэк SHGFI_USEFILEATTRIBUTES для офлайн/отсутствующих путей"
-    - "В crates/ui-slint/src/vibrancy.rs убран конфликтующий window_vibrancy acrylic поверх softbuffer; введён DesktopWindowSpec + configure_desktop_window, 8-сторонний start_window_resize, apply_window_opacity, force_window_repaint и center_window_in_work_area"
-    - "В ui/components/{window_chrome,controls}.slint добавлены чистые Slint Path-векторы (VectorIconClose/Gear/Refresh/Chevron/Search/Plus/Check/Theme/Folder/File/Nav), всегда видимая красная кнопка закрытия и 8-сторонний WindowResizeHandles; подключены в Settings, Notes, Weather, SysMonitor и Calendar"
-    - "В tray_menu.slint и tray_runner.rs исправлен серый экран до наведения (hide/show + InvalidateRect через 20 мс, динамическая высота) и векторные кнопки быстрого ряда"
-    - "В dock.slint, dock_icons.rs (новый), dock_view.rs и dock_runner.rs добавлены веерный попап папок (folder-popup с иконками и кнопкой Проводник), стеклянный hover-тултип (IconsOnly/Tooltip) и векторный фолбэк DockFallbackBadge"
-    - "Обновлены crates/ui-slint/MAP.md (включая dock_icons.rs для xtask atlas-check), crates/platform-windows/MAP.md, CHANGELOG.md и HANDOFF.yaml"
+    - "Создан crates/platform-windows/src/slint_host.rs (apply_window_app_icon, set_window_skip_taskbar через WS_EX_TOOLWINDOW, move_window_phys, show_dock_native_menu, show_folder_native_popup, show_native_fluent_menu); в shell.rs ncpa.cpl запускается через control.exe с фолбэком на ms-settings:network"
+    - "В mod-dock ({config,storage}.rs), app/slint_dispatch_dock.rs, settings_dock.slint, settings.slint, settings_state_tabs.rs и dock.{slint,dock_view.rs} добавлена постоянная стеклянная рамка плиток дока и настройка icon_frame_px (0..24 px, по умолчанию 6 px)"
+    - "В window_chrome.slint и settings_widgets.slint исправлено перетаскивание правой половины шапки (Settings/Notes) и высота 4 вкладок Виджетов (34 px)"
+    - "В vibrancy.rs, settings_bridge.rs, notes_bridge.rs, notes_view.rs, widgets_{weather,sysmon,calendar}.rs и dock_runner.rs: скрытие всех виджетов/доков/Заметок из панели задач, иконка ASR для Настроек, защита стартовых координат (ignore_bounds_until + 60 мс SetWindowPos), необрезаемые нативные ПКМ-меню дока/Заметок и веерный попап папок, асинхронные клики карточек Монитора (ms-settings:display / control.exe ncpa.cpl)"
+    - "В app/src/{tools,main}.rs возвращено мгновенное встроенное Fluent-меню трея без лага и лишнего дочернего процесса (с фолбэком на --ui-tray)"
+    - "Обновлены MAP.md (platform-windows, ui-slint, mod-dock), CHANGELOG.md и HANDOFF.yaml"
   not_done:
-    - "Прогон GitHub Actions (.github/workflows/ci.yml) на windows-latest и живая проверка обновлённого UI на Windows 11"
+    - "Прогон GitHub Actions (.github/workflows/ci.yml) на windows-latest и живая проверка на Windows 11"
   verified:
     ci_build: false
     tests: false
     manual_run: false
 open_bugs: [BUG-003, BUG-004, BUG-005, BUG-006, BUG-007, BUG-008, BUG-009, BUG-010, BUG-011, BUG-012, BUG-013]
-next_step: "Прогнать GitHub Actions (windows-latest): проверить slint-build, cargo fmt --check, cargo clippy -D warnings, xtask atlas-check, тесты, размер .exe < 25 МБ и --selftest, затем проверить на Windows 11 ресайз, красную кнопку ✕, скругления, трей-меню, тултип и веерный попап папок"
+next_step: "Прогнать GitHub Actions (windows-latest): cargo fmt --check, clippy -D warnings, xtask atlas-check, тесты, размер .exe < 25 МБ и --selftest, затем проверить все 9 пунктов на Windows 11"
 touched_files:
   - CHANGELOG.md, HANDOFF.yaml
-  - crates/platform-windows/ (MAP.md, src/{lib.rs, icons_lnk.rs})
-  - crates/ui-slint/ (MAP.md, src/{lib.rs, vibrancy.rs, win_os.rs, settings_bridge.rs, notes_bridge.rs, tray_runner.rs, widgets_weather.rs, widgets_sysmon.rs, widgets_calendar.rs, dock_icons.rs, dock_view.rs, dock_runner.rs}, ui/{app.slint, theme.slint, components/window_chrome.slint, components/controls.slint, tray_menu.slint, settings.slint, settings_general.slint, settings_dock.slint, settings_widgets.slint, notes.slint, widget_weather.slint, widget_sysmon.slint, widget_calendar.slint, dock.slint})
+  - crates/platform-windows/ (MAP.md, src/{lib.rs, slint_host.rs, shell.rs})
+  - crates/mod-dock/ (MAP.md, src/{config.rs, storage.rs})
+  - crates/app/src/{main.rs, tools.rs, slint_dispatch.rs, slint_dispatch_dock.rs}
+  - crates/ui-slint/ (MAP.md, src/{vibrancy.rs, win_os.rs, settings_bridge.rs, settings_state_tabs.rs, notes_bridge.rs, notes_view.rs, widgets_weather.rs, widgets_sysmon.rs, widgets_calendar.rs, dock_icons.rs, dock_view.rs, dock_runner.rs}, ui/{app.slint, theme.slint, components/window_chrome.slint, settings.slint, settings_dock.slint, settings_widgets.slint, notes.slint, dock.slint})
 warnings:
   - "Сборка и тесты не запускались локально (отсутствует cargo); требуется прогон GitHub Actions windows-latest и живая проверка на Windows 11"
 ideas:

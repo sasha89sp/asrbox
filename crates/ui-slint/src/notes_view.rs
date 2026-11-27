@@ -2,14 +2,16 @@ use std::cell::RefCell;
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use asrbox_mod_about::AppPaths;
 use asrbox_mod_widgets::{save_notes_config, save_notes_db, NotesDb, NotesWidgetConfig};
-use slint::{ModelRc, SharedString, Timer, TimerMode, VecModel};
+use asrbox_platform_api::{FluentMenuItem, FluentMenuSpec, WidgetLayer};
+use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel};
 
 use crate::generated::ui::{NotesWindow, SlintFolderRow, SlintNoteCardRow, SlintTaskRow};
 use crate::ipc_proto::encode_ui_cmd;
+use crate::vibrancy::{apply_window_opacity, set_window_layer};
 
 pub struct LocalNotesState {
     pub paths: AppPaths,
@@ -19,6 +21,7 @@ pub struct LocalNotesState {
     pub search: String,
     pub dirty: bool,
     pub last_dark: bool,
+    pub ignore_bounds_until: Instant,
     pub autosave_timer: Timer,
 }
 
@@ -76,6 +79,118 @@ pub fn emit_notes_cmd(action: &str, arg: &str) {
     let mut out = io::stdout().lock();
     let _ = writeln!(out, "{}", encode_ui_cmd(action, arg));
     let _ = out.flush();
+}
+
+pub fn build_notes_context_menu(cfg: &NotesWidgetConfig) -> FluentMenuSpec {
+    let layers = vec![
+        menu_act(10, "Над обоями", cfg.layer == WidgetLayer::Wallpaper),
+        menu_act(11, "Обычное окно", cfg.layer == WidgetLayer::Normal),
+        menu_act(12, "Поверх всех окон", cfg.layer == WidgetLayer::Topmost),
+    ];
+    let opacities = vec![
+        menu_act(20, "100%", cfg.opacity_percent >= 96),
+        menu_act(21, "90%", (86..96).contains(&cfg.opacity_percent)),
+        menu_act(22, "80%", (73..86).contains(&cfg.opacity_percent)),
+        menu_act(23, "65%", (58..73).contains(&cfg.opacity_percent)),
+        menu_act(24, "50%", cfg.opacity_percent < 58),
+    ];
+    let panes = vec![
+        menu_act(30, "Папки (Ctrl+1)", cfg.show_folders_pane),
+        menu_act(31, "Список заметок (Ctrl+2)", cfg.show_list_pane),
+        menu_act(32, "Редактор (Ctrl+3)", cfg.show_editor_pane),
+    ];
+    FluentMenuSpec {
+        quick_actions: Vec::new(),
+        min_width: 210,
+        items: vec![
+            FluentMenuItem::Submenu {
+                icon: Some("◫".to_owned()),
+                label: "Слой отображения".to_owned(),
+                enabled: true,
+                items: layers,
+            },
+            FluentMenuItem::Submenu {
+                icon: Some("◐".to_owned()),
+                label: "Прозрачность".to_owned(),
+                enabled: true,
+                items: opacities,
+            },
+            FluentMenuItem::Submenu {
+                icon: Some("⊞".to_owned()),
+                label: "Колонки".to_owned(),
+                enabled: true,
+                items: panes,
+            },
+            FluentMenuItem::Separator,
+            menu_icon_act(40, "Папка заметок", "📂"),
+            menu_icon_act(41, "Настройки заметок", "⚙"),
+            FluentMenuItem::Separator,
+            menu_icon_act(42, "Скрыть заметки", "✕"),
+        ],
+    }
+}
+
+pub fn apply_notes_menu_choice(g: &mut LocalNotesState, ui: &NotesWindow, cmd: u32) {
+    match cmd {
+        10..=12 => {
+            g.cfg.layer = match cmd {
+                10 => WidgetLayer::Wallpaper,
+                12 => WidgetLayer::Topmost,
+                _ => WidgetLayer::Normal,
+            };
+            set_window_layer(ui.window(), g.cfg.layer);
+            g.persist_cfg();
+            emit_notes_cmd("notes_changed", "");
+        }
+        20..=24 => {
+            let pct = [100u8, 90, 80, 65, 50][(cmd - 20) as usize];
+            g.cfg.opacity_percent = pct;
+            apply_window_opacity(ui.window(), pct);
+            g.persist_cfg();
+            emit_notes_cmd("notes_changed", "");
+        }
+        30..=32 => {
+            if g.cfg.toggle_pane((cmd - 30) as u8) {
+                g.persist_cfg();
+                g.sync_ui(ui, false);
+                emit_notes_cmd("notes_changed", "");
+            }
+        }
+        40 => emit_notes_cmd("open_notes_folder", ""),
+        41 => emit_notes_cmd("open_notes_settings", ""),
+        42 => {
+            if g.dirty {
+                g.persist_db();
+            }
+            g.cfg.visible = false;
+            g.persist_cfg();
+            emit_notes_cmd("notes_closed", "");
+            let _ = slint::quit_event_loop();
+        }
+        _ => {}
+    }
+}
+
+fn menu_act(id: u32, label: &str, checked: bool) -> FluentMenuItem {
+    FluentMenuItem::Action {
+        id,
+        icon: None,
+        label: label.to_owned(),
+        shortcut: None,
+        checked,
+        enabled: true,
+    }
+}
+
+fn menu_icon_act(id: u32, label: &str, icon: &str) -> FluentMenuItem {
+    FluentMenuItem::Action {
+        id,
+        icon: Some(icon.to_owned()),
+        label: label.to_owned(),
+        shortcut: None,
+        checked: false,
+        enabled: true,
+    }
 }
 
 pub fn sync_notes_window_ui(

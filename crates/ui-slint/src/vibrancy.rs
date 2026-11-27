@@ -24,6 +24,20 @@ fn extract_hwnd(w: &winit::window::Window) -> isize {
 }
 
 #[cfg(windows)]
+pub fn window_hwnd_raw(window: &slint::Window) -> isize {
+    let mut raw = 0isize;
+    let _ = window.with_winit_window(|w| {
+        raw = extract_hwnd(w);
+    });
+    raw
+}
+
+#[cfg(not(windows))]
+pub fn window_hwnd_raw(_window: &slint::Window) -> isize {
+    0
+}
+
+#[cfg(windows)]
 pub fn apply_window_vibrancy(window: &slint::Window, dark: bool) {
     let _ = window.with_winit_window(|w| {
         w.set_resizable(true);
@@ -36,6 +50,23 @@ pub fn apply_window_vibrancy(window: &slint::Window, dark: bool) {
 
 #[cfg(not(windows))]
 pub fn apply_window_vibrancy(window: &slint::Window, _dark: bool) {
+    window.request_redraw();
+}
+
+#[cfg(windows)]
+pub fn apply_settings_chrome(window: &slint::Window, dark: bool) {
+    let _ = window.with_winit_window(|w| {
+        w.set_resizable(true);
+        let hwnd = extract_hwnd(w);
+        asrbox_platform_windows::apply_window_app_icon(hwnd);
+        asrbox_platform_windows::apply_dwm_frameless_style(hwnd, dark, false);
+        asrbox_platform_windows::force_redraw_hwnd(hwnd);
+    });
+    window.request_redraw();
+}
+
+#[cfg(not(windows))]
+pub fn apply_settings_chrome(window: &slint::Window, _dark: bool) {
     window.request_redraw();
 }
 
@@ -96,7 +127,68 @@ pub fn center_window_in_work_area(
         let x = (work_area.x + (work_area.width as i32 - phys_w) / 2).max(work_area.x + 8);
         let y = (work_area.y + (work_area.height as i32 - phys_h) / 2).max(work_area.y + 8);
         w.set_outer_position(PhysicalPosition::new(x, y));
+        #[cfg(windows)]
+        asrbox_platform_windows::move_window_phys(extract_hwnd(w), x, y);
     });
+}
+
+pub fn restore_or_center_window(
+    window: &slint::Window,
+    work_area: PixelRect,
+    spec: DesktopWindowSpec,
+    skip_taskbar: bool,
+) {
+    let _ = window.with_winit_window(|w| {
+        #[cfg(windows)]
+        {
+            use winit::platform::windows::WindowExtWindows;
+            let hwnd = extract_hwnd(w);
+            w.set_skip_taskbar(skip_taskbar);
+            asrbox_platform_windows::set_window_skip_taskbar(hwnd, skip_taskbar);
+            if !skip_taskbar {
+                asrbox_platform_windows::apply_window_app_icon(hwnd);
+            }
+        }
+        #[cfg(not(windows))]
+        let _ = skip_taskbar;
+        w.set_resizable(spec.resizable);
+        if spec.resizable {
+            w.set_min_inner_size(Some(LogicalSize::new(spec.min_w, spec.min_h)));
+        }
+        let lw = spec.width.max(spec.min_w);
+        let lh = spec.height.max(spec.min_h);
+        let _ = w.request_inner_size(LogicalSize::new(lw, lh));
+        let sf = w.scale_factor().max(1.0);
+        let phys_w = (f64::from(lw) * sf).round() as i32;
+        let phys_h = (f64::from(lh) * sf).round() as i32;
+        let max_x = (work_area.x + work_area.width as i32 - 80).max(work_area.x + 8);
+        let max_y = (work_area.y + work_area.height as i32 - 60).max(work_area.y + 8);
+        let has_saved = spec.x > work_area.x - phys_w + 40 && spec.y >= work_area.y - 20;
+        let (x, y) = if has_saved {
+            (
+                spec.x.clamp(work_area.x, max_x),
+                spec.y.clamp(work_area.y, max_y),
+            )
+        } else {
+            (
+                (work_area.x + (work_area.width as i32 - phys_w) / 2).max(work_area.x + 8),
+                (work_area.y + (work_area.height as i32 - phys_h) / 2).max(work_area.y + 8),
+            )
+        };
+        w.set_outer_position(PhysicalPosition::new(x, y));
+        w.set_window_level(to_winit_level(spec.layer));
+        #[cfg(windows)]
+        {
+            let hwnd = extract_hwnd(w);
+            asrbox_platform_windows::move_window_phys(hwnd, x, y);
+            asrbox_platform_windows::apply_dwm_frameless_style(hwnd, spec.dark, false);
+            asrbox_platform_windows::set_window_opacity_alpha(hwnd, spec.opacity_percent);
+            asrbox_platform_windows::force_redraw_hwnd(hwnd);
+        }
+        #[cfg(not(windows))]
+        let _ = (spec.dark, spec.opacity_percent);
+    });
+    window.request_redraw();
 }
 
 pub struct DesktopWindowSpec {
@@ -117,20 +209,23 @@ pub fn configure_desktop_window(window: &slint::Window, spec: DesktopWindowSpec)
         #[cfg(windows)]
         {
             use winit::platform::windows::WindowExtWindows;
+            let hwnd = extract_hwnd(w);
             w.set_skip_taskbar(true);
+            asrbox_platform_windows::set_window_skip_taskbar(hwnd, true);
         }
         w.set_resizable(spec.resizable);
         if spec.resizable {
             w.set_min_inner_size(Some(LogicalSize::new(spec.min_w, spec.min_h)));
         }
-        w.set_outer_position(PhysicalPosition::new(spec.x, spec.y));
         let lw = spec.width.max(spec.min_w);
         let lh = spec.height.max(spec.min_h);
         let _ = w.request_inner_size(LogicalSize::new(lw, lh));
+        w.set_outer_position(PhysicalPosition::new(spec.x, spec.y));
         w.set_window_level(to_winit_level(spec.layer));
         #[cfg(windows)]
         {
             let hwnd = extract_hwnd(w);
+            asrbox_platform_windows::move_window_phys(hwnd, spec.x, spec.y);
             asrbox_platform_windows::apply_dwm_frameless_style(hwnd, spec.dark, false);
             asrbox_platform_windows::set_window_opacity_alpha(hwnd, spec.opacity_percent);
             asrbox_platform_windows::force_redraw_hwnd(hwnd);
@@ -153,7 +248,9 @@ pub fn configure_popup_window(
         #[cfg(windows)]
         {
             use winit::platform::windows::WindowExtWindows;
+            let hwnd = extract_hwnd(w);
             w.set_skip_taskbar(true);
+            asrbox_platform_windows::set_window_skip_taskbar(hwnd, true);
         }
         w.set_resizable(false);
         w.set_window_level(WindowLevel::AlwaysOnTop);
@@ -162,6 +259,7 @@ pub fn configure_popup_window(
         #[cfg(windows)]
         {
             let hwnd = extract_hwnd(w);
+            asrbox_platform_windows::move_window_phys(hwnd, x, y);
             asrbox_platform_windows::apply_dwm_frameless_style(hwnd, dark, false);
             asrbox_platform_windows::force_redraw_hwnd(hwnd);
         }
@@ -182,6 +280,8 @@ pub fn set_window_layer(window: &slint::Window, layer: WidgetLayer) {
 pub fn move_window_to(window: &slint::Window, x: i32, y: i32) {
     let _ = window.with_winit_window(|w| {
         w.set_outer_position(PhysicalPosition::new(x, y));
+        #[cfg(windows)]
+        asrbox_platform_windows::move_window_phys(extract_hwnd(w), x, y);
     });
 }
 
@@ -246,7 +346,7 @@ pub fn install_bounds_tracker<FMove, FResize>(
         match ev {
             WindowEvent::Moved(pos) => on_move(pos.x, pos.y),
             WindowEvent::Resized(size) => {
-                let sf = f64::from(w.scale_factor().max(1.0));
+                let sf = w.scale_factor().max(1.0);
                 let lw = (f64::from(size.width) / sf).round().max(64.0) as u32;
                 let lh = (f64::from(size.height) / sf).round().max(48.0) as u32;
                 on_resize(lw, lh);

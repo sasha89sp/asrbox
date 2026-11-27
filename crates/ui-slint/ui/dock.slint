@@ -1,49 +1,6 @@
-import { Theme, SlintDockIconRow, SlintFolderEntryRow } from "theme.slint";
+import { Theme, SlintDockIconRow } from "theme.slint";
 import { AsrGlassLogo } from "components/asr_logo.slint";
 import { VectorIconFolder, VectorIconFile } from "components/window_chrome.slint";
-
-component DockMenuBtn inherits Rectangle {
-    in property <string> label;
-    in property <bool> checked: false;
-    in property <bool> danger: false;
-    callback clicked();
-
-    height: 27px;
-    border-radius: 6px;
-    background: ta.has-hover
-        ? (root.danger ? Theme.danger : Theme.hover-bg)
-        : (root.checked ? Theme.accent-tint : transparent);
-
-    HorizontalLayout {
-        padding-left: 10px;
-        padding-right: 10px;
-        spacing: 8px;
-
-        Text {
-            horizontal-stretch: 1;
-            min-width: 0px;
-            text: root.label;
-            color: (ta.has-hover && root.danger) ? #FFFFFF : Theme.text-primary;
-            font-size: 11.5px;
-            font-weight: root.checked ? 600 : 400;
-            vertical-alignment: center;
-            overflow: elide;
-        }
-
-        if (root.checked) : Rectangle {
-            width: 6px;
-            height: 6px;
-            y: (parent.height - self.height) / 2;
-            border-radius: 3px;
-            background: Theme.accent;
-        }
-    }
-
-    ta := TouchArea {
-        mouse-cursor: pointer;
-        clicked => { root.clicked(); }
-    }
-}
 
 component DockFallbackBadge inherits Rectangle {
     in property <bool> is-folder: false;
@@ -104,25 +61,39 @@ component DockDragGrip inherits Rectangle {
 component DockTile inherits Rectangle {
     in property <SlintDockIconRow> item;
     in property <length> icon-size: 44px;
+    in property <length> icon-frame-px: 6px;
     in property <int> label-mode: 0; // 0=IconsOnly, 1=Below, 2=Right, 3=Tooltip
     in property <bool> hover-zoom: true;
     in property <bool> show-running-dot: true;
     in property <bool> launch-anim: true;
     callback launched(int);
-    callback right-clicked(int, bool, length, length);
+    callback right-clicked(int, bool);
     callback hovered(string);
     callback unhovered();
 
     private property <bool> bouncing: false;
+    private property <bool> show-frame: root.icon-frame-px > 0px;
 
-    width: root.label-mode == 2 ? (root.icon-size + 96px) : (root.icon-size + 12px);
-    height: root.label-mode == 1 ? (root.icon-size + 24px) : (root.icon-size + 12px);
-    border-radius: 9px;
+    width: root.label-mode == 2
+        ? (root.icon-size + root.icon-frame-px * 2 + 88px)
+        : (root.icon-size + root.icon-frame-px * 2);
+    height: root.label-mode == 1
+        ? (root.icon-size + root.icon-frame-px * 2 + 14px)
+        : (root.icon-size + root.icon-frame-px * 2);
+    border-radius: Math.clamp(root.icon-size * 0.22, 8px, 14px);
     background: ta.pressed
         ? Theme.press-bg
-        : (ta.has-hover ? Theme.hover-bg : transparent);
+        : (ta.has-hover
+            ? Theme.hover-bg
+            : (root.show-frame
+                ? (Theme.dark-mode ? rgba(255, 255, 255, 0.065) : rgba(255, 255, 255, 0.52))
+                : transparent));
     border-width: 1px;
-    border-color: ta.has-hover ? Theme.border-strong : transparent;
+    border-color: ta.has-hover
+        ? Theme.border-strong
+        : (root.show-frame
+            ? (Theme.dark-mode ? rgba(255, 255, 255, 0.14) : rgba(15, 23, 42, 0.14))
+            : transparent);
     animate background { duration: 120ms; easing: ease-out; }
 
     ta := TouchArea {
@@ -136,7 +107,7 @@ component DockTile inherits Rectangle {
         }
         pointer-event(ev) => {
             if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
-                root.right-clicked(root.item.id, root.item.is-separator, self.mouse-x, self.mouse-y);
+                root.right-clicked(root.item.id, root.item.is-separator);
             } else if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
                 if (root.launch-anim) {
                     root.bouncing = true;
@@ -151,7 +122,7 @@ component DockTile inherits Rectangle {
     }
 
     if (root.label-mode == 2) : HorizontalLayout {
-        padding-left: 6px;
+        padding-left: root.icon-frame-px;
         padding-right: 8px;
         spacing: 8px;
         alignment: start;
@@ -195,37 +166,40 @@ component DockTile inherits Rectangle {
     }
 
     if (root.label-mode != 2) : VerticalLayout {
-        padding: 4px;
+        padding: 0px;
         spacing: 2px;
         alignment: center;
 
-        Rectangle {
-            width: root.icon-size;
-            height: root.icon-size;
-            background: transparent;
+        HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                width: root.icon-size;
+                height: root.icon-size;
+                background: transparent;
 
-            if (root.item.has-icon) : Image {
-                width: (ta.has-hover && root.hover-zoom) ? root.icon-size * 1.08 : root.icon-size * 0.90;
-                height: (ta.has-hover && root.hover-zoom) ? root.icon-size * 1.08 : root.icon-size * 0.90;
-                x: (parent.width - self.width) / 2;
-                y: (parent.height - self.height) / 2
-                    + (root.bouncing ? -4px : (ta.has-hover && root.hover-zoom ? -2px : 0px));
-                source: root.item.icon-img;
-                image-fit: contain;
-                animate width, height, y { duration: 120ms; easing: ease-out; }
-            }
+                if (root.item.has-icon) : Image {
+                    width: (ta.has-hover && root.hover-zoom) ? root.icon-size * 1.08 : root.icon-size * 0.90;
+                    height: (ta.has-hover && root.hover-zoom) ? root.icon-size * 1.08 : root.icon-size * 0.90;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2
+                        + (root.bouncing ? -4px : (ta.has-hover && root.hover-zoom ? -2px : 0px));
+                    source: root.item.icon-img;
+                    image-fit: contain;
+                    animate width, height, y { duration: 120ms; easing: ease-out; }
+                }
 
-            if (!root.item.has-icon) : DockFallbackBadge {
-                is-folder: root.item.is-folder;
-                size: root.icon-size * 0.88;
-                x: (parent.width - self.width) / 2;
-                y: (parent.height - self.height) / 2
-                    + (root.bouncing ? -4px : (ta.has-hover && root.hover-zoom ? -2px : 0px));
+                if (!root.item.has-icon) : DockFallbackBadge {
+                    is-folder: root.item.is-folder;
+                    size: root.icon-size * 0.88;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2
+                        + (root.bouncing ? -4px : (ta.has-hover && root.hover-zoom ? -2px : 0px));
+                }
             }
         }
 
         if (root.label-mode == 1) : Text {
-            width: root.icon-size + 6px;
+            width: Math.max(root.icon-size, parent.width - 4px);
             text: root.item.label;
             color: Theme.text-primary;
             font-size: 10px;
@@ -255,6 +229,7 @@ export component DockWindow inherits Window {
     in property <string> dock-name: "Док 1";
     in property <bool> is-horizontal: true;
     in property <length> icon-size: 44px;
+    in property <length> icon-frame-px: 6px;
     in property <length> item-spacing: 6px;
     in property <length> dock-padding: 8px;
     in property <length> corner-radius: 8px;
@@ -272,36 +247,15 @@ export component DockWindow inherits Window {
     in property <bool> can-remove-dock: false;
     in property <[SlintDockIconRow]> items: [];
 
-    // Folder Fan-Out popup state
-    in property <string> folder-title: "";
-    in property <string> folder-path: "";
-    in property <[SlintFolderEntryRow]> folder-entries: [];
-
-    // Menu visibility flags (from menus.cfg)
-    in property <bool> vis-item-actions: true;
-    in property <bool> vis-add-separator: true;
-    in property <bool> vis-edge-layer: true;
-    in property <bool> vis-appearance: true;
-    in property <bool> vis-behavior: true;
-    in property <bool> vis-lock: true;
-    in property <bool> vis-dock-mgmt: true;
-
     callback drag-window();
     callback launch-item(int);
-    callback launch-folder-entry(string);
-    callback open-folder-explorer(string);
     callback open-settings();
-    callback menu-action(string, int);
+    callback open-context-menu(int, bool);
 
-    public function open-folder-popup() {
-        folder-popup.show();
-    }
-
-    private property <int> ctx-item-id: -1;
-    private property <bool> ctx-item-is-sep: false;
-    private property <length> ctx-x: 16px;
-    private property <length> ctx-y: 12px;
     private property <string> hover-tip: "";
+    private property <bool> show-frame: root.icon-frame-px > 0px;
+    private property <length> tile-span: root.icon-size + root.icon-frame-px * 2;
+    private property <length> tile-radius: Math.clamp(root.icon-size * 0.22, 8px, 14px);
 
     Rectangle {
         width: 100%;
@@ -320,17 +274,13 @@ export component DockWindow inherits Window {
             background: Theme.top-shine;
         }
 
-        // Background drag (when unlocked) + right-click context menu
+        // Background drag (when unlocked) + right-click native unclipped menu
         TouchArea {
             pointer-event(ev) => {
                 if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down && !root.locked) {
                     root.drag-window();
                 } else if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
-                    root.ctx-item-id = -1;
-                    root.ctx-item-is-sep = false;
-                    root.ctx-x = Math.clamp(self.mouse-x, 4px, Math.max(4px, root.width - 216px));
-                    root.ctx-y = 4px;
-                    ctx-menu.show();
+                    root.open-context-menu(-1, false);
                 }
             }
         }
@@ -347,7 +297,7 @@ export component DockWindow inherits Window {
 
             if (!root.locked) : Rectangle {
                 width: 16px;
-                height: root.icon-size + 8px;
+                height: root.tile-span;
                 border-radius: 6px;
                 background: drag-ta.has-hover ? Theme.hover-bg : transparent;
 
@@ -363,6 +313,8 @@ export component DockWindow inherits Window {
                     pointer-event(ev) => {
                         if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
                             root.drag-window();
+                        } else if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
+                            root.open-context-menu(-1, false);
                         }
                     }
                 }
@@ -370,8 +322,8 @@ export component DockWindow inherits Window {
 
             for it in root.items : Rectangle {
                 width: it.is-separator ? 10px
-                    : (root.label-mode == 2 ? (root.icon-size + 96px) : (root.icon-size + 12px));
-                height: root.label-mode == 1 ? (root.icon-size + 24px) : (root.icon-size + 12px);
+                    : (root.label-mode == 2 ? (root.tile-span + 88px) : root.tile-span);
+                height: root.label-mode == 1 ? (root.tile-span + 14px) : root.tile-span;
                 background: transparent;
 
                 if (it.is-separator) : Rectangle {
@@ -385,11 +337,7 @@ export component DockWindow inherits Window {
                     TouchArea {
                         pointer-event(ev) => {
                             if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
-                                root.ctx-item-id = it.id;
-                                root.ctx-item-is-sep = true;
-                                root.ctx-x = 12px;
-                                root.ctx-y = 4px;
-                                ctx-menu.show();
+                                root.open-context-menu(it.id, true);
                             }
                         }
                     }
@@ -398,6 +346,7 @@ export component DockWindow inherits Window {
                 if (!it.is-separator) : DockTile {
                     item: it;
                     icon-size: root.icon-size;
+                    icon-frame-px: root.icon-frame-px;
                     label-mode: root.label-mode;
                     hover-zoom: root.hover-zoom;
                     show-running-dot: root.show-running-dot;
@@ -405,23 +354,25 @@ export component DockWindow inherits Window {
                     launched(id) => { root.launch-item(id); }
                     hovered(lbl) => { root.hover-tip = lbl; }
                     unhovered => { root.hover-tip = ""; }
-                    right-clicked(id, sep, _mx, _my) => {
-                        root.ctx-item-id = id;
-                        root.ctx-item-is-sep = sep;
-                        root.ctx-x = 12px;
-                        root.ctx-y = 4px;
-                        ctx-menu.show();
-                    }
+                    right-clicked(id, sep) => { root.open-context-menu(id, sep); }
                 }
             }
 
             if (root.show-settings-button) : Rectangle {
-                width: root.icon-size + 12px;
-                height: root.icon-size + 12px;
-                border-radius: 9px;
-                background: set-ta.has-hover ? Theme.hover-bg : transparent;
+                width: root.tile-span;
+                height: root.tile-span;
+                border-radius: root.tile-radius;
+                background: set-ta.has-hover
+                    ? Theme.hover-bg
+                    : (root.show-frame
+                        ? (Theme.dark-mode ? rgba(255, 255, 255, 0.065) : rgba(255, 255, 255, 0.52))
+                        : transparent);
                 border-width: 1px;
-                border-color: set-ta.has-hover ? Theme.border-strong : transparent;
+                border-color: set-ta.has-hover
+                    ? Theme.border-strong
+                    : (root.show-frame
+                        ? (Theme.dark-mode ? rgba(255, 255, 255, 0.14) : rgba(15, 23, 42, 0.14))
+                        : transparent);
 
                 AsrGlassLogo {
                     x: (parent.width - self.width) / 2;
@@ -434,11 +385,7 @@ export component DockWindow inherits Window {
                     clicked => { root.open-settings(); }
                     pointer-event(ev) => {
                         if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
-                            root.ctx-item-id = -1;
-                            root.ctx-item-is-sep = false;
-                            root.ctx-x = Math.max(4px, root.width - 216px);
-                            root.ctx-y = 4px;
-                            ctx-menu.show();
+                            root.open-context-menu(-1, false);
                         }
                     }
                 }
@@ -456,7 +403,7 @@ export component DockWindow inherits Window {
             alignment: center;
 
             if (!root.locked) : Rectangle {
-                width: root.icon-size + 8px;
+                width: root.tile-span;
                 height: 16px;
                 border-radius: 6px;
                 background: vdrag-ta.has-hover ? Theme.hover-bg : transparent;
@@ -473,15 +420,17 @@ export component DockWindow inherits Window {
                     pointer-event(ev) => {
                         if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
                             root.drag-window();
+                        } else if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
+                            root.open-context-menu(-1, false);
                         }
                     }
                 }
             }
 
             for it in root.items : Rectangle {
-                width: root.label-mode == 2 ? (root.icon-size + 96px) : (root.icon-size + 12px);
+                width: root.label-mode == 2 ? (root.tile-span + 88px) : root.tile-span;
                 height: it.is-separator ? 10px
-                    : (root.label-mode == 1 ? (root.icon-size + 24px) : (root.icon-size + 12px));
+                    : (root.label-mode == 1 ? (root.tile-span + 14px) : root.tile-span);
                 background: transparent;
 
                 if (it.is-separator) : Rectangle {
@@ -495,11 +444,7 @@ export component DockWindow inherits Window {
                     TouchArea {
                         pointer-event(ev) => {
                             if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
-                                root.ctx-item-id = it.id;
-                                root.ctx-item-is-sep = true;
-                                root.ctx-x = 4px;
-                                root.ctx-y = 12px;
-                                ctx-menu.show();
+                                root.open-context-menu(it.id, true);
                             }
                         }
                     }
@@ -508,6 +453,7 @@ export component DockWindow inherits Window {
                 if (!it.is-separator) : DockTile {
                     item: it;
                     icon-size: root.icon-size;
+                    icon-frame-px: root.icon-frame-px;
                     label-mode: root.label-mode;
                     hover-zoom: root.hover-zoom;
                     show-running-dot: root.show-running-dot;
@@ -515,21 +461,25 @@ export component DockWindow inherits Window {
                     launched(id) => { root.launch-item(id); }
                     hovered(lbl) => { root.hover-tip = lbl; }
                     unhovered => { root.hover-tip = ""; }
-                    right-clicked(id, sep, _mx, _my) => {
-                        root.ctx-item-id = id;
-                        root.ctx-item-is-sep = sep;
-                        root.ctx-x = 4px;
-                        root.ctx-y = 12px;
-                        ctx-menu.show();
-                    }
+                    right-clicked(id, sep) => { root.open-context-menu(id, sep); }
                 }
             }
 
             if (root.show-settings-button) : Rectangle {
-                width: root.icon-size + 12px;
-                height: root.icon-size + 12px;
-                border-radius: 9px;
-                background: vset-ta.has-hover ? Theme.hover-bg : transparent;
+                width: root.tile-span;
+                height: root.tile-span;
+                border-radius: root.tile-radius;
+                background: vset-ta.has-hover
+                    ? Theme.hover-bg
+                    : (root.show-frame
+                        ? (Theme.dark-mode ? rgba(255, 255, 255, 0.065) : rgba(255, 255, 255, 0.52))
+                        : transparent);
+                border-width: 1px;
+                border-color: vset-ta.has-hover
+                    ? Theme.border-strong
+                    : (root.show-frame
+                        ? (Theme.dark-mode ? rgba(255, 255, 255, 0.14) : rgba(15, 23, 42, 0.14))
+                        : transparent);
 
                 AsrGlassLogo {
                     x: (parent.width - self.width) / 2;
@@ -542,11 +492,7 @@ export component DockWindow inherits Window {
                     clicked => { root.open-settings(); }
                     pointer-event(ev) => {
                         if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
-                            root.ctx-item-id = -1;
-                            root.ctx-item-is-sep = false;
-                            root.ctx-x = 4px;
-                            root.ctx-y = 12px;
-                            ctx-menu.show();
+                            root.open-context-menu(-1, false);
                         }
                     }
                 }
@@ -574,339 +520,6 @@ export component DockWindow inherits Window {
                     font-weight: 600;
                     vertical-alignment: center;
                     overflow: elide;
-                }
-            }
-        }
-    }
-
-    // Concentric Fluent Glass Folder Fan-Out Popup
-    folder-popup := PopupWindow {
-        x: Math.clamp((root.width - 300px) / 2, 4px, Math.max(4px, root.width - 304px));
-        y: root.edge-index == 2 ? root.height + 4px : 4px;
-        width: 300px;
-        close-policy: PopupClosePolicy.close-on-click-outside;
-
-        Rectangle {
-            border-radius: 10px;
-            background: Theme.popup-bg;
-            border-width: 1px;
-            border-color: Theme.border-strong;
-            drop-shadow-blur: 20px;
-            drop-shadow-color: rgba(0, 0, 0, 0.48);
-            drop-shadow-offset-y: 8px;
-
-            VerticalLayout {
-                padding: 8px;
-                spacing: 6px;
-
-                HorizontalLayout {
-                    height: 26px;
-                    spacing: 6px;
-                    alignment: stretch;
-
-                    VerticalLayout {
-                        alignment: center;
-                        VectorIconFolder { size: 14px; icon-color: Theme.accent; }
-                    }
-
-                    Text {
-                        horizontal-stretch: 1;
-                        min-width: 0px;
-                        text: root.folder-title;
-                        color: Theme.text-primary;
-                        font-size: 12px;
-                        font-weight: 700;
-                        vertical-alignment: center;
-                        overflow: elide;
-                    }
-
-                    Rectangle {
-                        height: 22px;
-                        border-radius: 5px;
-                        background: exp-ta.has-hover ? Theme.accent-hover : Theme.accent-tint;
-                        border-width: 1px;
-                        border-color: Theme.accent;
-
-                        HorizontalLayout {
-                            padding-left: 8px;
-                            padding-right: 8px;
-                            Text {
-                                text: "Проводник";
-                                color: exp-ta.has-hover ? #FFFFFF : Theme.accent;
-                                font-size: 10.5px;
-                                font-weight: 600;
-                                vertical-alignment: center;
-                            }
-                        }
-
-                        exp-ta := TouchArea {
-                            mouse-cursor: pointer;
-                            clicked => {
-                                folder-popup.close();
-                                root.open-folder-explorer(root.folder-path);
-                            }
-                        }
-                    }
-                }
-
-                Rectangle { height: 1px; background: Theme.divider-color; }
-
-                if (root.folder-entries.length == 0) : Rectangle {
-                    height: 36px;
-                    background: transparent;
-                    Text {
-                        width: 100%;
-                        height: 100%;
-                        text: "Папка пуста";
-                        color: Theme.text-muted;
-                        font-size: 11.5px;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                }
-
-                if (root.folder-entries.length > 0) : Flickable {
-                    height: Math.min(264px, root.folder-entries.length * 32px);
-                    content-width: self.width;
-                    content-height: f-col.preferred-height;
-
-                    f-col := VerticalLayout {
-                        width: parent.width;
-                        spacing: 2px;
-
-                        for entry in root.folder-entries : Rectangle {
-                            height: 30px;
-                            border-radius: 6px;
-                            background: fe-ta.has-hover ? Theme.hover-bg : transparent;
-
-                            HorizontalLayout {
-                                padding-left: 6px;
-                                padding-right: 8px;
-                                spacing: 8px;
-                                alignment: stretch;
-
-                                VerticalLayout {
-                                    alignment: center;
-                                    width: 20px;
-
-                                    if (entry.has-icon) : Image {
-                                        width: 18px;
-                                        height: 18px;
-                                        source: entry.icon-img;
-                                        image-fit: contain;
-                                    }
-
-                                    if (!entry.has-icon && entry.is-dir) : VectorIconFolder {
-                                        size: 15px;
-                                        icon-color: Theme.accent;
-                                    }
-
-                                    if (!entry.has-icon && !entry.is-dir) : VectorIconFile {
-                                        size: 14px;
-                                        icon-color: Theme.text-secondary;
-                                    }
-                                }
-
-                                Text {
-                                    horizontal-stretch: 1;
-                                    min-width: 0px;
-                                    text: entry.name;
-                                    color: Theme.text-primary;
-                                    font-size: 11.5px;
-                                    vertical-alignment: center;
-                                    overflow: elide;
-                                }
-                            }
-
-                            fe-ta := TouchArea {
-                                mouse-cursor: pointer;
-                                clicked => {
-                                    folder-popup.close();
-                                    root.launch-folder-entry(entry.path);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Slint PopupWindow context menu (auto-closes on outside click / Esc)
-    ctx-menu := PopupWindow {
-        x: root.ctx-x;
-        y: root.ctx-y;
-        width: 214px;
-        close-policy: PopupClosePolicy.close-on-click-outside;
-
-        Rectangle {
-            border-radius: 10px;
-            background: Theme.popup-bg;
-            border-width: 1px;
-            border-color: Theme.border-strong;
-            drop-shadow-blur: 18px;
-            drop-shadow-color: rgba(0, 0, 0, 0.45);
-            drop-shadow-offset-y: 6px;
-
-            VerticalLayout {
-                padding: 5px;
-                spacing: 2px;
-
-                if (root.ctx-item-id >= 0 && root.vis-item-actions && !root.ctx-item-is-sep) : DockMenuBtn {
-                    label: "Открыть расположение";
-                    clicked => { ctx-menu.close(); root.menu-action("open_item_folder", root.ctx-item-id); }
-                }
-                if (root.ctx-item-id >= 0 && root.vis-item-actions && !root.ctx-item-is-sep) : DockMenuBtn {
-                    label: "Выбрать иконку…";
-                    clicked => { ctx-menu.close(); root.menu-action("choose_icon", root.ctx-item-id); }
-                }
-                if (root.ctx-item-id >= 0 && root.vis-item-actions && !root.ctx-item-is-sep) : DockMenuBtn {
-                    label: "Сбросить иконку";
-                    clicked => { ctx-menu.close(); root.menu-action("reset_icon", root.ctx-item-id); }
-                }
-                if (root.ctx-item-id >= 0 && root.vis-item-actions && !root.lock-items) : HorizontalLayout {
-                    height: 26px;
-                    spacing: 4px;
-                    DockMenuBtn {
-                        horizontal-stretch: 1;
-                        label: "< Сдвинуть";
-                        clicked => { ctx-menu.close(); root.menu-action("move_prev", root.ctx-item-id); }
-                    }
-                    DockMenuBtn {
-                        horizontal-stretch: 1;
-                        label: "Сдвинуть >";
-                        clicked => { ctx-menu.close(); root.menu-action("move_next", root.ctx-item-id); }
-                    }
-                }
-                if (root.ctx-item-id >= 0 && root.vis-item-actions && !root.lock-items) : DockMenuBtn {
-                    label: root.ctx-item-is-sep ? "Удалить разделитель" : "Удалить значок";
-                    danger: true;
-                    clicked => { ctx-menu.close(); root.menu-action("remove_item", root.ctx-item-id); }
-                }
-                if (root.ctx-item-id >= 0 && root.vis-item-actions) : Rectangle {
-                    height: 1px;
-                    background: Theme.divider-color;
-                }
-
-                if (root.vis-add-separator && !root.lock-items) : DockMenuBtn {
-                    label: "Добавить разделитель";
-                    clicked => { ctx-menu.close(); root.menu-action("add_separator", 0); }
-                }
-
-                if (root.vis-edge-layer) : HorizontalLayout {
-                    height: 25px;
-                    padding-left: 4px;
-                    padding-right: 4px;
-                    spacing: 3px;
-                    for e[idx] in ["Лево", "Право", "Верх", "Низ"] : Rectangle {
-                        horizontal-stretch: 1;
-                        border-radius: 5px;
-                        background: root.edge-index == idx ? Theme.accent : Theme.card-bg;
-                        Text {
-                            width: 100%;
-                            height: 100%;
-                            text: e;
-                            color: root.edge-index == idx ? #FFFFFF : Theme.text-primary;
-                            font-size: 10px;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
-                        TouchArea {
-                            mouse-cursor: pointer;
-                            clicked => { ctx-menu.close(); root.menu-action("set_edge", idx); }
-                        }
-                    }
-                }
-                if (root.vis-edge-layer) : HorizontalLayout {
-                    height: 25px;
-                    padding-left: 4px;
-                    padding-right: 4px;
-                    spacing: 3px;
-                    for l[idx] in ["Обои", "Обычн.", "Поверх"] : Rectangle {
-                        horizontal-stretch: 1;
-                        border-radius: 5px;
-                        background: root.layer-index == idx ? Theme.accent : Theme.card-bg;
-                        Text {
-                            width: 100%;
-                            height: 100%;
-                            text: l;
-                            color: root.layer-index == idx ? #FFFFFF : Theme.text-primary;
-                            font-size: 10px;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
-                        TouchArea {
-                            mouse-cursor: pointer;
-                            clicked => { ctx-menu.close(); root.menu-action("set_layer", idx); }
-                        }
-                    }
-                }
-
-                if (root.vis-appearance) : HorizontalLayout {
-                    height: 25px;
-                    padding-left: 4px;
-                    padding-right: 4px;
-                    spacing: 3px;
-                    for sz in [40, 48, 64] : Rectangle {
-                        horizontal-stretch: 1;
-                        border-radius: 5px;
-                        background: root.icon-size == sz * 1px ? Theme.accent : Theme.card-bg;
-                        Text {
-                            width: 100%;
-                            height: 100%;
-                            text: "\{sz}px";
-                            color: root.icon-size == sz * 1px ? #FFFFFF : Theme.text-primary;
-                            font-size: 10px;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
-                        TouchArea {
-                            mouse-cursor: pointer;
-                            clicked => { ctx-menu.close(); root.menu-action("icon_size", sz); }
-                        }
-                    }
-                }
-                if (root.vis-appearance) : DockMenuBtn {
-                    label: "Режим подписей (цикл)";
-                    clicked => { ctx-menu.close(); root.menu-action("cycle_labels", 0); }
-                }
-
-                if (root.vis-behavior) : DockMenuBtn {
-                    label: "Увеличение при наведении";
-                    checked: root.hover-zoom;
-                    clicked => { ctx-menu.close(); root.menu-action("toggle_hover_zoom", 0); }
-                }
-                if (root.vis-behavior) : DockMenuBtn {
-                    label: "Точка запущенных окон";
-                    checked: root.show-running-dot;
-                    clicked => { ctx-menu.close(); root.menu-action("toggle_running_dot", 0); }
-                }
-
-                if (root.vis-lock) : Rectangle { height: 1px; background: Theme.divider-color; }
-                if (root.vis-lock) : DockMenuBtn {
-                    label: "Закрепить положение";
-                    checked: root.locked;
-                    clicked => { ctx-menu.close(); root.menu-action("toggle_lock", 0); }
-                }
-                if (root.vis-lock) : DockMenuBtn {
-                    label: "Защита значков от удаления";
-                    checked: root.lock-items;
-                    clicked => { ctx-menu.close(); root.menu-action("toggle_lock_items", 0); }
-                }
-
-                if (root.vis-dock-mgmt) : Rectangle { height: 1px; background: Theme.divider-color; }
-                if (root.vis-dock-mgmt) : DockMenuBtn {
-                    label: "Настройки док-панелей";
-                    clicked => { ctx-menu.close(); root.open-settings(); }
-                }
-                if (root.vis-dock-mgmt) : DockMenuBtn {
-                    label: "Добавить новую панель";
-                    clicked => { ctx-menu.close(); root.menu-action("add_dock", 0); }
-                }
-                if (root.vis-dock-mgmt && root.can-remove-dock) : DockMenuBtn {
-                    label: "Удалить эту панель";
-                    danger: true;
-                    clicked => { ctx-menu.close(); root.menu-action("remove_dock", 0); }
                 }
             }
         }

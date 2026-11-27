@@ -1,12 +1,10 @@
 use std::collections::{HashMap, HashSet};
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use asrbox_mod_dock::{icon_request_for_item, DockItem, IconSource};
 use asrbox_platform_api::IconRequest;
-use slint::{Image, Rgba8Pixel, SharedPixelBuffer, SharedString};
+use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
 
-use crate::generated::ui::SlintFolderEntryRow;
 use crate::win_os::{emit_worker_log, load_shell_icon};
 
 pub struct DockIconCache {
@@ -62,21 +60,6 @@ impl DockIconCache {
             }
         }
     }
-
-    pub fn load_path_icon(&mut self, path: &Path) -> Option<Image> {
-        let key = format!("path|{}", path.display());
-        if let Some(img) = self.icons.get(&key) {
-            return Some(img.clone());
-        }
-        let req = IconRequest::AutoShell(path.to_path_buf());
-        let rgba = load_shell_icon(&req, 48).ok()?;
-        if rgba.width == 0 || rgba.height == 0 {
-            return None;
-        }
-        let img = rgba_to_image(&rgba.pixels, rgba.width, rgba.height);
-        self.icons.insert(key, img.clone());
-        Some(img)
-    }
 }
 
 pub fn resolve_dock_target(target: &Path, base_dir: &Path) -> PathBuf {
@@ -98,41 +81,6 @@ pub fn is_folder_target(path: &Path) -> bool {
                 || e.eq_ignore_ascii_case("lnk")
                 || e.eq_ignore_ascii_case("url")
         })
-}
-
-pub fn scan_folder_entries(dir: &Path, icons: &mut DockIconCache) -> Vec<SlintFolderEntryRow> {
-    let Ok(rd) = fs::read_dir(dir) else {
-        return Vec::new();
-    };
-    let mut raw: Vec<(bool, String, PathBuf)> = rd
-        .flatten()
-        .filter_map(|e| {
-            let name = e.file_name().to_string_lossy().to_string();
-            if name.starts_with('.') || name.eq_ignore_ascii_case("desktop.ini") {
-                return None;
-            }
-            let path = e.path();
-            let is_dir = e.file_type().map(|t| t.is_dir()).unwrap_or(false);
-            Some((is_dir, name, path))
-        })
-        .collect();
-    raw.sort_by(|a, b| {
-        b.0.cmp(&a.0)
-            .then_with(|| a.1.to_lowercase().cmp(&b.1.to_lowercase()))
-    });
-    raw.into_iter()
-        .take(28)
-        .map(|(is_dir, name, path)| {
-            let icon = icons.load_path_icon(&path);
-            SlintFolderEntryRow {
-                name: SharedString::from(name),
-                path: SharedString::from(path.to_string_lossy().as_ref()),
-                is_dir,
-                has_icon: icon.is_some(),
-                icon_img: icon.unwrap_or_default(),
-            }
-        })
-        .collect()
 }
 
 fn rgba_to_image(pixels: &[u8], width: u32, height: u32) -> Image {

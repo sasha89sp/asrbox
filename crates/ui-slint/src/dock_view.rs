@@ -1,24 +1,32 @@
 use std::collections::HashSet;
-use std::path::Path;
 use std::rc::Rc;
 
 use asrbox_mod_dock::{DockAlignment, DockConfig, DockEdge, DockItem, DockLabelMode, IconSource};
-use asrbox_platform_api::{DockMenuVisibility, PixelRect};
+use asrbox_platform_api::{
+    DockMenuAction, DockMenuState, DockMenuVisibility, PixelRect, WidgetLayer,
+};
 use slint::{ModelRc, SharedString, VecModel};
 
-use crate::dock_icons::{
-    is_folder_target, resolve_dock_target, scan_folder_entries, DockIconCache,
-};
+use crate::dock_icons::{is_folder_target, resolve_dock_target, DockIconCache};
 use crate::generated::ui::{DockWindow, SlintDockIconRow};
-use crate::win_os::{idx_to_layer, layer_to_idx, resolve_exe_name};
+use crate::win_os::{layer_to_idx, resolve_exe_name};
 
 fn compute_dock_size(cfg: &DockConfig) -> (u32, u32) {
     let icon = u32::from(cfg.icon_size_px.clamp(24, 128));
+    let frame2 = u32::from(cfg.icon_frame_px.min(24)) * 2;
     let pad = u32::from(cfg.padding_px.clamp(4, 48));
     let gap = u32::from(cfg.item_spacing_px.min(48));
     let lm = cfg.label_mode.to_index();
-    let tile_w = if lm == 2 { icon + 96 } else { icon + 12 };
-    let tile_h = if lm == 1 { icon + 24 } else { icon + 12 };
+    let tile_w = if lm == 2 {
+        icon + frame2 + 88
+    } else {
+        icon + frame2
+    };
+    let tile_h = if lm == 1 {
+        icon + frame2 + 14
+    } else {
+        icon + frame2
+    };
     let horiz = cfg.edge.is_horizontal();
     let mut main_len = pad * 2;
     let mut count = 0u32;
@@ -37,7 +45,7 @@ fn compute_dock_size(cfg: &DockConfig) -> (u32, u32) {
         count += 1;
     }
     if cfg.show_settings_button {
-        main_len += icon + 12;
+        main_len += icon + frame2;
         count += 1;
     }
     if count > 1 {
@@ -89,7 +97,6 @@ pub fn compute_dock_rect(cfg: &DockConfig, work_area: PixelRect) -> (i32, i32, u
 pub fn sync_dock_window(
     ui: &DockWindow,
     cfg: &DockConfig,
-    vis: DockMenuVisibility,
     running_exes: &HashSet<String>,
     icons: &mut DockIconCache,
     can_remove: bool,
@@ -97,16 +104,12 @@ pub fn sync_dock_window(
     ui.set_dock_name(SharedString::from(cfg.name.as_str()));
     ui.set_is_horizontal(cfg.edge.is_horizontal());
     ui.set_icon_size(f32::from(cfg.icon_size_px.clamp(24, 128)));
+    ui.set_icon_frame_px(f32::from(cfg.icon_frame_px.min(24)));
     ui.set_item_spacing(f32::from(cfg.item_spacing_px.min(48)));
     ui.set_dock_padding(f32::from(cfg.padding_px.clamp(4, 48)));
     ui.set_corner_radius(f32::from(cfg.corner_radius_px.clamp(4, 32)));
     ui.set_opacity_pct(i32::from(cfg.opacity_percent));
-    ui.set_edge_index(match cfg.edge {
-        DockEdge::Left => 0,
-        DockEdge::Right => 1,
-        DockEdge::Top => 2,
-        DockEdge::Bottom => 3,
-    });
+    ui.set_edge_index(i32::from(edge_to_code(cfg.edge)));
     ui.set_layer_index(layer_to_idx(cfg.layer));
     ui.set_label_mode(i32::from(cfg.label_mode.to_index()));
     ui.set_locked(cfg.locked);
@@ -117,15 +120,45 @@ pub fn sync_dock_window(
     ui.set_launch_anim(cfg.launch_animation_enabled);
     ui.set_show_settings_button(cfg.show_settings_button);
     ui.set_can_remove_dock(can_remove);
-    ui.set_vis_item_actions(vis.show_item_actions);
-    ui.set_vis_add_separator(vis.show_add_separator);
-    ui.set_vis_edge_layer(vis.show_edge_and_layer);
-    ui.set_vis_appearance(vis.show_appearance);
-    ui.set_vis_behavior(vis.show_behavior);
-    ui.set_vis_lock(vis.show_lock_controls);
-    ui.set_vis_dock_mgmt(vis.show_dock_management);
     let rows = build_dock_icon_rows(cfg, running_exes, icons);
     ui.set_items(ModelRc::from(Rc::new(VecModel::from(rows))));
+}
+
+fn edge_to_code(edge: DockEdge) -> u8 {
+    match edge {
+        DockEdge::Left => 0,
+        DockEdge::Right => 1,
+        DockEdge::Top => 2,
+        DockEdge::Bottom => 3,
+    }
+}
+
+pub fn build_dock_menu_state(
+    cfg: &DockConfig,
+    vis: DockMenuVisibility,
+    hovered_item_id: Option<u64>,
+    hovered_is_separator: bool,
+    can_remove_dock: bool,
+) -> DockMenuState {
+    DockMenuState {
+        edge_code: edge_to_code(cfg.edge),
+        layer: cfg.layer,
+        label_mode_code: cfg.label_mode.to_index(),
+        is_centered: cfg.free_pos.is_none() && matches!(cfg.alignment, DockAlignment::Center),
+        icon_size_px: cfg.icon_size_px,
+        opacity_percent: cfg.opacity_percent,
+        locked: cfg.locked,
+        lock_items: cfg.lock_items,
+        hover_zoom_enabled: cfg.hover_zoom.enabled,
+        show_running_indicator: cfg.show_running_indicator,
+        focus_running_window: cfg.focus_running_window,
+        launch_animation_enabled: cfg.launch_animation_enabled,
+        hovered_item_id,
+        hovered_is_separator,
+        show_settings_button: cfg.show_settings_button,
+        can_remove_dock,
+        menu_vis: vis,
+    }
 }
 
 fn build_dock_icon_rows(
@@ -155,104 +188,101 @@ fn build_dock_icon_rows(
         .collect()
 }
 
-pub fn apply_dock_mutation(
+pub fn apply_native_dock_action(
     cfg: &mut DockConfig,
     icons: &mut DockIconCache,
-    action: &str,
-    arg: i32,
+    action: DockMenuAction,
 ) -> bool {
-    if let Some(res) = apply_dock_item_mutation(cfg, icons, action, arg as u64) {
-        return res;
-    }
     match action {
-        "set_edge" => {
-            cfg.edge = match arg {
-                0 => DockEdge::Left,
-                1 => DockEdge::Right,
-                2 => DockEdge::Top,
-                _ => DockEdge::Bottom,
-            };
+        DockMenuAction::SetEdgeLeft => set_edge(cfg, DockEdge::Left),
+        DockMenuAction::SetEdgeRight => set_edge(cfg, DockEdge::Right),
+        DockMenuAction::SetEdgeTop => set_edge(cfg, DockEdge::Top),
+        DockMenuAction::SetEdgeBottom => set_edge(cfg, DockEdge::Bottom),
+        DockMenuAction::AlignCenter => {
             cfg.free_pos = None;
+            cfg.alignment = DockAlignment::Center;
             true
         }
-        "set_layer" => {
-            cfg.layer = idx_to_layer(arg);
+        DockMenuAction::SetLayerWallpaper => set_layer(cfg, WidgetLayer::Wallpaper),
+        DockMenuAction::SetLayerNormal => set_layer(cfg, WidgetLayer::Normal),
+        DockMenuAction::SetLayerTopmost => set_layer(cfg, WidgetLayer::Topmost),
+        DockMenuAction::SetLabelMode(idx) => {
+            cfg.label_mode = DockLabelMode::from_index(idx);
             true
         }
-        "icon_size" => {
-            cfg.icon_size_px = arg.clamp(24, 128) as u16;
+        DockMenuAction::SetOpacity(pct) => {
+            cfg.opacity_percent = pct.clamp(20, 100);
             true
         }
-        "cycle_labels" => {
-            cfg.label_mode = DockLabelMode::from_index((cfg.label_mode.to_index() + 1) % 4);
-            true
-        }
-        "toggle_hover_zoom" => {
-            cfg.hover_zoom.enabled = !cfg.hover_zoom.enabled;
-            true
-        }
-        "toggle_running_dot" => {
-            cfg.show_running_indicator = !cfg.show_running_indicator;
-            true
-        }
-        "toggle_lock" => {
+        DockMenuAction::IconSizeSmall => set_icon_size(cfg, 40),
+        DockMenuAction::IconSizeMedium => set_icon_size(cfg, 48),
+        DockMenuAction::IconSizeLarge => set_icon_size(cfg, 64),
+        DockMenuAction::ToggleLock => {
             cfg.locked = !cfg.locked;
             true
         }
-        "toggle_lock_items" => {
+        DockMenuAction::ToggleLockItems => {
             cfg.lock_items = !cfg.lock_items;
+            true
+        }
+        DockMenuAction::ToggleHoverZoom => {
+            cfg.hover_zoom.enabled = !cfg.hover_zoom.enabled;
+            true
+        }
+        DockMenuAction::ToggleRunningIndicator => {
+            cfg.show_running_indicator = !cfg.show_running_indicator;
+            true
+        }
+        DockMenuAction::ToggleFocusRunning => {
+            cfg.focus_running_window = !cfg.focus_running_window;
+            true
+        }
+        DockMenuAction::ToggleLaunchAnimation => {
+            cfg.launch_animation_enabled = !cfg.launch_animation_enabled;
+            true
+        }
+        DockMenuAction::ToggleSettingsButton => {
+            cfg.show_settings_button = !cfg.show_settings_button;
+            true
+        }
+        DockMenuAction::ResetItemIcon(id) => reset_item_icon(cfg, icons, id),
+        DockMenuAction::RemoveItem(id) if !cfg.lock_items => {
+            let prev = cfg.items.len();
+            cfg.items.retain(|i| i.id != id);
+            cfg.items.len() != prev
+        }
+        DockMenuAction::AddSeparator if !cfg.lock_items => {
+            let nid = cfg.next_item_id();
+            cfg.items.push(DockItem::separator(nid));
             true
         }
         _ => false,
     }
 }
 
-fn apply_dock_item_mutation(
-    cfg: &mut DockConfig,
-    icons: &mut DockIconCache,
-    action: &str,
-    id: u64,
-) -> Option<bool> {
-    Some(match action {
-        "reset_icon" => {
-            if let Some(it) = cfg.items.iter_mut().find(|i| i.id == id) {
-                it.icon = IconSource::AutoShell;
-                icons.invalidate_item(it);
-                true
-            } else {
-                false
-            }
-        }
-        "move_prev" if !cfg.lock_items => {
-            let pos = cfg.items.iter().position(|i| i.id == id);
-            if let Some(p) = pos.filter(|&p| p > 0) {
-                cfg.items.swap(p, p - 1);
-                true
-            } else {
-                false
-            }
-        }
-        "move_next" if !cfg.lock_items => {
-            let pos = cfg.items.iter().position(|i| i.id == id);
-            if let Some(p) = pos.filter(|&p| p + 1 < cfg.items.len()) {
-                cfg.items.swap(p, p + 1);
-                true
-            } else {
-                false
-            }
-        }
-        "remove_item" if !cfg.lock_items => {
-            let prev = cfg.items.len();
-            cfg.items.retain(|i| i.id != id);
-            cfg.items.len() != prev
-        }
-        "add_separator" if !cfg.lock_items => {
-            let nid = cfg.next_item_id();
-            cfg.items.push(DockItem::separator(nid));
-            true
-        }
-        _ => return None,
-    })
+fn set_edge(cfg: &mut DockConfig, edge: DockEdge) -> bool {
+    cfg.edge = edge;
+    cfg.free_pos = None;
+    true
+}
+
+fn set_layer(cfg: &mut DockConfig, layer: WidgetLayer) -> bool {
+    cfg.layer = layer;
+    true
+}
+
+fn set_icon_size(cfg: &mut DockConfig, px: u16) -> bool {
+    cfg.icon_size_px = px;
+    true
+}
+
+fn reset_item_icon(cfg: &mut DockConfig, icons: &mut DockIconCache, id: u64) -> bool {
+    let Some(it) = cfg.items.iter_mut().find(|i| i.id == id) else {
+        return false;
+    };
+    it.icon = IconSource::AutoShell;
+    icons.invalidate_item(it);
+    true
 }
 
 pub fn add_dock_config(configs: &mut Vec<DockConfig>) {
@@ -302,12 +332,4 @@ pub fn set_custom_icon_config(
     it.icon = IconSource::CustomFile(picked);
     icons.invalidate_item(it);
     true
-}
-
-pub fn open_folder_popup_ui(win: &DockWindow, label: &str, dir: &Path, icons: &mut DockIconCache) {
-    let entries = scan_folder_entries(dir, icons);
-    win.set_folder_title(SharedString::from(label));
-    win.set_folder_path(SharedString::from(dir.to_string_lossy().as_ref()));
-    win.set_folder_entries(ModelRc::from(Rc::new(VecModel::from(entries))));
-    win.invoke_open_folder_popup();
 }

@@ -224,7 +224,6 @@ fn run_app(safe_mode: bool, force_inproc: bool) -> Result<(), String> {
         safe_mode,
     );
     ctrl.sync_runtime_modules(&mut host);
-    let _ = ctrl.slint_ui.prewarm_tray();
     if !safe_mode
         && ctrl.modules_cfg.widgets_enabled
         && load_notes_config(&ctrl.paths.notes_cfg)

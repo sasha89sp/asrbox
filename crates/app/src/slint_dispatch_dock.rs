@@ -72,6 +72,12 @@ impl<I: IconProvider> AppController<I> {
                 }
                 true
             }
+            "dock_icon_frame" => {
+                if let Ok(px) = rest.parse::<u16>() {
+                    self.set_dock_icon_frame_direct(host, dock_id, px.min(24));
+                }
+                true
+            }
             "dock_menu_vis" => {
                 if let Some((m_idx, val_s)) = rest.split_once('|') {
                     let on = val_s == "1";
@@ -152,6 +158,24 @@ impl<I: IconProvider> AppController<I> {
         {
             it.label = trimmed.to_owned();
             if save_docks_to_file(&self.paths.docks_cfg, &cfgs, APP_VERSION).is_ok() {
+                self.reload_module_config(host, ModuleId::Dock);
+            }
+        }
+    }
+
+    fn set_dock_icon_frame_direct<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
+        &mut self,
+        host: &mut H,
+        dock_id: &str,
+        frame_px: u16,
+    ) {
+        let Ok(id) = dock_id.parse::<u64>() else {
+            return;
+        };
+        let mut docks = load_docks_from_file(&self.paths.docks_cfg).unwrap_or_default();
+        if let Some(dock) = docks.iter_mut().find(|d| d.id == id) {
+            dock.icon_frame_px = frame_px.min(24);
+            if save_docks_to_file(&self.paths.docks_cfg, &docks, APP_VERSION).is_ok() {
                 self.reload_module_config(host, ModuleId::Dock);
             }
         }

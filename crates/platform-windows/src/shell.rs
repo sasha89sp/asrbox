@@ -259,6 +259,15 @@ pub(crate) fn copy_text_to_clipboard(owner: HWND, text: &str) -> Result<(), Stri
 
 pub(crate) fn launch_system_tool(cmd: &str, args: &str) -> Result<(), String> {
     let verb = encode_wide_str("open");
+    if cmd.eq_ignore_ascii_case("ncpa.cpl") {
+        let ctl = encode_wide_str("control.exe");
+        let cpl = encode_wide_str("ncpa.cpl");
+        if shell_exec(&verb, &ctl, Some(&cpl)).is_ok() {
+            return Ok(());
+        }
+        let fallback = encode_wide_str("ms-settings:network");
+        return shell_exec(&verb, &fallback, None);
+    }
     let target = encode_wide_str(cmd);
     let params = (!args.is_empty()).then(|| encode_wide_str(args));
     shell_exec(&verb, &target, params.as_deref())

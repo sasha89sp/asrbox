@@ -313,6 +313,7 @@ component WindowControlButton inherits Rectangle {
 export component FramelessTitleBar inherits Rectangle {
     in property <string> title: "asrbox";
     callback drag-window();
+    callback right-clicked();
     callback minimize-clicked();
     callback maximize-clicked();
     callback close-clicked();
@@ -320,26 +321,33 @@ export component FramelessTitleBar inherits Rectangle {
     height: 36px;
     background: transparent;
 
+    // Full-width draggable header background (top 4px left for N-resize handle)
+    TouchArea {
+        x: 0px;
+        y: 4px;
+        width: 100%;
+        height: parent.height - 4px;
+        pointer-event(ev) => {
+            if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
+                root.drag-window();
+            } else if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
+                root.right-clicked();
+            }
+        }
+    }
+
     HorizontalLayout {
         padding-left: 12px;
         padding-right: 6px;
         spacing: 8px;
         alignment: stretch;
 
-        // Draggable left header region
+        // Left header brand + title
         Rectangle {
             horizontal-stretch: 1;
             min-width: 0px;
             background: transparent;
             clip: true;
-
-            TouchArea {
-                pointer-event(ev) => {
-                    if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
-                        root.drag-window();
-                    }
-                }
-            }
 
             HorizontalLayout {
                 spacing: 8px;
@@ -365,6 +373,7 @@ export component FramelessTitleBar inherits Rectangle {
 
         // Optional middle slot (e.g., Notes pane toggle pills)
         HorizontalLayout {
+            horizontal-stretch: 0;
             spacing: 4px;
             alignment: center;
             @children
@@ -372,6 +381,7 @@ export component FramelessTitleBar inherits Rectangle {
 
         // Right window controls (-, [], red X)
         HorizontalLayout {
+            horizontal-stretch: 0;
             spacing: 3px;
             alignment: end;
 

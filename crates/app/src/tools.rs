@@ -73,17 +73,13 @@ impl<I: IconProvider> AppController<I> {
             autostart_enabled: host.is_autostart_enabled(),
             menu_vis: self.menus_cfg.tray,
         };
-        if self
-            .slint_ui
-            .show_tray_menu(screen, &entries, flags)
-            .is_ok()
-        {
-            return;
+        match host.show_tray_menu(screen, &entries, flags) {
+            Ok(Some(action)) => self.apply_tray_action(host, action),
+            Ok(None) => {}
+            Err(_) => {
+                let _ = self.slint_ui.show_tray_menu(screen, &entries, flags);
+            }
         }
-        let Ok(Some(action)) = host.show_tray_menu(screen, &entries, flags) else {
-            return;
-        };
-        self.apply_tray_action(host, action);
     }
 
     fn current_tray_entries(&self) -> Vec<TrayMenuEntry> {

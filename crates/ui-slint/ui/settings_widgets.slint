@@ -113,9 +113,12 @@ export component SettingsWidgetsView inherits VerticalLayout {
 
     // 4-widget segmented selector
     HorizontalLayout {
+        height: 34px;
+        vertical-stretch: 0;
         spacing: 6px;
         GlassButton {
             horizontal-stretch: 1;
+            height: 34px;
             label: Theme.is-ru ? "Календарь" : "Calendar";
             active: root.selected-widget == 0;
             compact: true;
@@ -123,6 +126,7 @@ export component SettingsWidgetsView inherits VerticalLayout {
         }
         GlassButton {
             horizontal-stretch: 1;
+            height: 34px;
             label: Theme.is-ru ? "Монитор" : "SysMonitor";
             active: root.selected-widget == 1;
             compact: true;
@@ -130,6 +134,7 @@ export component SettingsWidgetsView inherits VerticalLayout {
         }
         GlassButton {
             horizontal-stretch: 1;
+            height: 34px;
             label: Theme.is-ru ? "Погода" : "Weather";
             active: root.selected-widget == 2;
             compact: true;
@@ -137,6 +142,7 @@ export component SettingsWidgetsView inherits VerticalLayout {
         }
         GlassButton {
             horizontal-stretch: 1;
+            height: 34px;
             label: Theme.is-ru ? "Заметки" : "Notes";
             active: root.selected-widget == 3;
             compact: true;

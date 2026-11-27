@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::io::{self, BufRead, BufReader};
 use std::rc::Rc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use asrbox_mod_about::AppPaths;
 use asrbox_mod_widgets::{
@@ -12,14 +12,17 @@ use asrbox_platform_api::load_appearance_config;
 use slint::{ComponentHandle, ModelRc, SharedString, Timer, VecModel, Weak};
 
 use crate::generated::ui::NotesWindow;
-use crate::notes_view::{build_note_rows, emit_notes_cmd, LocalNotesState};
+use crate::notes_view::{
+    apply_notes_menu_choice, build_note_rows, build_notes_context_menu, emit_notes_cmd,
+    LocalNotesState,
+};
 use crate::settings_state::apply_theme_to_window;
 use crate::vibrancy::{
-    apply_window_opacity, apply_window_vibrancy, center_window_in_work_area, minimize_window,
-    select_winit_backend, set_window_layer, start_window_drag, start_window_resize,
-    toggle_maximize_window,
+    apply_window_opacity, apply_window_vibrancy, install_bounds_tracker, minimize_window,
+    restore_or_center_window, select_winit_backend, set_window_layer, start_window_drag,
+    start_window_resize, toggle_maximize_window, window_hwnd_raw, DesktopWindowSpec,
 };
-use crate::win_os::primary_work_area;
+use crate::win_os::{primary_work_area, show_native_fluent_menu};
 
 pub fn run_notes_window(paths: AppPaths, app_version: &str) -> Result<(), String> {
     select_winit_backend()?;
@@ -44,6 +47,7 @@ pub fn run_notes_window(paths: AppPaths, app_version: &str) -> Result<(), String
         search: String::new(),
         dirty: false,
         last_dark: initial_dark,
+        ignore_bounds_until: Instant::now() + Duration::from_millis(800),
         autosave_timer: Timer::default(),
     }));
     state.borrow_mut().sync_ui(&ui, true);
@@ -56,15 +60,25 @@ pub fn run_notes_window(paths: AppPaths, app_version: &str) -> Result<(), String
     spawn_notes_stdin_listener(ui.as_weak(), &state);
 
     let weak_vib = ui.as_weak();
-    let initial_opacity = state.borrow().cfg.opacity_percent;
-    let initial_layer = state.borrow().cfg.layer;
+    let st_init = Rc::clone(&state);
     Timer::single_shot(Duration::from_millis(24), move || {
         if let Some(win) = weak_vib.upgrade() {
+            let mut g = st_init.borrow_mut();
+            g.ignore_bounds_until = Instant::now() + Duration::from_millis(700);
             let wa = primary_work_area();
-            center_window_in_work_area(win.window(), wa, 780, 520, 340, 320);
-            apply_window_vibrancy(win.window(), initial_dark);
-            apply_window_opacity(win.window(), initial_opacity);
-            set_window_layer(win.window(), initial_layer);
+            let spec = DesktopWindowSpec {
+                x: g.cfg.x,
+                y: g.cfg.y,
+                width: g.cfg.width,
+                height: g.cfg.height,
+                min_w: 340,
+                min_h: 320,
+                resizable: true,
+                layer: g.cfg.layer,
+                dark: initial_dark,
+                opacity_percent: g.cfg.opacity_percent,
+            };
+            restore_or_center_window(win.window(), wa, spec, true);
         }
     });
 
@@ -72,33 +86,47 @@ pub fn run_notes_window(paths: AppPaths, app_version: &str) -> Result<(), String
 }
 
 fn wire_notes_chrome(ui: &NotesWindow, state: &Rc<RefCell<LocalNotesState>>) {
-    let w = ui.as_weak();
+    let (w1, w2, w3, w4) = (ui.as_weak(), ui.as_weak(), ui.as_weak(), ui.as_weak());
     ui.on_drag_window(move || {
-        if let Some(u) = w.upgrade() {
+        if let Some(u) = w1.upgrade() {
             start_window_drag(u.window());
         }
     });
-    let w = ui.as_weak();
     ui.on_resize_window(move |dir| {
-        if let Some(u) = w.upgrade() {
+        if let Some(u) = w2.upgrade() {
             start_window_resize(u.window(), dir);
         }
     });
-    let w = ui.as_weak();
     ui.on_minimize_window(move || {
-        if let Some(u) = w.upgrade() {
+        if let Some(u) = w3.upgrade() {
             minimize_window(u.window());
         }
     });
-    let w = ui.as_weak();
     ui.on_maximize_window(move || {
-        if let Some(u) = w.upgrade() {
+        if let Some(u) = w4.upgrade() {
             toggle_maximize_window(u.window());
         }
     });
-    let st = Rc::clone(state);
+    let (w_ctx, st_ctx) = (ui.as_weak(), Rc::clone(state));
+    ui.on_open_context_menu(move || {
+        let Some(u) = w_ctx.upgrade() else {
+            return;
+        };
+        let (spec, app) = {
+            let g = st_ctx.borrow();
+            (
+                build_notes_context_menu(&g.cfg),
+                load_appearance_config(&g.paths.appearance_cfg),
+            )
+        };
+        if let Ok(Some(cmd)) = show_native_fluent_menu(window_hwnd_raw(u.window()), &spec, app) {
+            let mut g = st_ctx.borrow_mut();
+            apply_notes_menu_choice(&mut g, &u, cmd);
+        }
+    });
+    let st_close = Rc::clone(state);
     ui.on_close_window(move || {
-        let mut g = st.borrow_mut();
+        let mut g = st_close.borrow_mut();
         if g.dirty {
             g.persist_db();
         }
@@ -107,6 +135,28 @@ fn wire_notes_chrome(ui: &NotesWindow, state: &Rc<RefCell<LocalNotesState>>) {
         emit_notes_cmd("notes_closed", "");
         let _ = slint::quit_event_loop();
     });
+    let (st_m, st_r) = (Rc::clone(state), Rc::clone(state));
+    install_bounds_tracker(
+        ui.window(),
+        move |x, y| {
+            let mut g = st_m.borrow_mut();
+            if Instant::now() >= g.ignore_bounds_until && (g.cfg.x != x || g.cfg.y != y) {
+                g.cfg.x = x;
+                g.cfg.y = y;
+                g.persist_cfg();
+            }
+        },
+        move |w, h| {
+            let mut g = st_r.borrow_mut();
+            let (cw, ch) = (w.clamp(340, 1600), h.clamp(320, 1200));
+            let changed = g.cfg.width != cw || g.cfg.height != ch;
+            if Instant::now() >= g.ignore_bounds_until && changed {
+                g.cfg.width = cw;
+                g.cfg.height = ch;
+                g.persist_cfg();
+            }
+        },
+    );
 }
 
 fn wire_notes_folder_callbacks(ui: &NotesWindow, state: &Rc<RefCell<LocalNotesState>>) {

@@ -4,21 +4,21 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use asrbox_mod_widgets::{
     load_sysmon_config, save_sysmon_config, SysMonitorConfig, MAX_REFRESH_MS, MAX_SYSMON_HEIGHT,
     MAX_SYSMON_WIDTH, MIN_REFRESH_MS, MIN_SYSMON_HEIGHT, MIN_SYSMON_WIDTH,
 };
 use asrbox_platform_api::{AppearanceConfig, SysTelemetry, WidgetMenuVisibility};
-use slint::ComponentHandle;
+use slint::{ComponentHandle, Timer};
 
 use crate::generated::ui::SysMonitorWindow;
 use crate::settings_state::apply_theme_to_window;
 use crate::vibrancy::{
     apply_acrylic_vibrancy, apply_window_opacity, configure_desktop_window, install_bounds_tracker,
-    resize_window_to, set_window_layer, set_window_visible, start_window_drag, start_window_resize,
-    DesktopWindowSpec,
+    move_window_to, resize_window_to, set_window_layer, set_window_visible, start_window_drag,
+    start_window_resize, DesktopWindowSpec,
 };
 use crate::widgets_sysmon_view::sync_sysmon_ui;
 use crate::win_os::{
@@ -37,6 +37,7 @@ pub struct SysMonSlintState {
     pub vis: WidgetMenuVisibility,
     pub dark: bool,
     pub window_shown: bool,
+    pub ignore_bounds_until: Instant,
     pub sampler_active: Arc<AtomicBool>,
     pub sampler_stop: Arc<AtomicBool>,
     pub sampler_ms: Arc<AtomicU32>,
@@ -67,6 +68,7 @@ pub fn create_sysmon_controller(
         vis,
         dark,
         window_shown: false,
+        ignore_bounds_until: Instant::now() + Duration::from_millis(800),
         sampler_active,
         sampler_stop,
         sampler_ms,
@@ -129,13 +131,15 @@ fn apply_sysmon_window_state(state: &SharedSysMon, safe_mode: bool) {
     let show = !safe_mode && s.cfg.visible;
     s.sampler_active.store(show, Ordering::Relaxed);
     if show {
+        s.ignore_bounds_until = Instant::now() + Duration::from_millis(700);
         if !s.window_shown {
+            let (saved_x, saved_y) = (s.cfg.x, s.cfg.y);
             let _ = s.ui.show();
             configure_desktop_window(
                 s.ui.window(),
                 DesktopWindowSpec {
-                    x: s.cfg.x,
-                    y: s.cfg.y,
+                    x: saved_x,
+                    y: saved_y,
                     width: s.cfg.width,
                     height: s.cfg.height,
                     min_w: MIN_SYSMON_WIDTH.min(380),
@@ -146,12 +150,19 @@ fn apply_sysmon_window_state(state: &SharedSysMon, safe_mode: bool) {
                     opacity_percent: s.cfg.opacity_percent,
                 },
             );
+            let weak = s.ui.as_weak();
+            Timer::single_shot(Duration::from_millis(60), move || {
+                if let Some(u) = weak.upgrade() {
+                    move_window_to(u.window(), saved_x, saved_y);
+                }
+            });
             s.window_shown = true;
         } else {
             set_window_visible(s.ui.window(), true);
             set_window_layer(s.ui.window(), s.cfg.layer);
             apply_window_opacity(s.ui.window(), s.cfg.opacity_percent);
             resize_window_to(s.ui.window(), s.cfg.width, s.cfg.height);
+            move_window_to(s.ui.window(), s.cfg.x, s.cfg.y);
         }
         s.sampler_kick.store(true, Ordering::Relaxed);
         sync_sysmon_ui(&s);
@@ -210,15 +221,14 @@ fn spawn_sysmon_sampler(state: &SharedSysMon) {
 
 fn wire_sysmon_callbacks(state: &SharedSysMon) {
     let ui = &state.borrow().ui;
-    let w = ui.as_weak();
+    let (w1, w2) = (ui.as_weak(), ui.as_weak());
     ui.on_drag_window(move || {
-        if let Some(u) = w.upgrade() {
+        if let Some(u) = w1.upgrade() {
             start_window_drag(u.window());
         }
     });
-    let w = ui.as_weak();
     ui.on_resize_window(move |dir| {
-        if let Some(u) = w.upgrade() {
+        if let Some(u) = w2.upgrade() {
             start_window_resize(u.window(), dir);
         }
     });
@@ -227,21 +237,25 @@ fn wire_sysmon_callbacks(state: &SharedSysMon) {
     ui.on_refresh_now(move || kick_sysmon_sample(&st));
     ui.on_open_section_tool(|idx| {
         let (cmd, args) = match idx {
-            1 => ("dxdiag.exe", ""),
+            1 => ("ms-settings:display", ""),
             2 => ("perfmon.exe", "/res"),
             3 => ("ncpa.cpl", ""),
             _ => ("taskmgr.exe", ""),
         };
-        let _ = launch_system_tool(cmd, args);
+        thread::spawn(move || {
+            let _ = launch_system_tool(cmd, args);
+        });
     });
     wire_sysmon_menu_callbacks(state);
-    let st_m = Rc::clone(state);
-    let st_r = Rc::clone(state);
+    let (st_m, st_r) = (Rc::clone(state), Rc::clone(state));
     install_bounds_tracker(
         state.borrow().ui.window(),
         move |x, y| {
             let mut s = st_m.borrow_mut();
-            if s.window_shown && (s.cfg.x != x || s.cfg.y != y) {
+            if s.window_shown
+                && Instant::now() >= s.ignore_bounds_until
+                && (s.cfg.x != x || s.cfg.y != y)
+            {
                 s.cfg.x = x;
                 s.cfg.y = y;
                 let _ = save_sysmon_config(&s.cfg_path, &s.cfg);
@@ -251,7 +265,10 @@ fn wire_sysmon_callbacks(state: &SharedSysMon) {
             let mut s = st_r.borrow_mut();
             let cw = w.clamp(MIN_SYSMON_WIDTH, MAX_SYSMON_WIDTH);
             let ch = h.clamp(MIN_SYSMON_HEIGHT, MAX_SYSMON_HEIGHT);
-            if s.window_shown && (s.cfg.width != cw || s.cfg.height != ch) {
+            if s.window_shown
+                && Instant::now() >= s.ignore_bounds_until
+                && (s.cfg.width != cw || s.cfg.height != ch)
+            {
                 s.cfg.width = cw;
                 s.cfg.height = ch;
                 let _ = save_sysmon_config(&s.cfg_path, &s.cfg);

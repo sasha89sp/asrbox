@@ -35,6 +35,7 @@ pub fn serialize_docks(docks: &[DockConfig], app_version: &str) -> String {
         out.push_str(&format!("alignment={}\n", alignment_to_str(dock.alignment)));
         out.push_str(&format!("edge_margin_px={}\n", dock.edge_margin_px));
         out.push_str(&format!("icon_size_px={}\n", dock.icon_size_px));
+        out.push_str(&format!("icon_frame_px={}\n", dock.icon_frame_px.min(24)));
         out.push_str(&format!("opacity={}\n", dock.opacity_percent));
         out.push_str(&format!("item_spacing_px={}\n", dock.item_spacing_px));
         out.push_str(&format!("padding_px={}\n", dock.padding_px));
@@ -154,6 +155,10 @@ fn apply_field(dock: &mut DockConfig, key: &str, val: &str) -> Result<(), String
         }
         "icon_size_px" => {
             dock.icon_size_px = val.parse().map_err(|e| format!("bad icon_size: {e}"))?;
+        }
+        "icon_frame_px" => {
+            let v: u16 = val.parse().map_err(|e| format!("bad icon_frame: {e}"))?;
+            dock.icon_frame_px = v.min(24);
         }
         "opacity" => {
             if let Ok(pct) = val.trim_end_matches('%').trim().parse::<u8>() {
