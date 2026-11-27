@@ -257,7 +257,7 @@ export component SettingsWindow inherits Window {
     callback save-gh-settings(string, string, string);
 
     public function reset-scroll() {
-        scroll.viewport-y = 0px;
+        scroll.content-y = 0px;
     }
 
     // Outer Concentric Fluent Glass frame (8px matches Windows 11 DWMWCP_ROUND)
@@ -339,7 +339,7 @@ export component SettingsWindow inherits Window {
                             active: root.active-tab == 0;
                             clicked => {
                                 root.active-tab = 0;
-                                scroll.viewport-y = 0px;
+                                scroll.content-y = 0px;
                             }
                         }
                         NavItem {
@@ -349,7 +349,7 @@ export component SettingsWindow inherits Window {
                             active: root.active-tab == 1;
                             clicked => {
                                 root.active-tab = 1;
-                                scroll.viewport-y = 0px;
+                                scroll.content-y = 0px;
                             }
                         }
                         NavItem {
@@ -359,7 +359,7 @@ export component SettingsWindow inherits Window {
                             active: root.active-tab == 2;
                             clicked => {
                                 root.active-tab = 2;
-                                scroll.viewport-y = 0px;
+                                scroll.content-y = 0px;
                             }
                         }
                         NavItem {
@@ -369,7 +369,7 @@ export component SettingsWindow inherits Window {
                             active: root.active-tab == 3;
                             clicked => {
                                 root.active-tab = 3;
-                                scroll.viewport-y = 0px;
+                                scroll.content-y = 0px;
                             }
                         }
 
@@ -385,7 +385,7 @@ export component SettingsWindow inherits Window {
                             active: root.active-tab == 4;
                             clicked => {
                                 root.active-tab = 4;
-                                scroll.viewport-y = 0px;
+                                scroll.content-y = 0px;
                                 root.dispatch("refresh_diag", "");
                             }
                         }
@@ -396,7 +396,7 @@ export component SettingsWindow inherits Window {
                             active: root.active-tab == 5;
                             clicked => {
                                 root.active-tab = 5;
-                                scroll.viewport-y = 0px;
+                                scroll.content-y = 0px;
                             }
                         }
 
@@ -623,12 +623,12 @@ export component SettingsWindow inherits Window {
                                 copy-paths => { root.dispatch("copy_paths", ""); }
                                 open-diagnostics => {
                                     root.active-tab = 4;
-                                    scroll.viewport-y = 0px;
+                                    scroll.content-y = 0px;
                                     root.dispatch("refresh_diag", "");
                                 }
                                 open-changelog => {
                                     root.active-tab = 5;
-                                    scroll.viewport-y = 0px;
+                                    scroll.content-y = 0px;
                                 }
                             }
 
@@ -928,7 +928,7 @@ export component SettingsWindow inherits Window {
                         active: root.active-tab == 0;
                         clicked => {
                             root.active-tab = 0;
-                            scroll.viewport-y = 0px;
+                            scroll.content-y = 0px;
                             root.drawer-open = false;
                         }
                     }
@@ -938,7 +938,7 @@ export component SettingsWindow inherits Window {
                         active: root.active-tab == 1;
                         clicked => {
                             root.active-tab = 1;
-                            scroll.viewport-y = 0px;
+                            scroll.content-y = 0px;
                             root.drawer-open = false;
                         }
                     }
@@ -948,7 +948,7 @@ export component SettingsWindow inherits Window {
                         active: root.active-tab == 2;
                         clicked => {
                             root.active-tab = 2;
-                            scroll.viewport-y = 0px;
+                            scroll.content-y = 0px;
                             root.drawer-open = false;
                         }
                     }
@@ -958,7 +958,7 @@ export component SettingsWindow inherits Window {
                         active: root.active-tab == 3;
                         clicked => {
                             root.active-tab = 3;
-                            scroll.viewport-y = 0px;
+                            scroll.content-y = 0px;
                             root.drawer-open = false;
                         }
                     }
@@ -974,7 +974,7 @@ export component SettingsWindow inherits Window {
                         active: root.active-tab == 4;
                         clicked => {
                             root.active-tab = 4;
-                            scroll.viewport-y = 0px;
+                            scroll.content-y = 0px;
                             root.drawer-open = false;
                             root.dispatch("refresh_diag", "");
                         }
@@ -985,7 +985,7 @@ export component SettingsWindow inherits Window {
                         active: root.active-tab == 5;
                         clicked => {
                             root.active-tab = 5;
-                            scroll.viewport-y = 0px;
+                            scroll.content-y = 0px;
                             root.drawer-open = false;
                         }
                     }
