@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::ffi::c_void;
 use std::mem;
 use std::path::{Path, PathBuf};
@@ -14,10 +15,11 @@ use windows::Win32::Foundation::{
 use windows::Win32::Graphics::Gdi::HBRUSH;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetCursorPos, GetWindowLongPtrW, IsWindowVisible, LoadCursorW, RegisterClassExW,
-    SetWindowLongPtrW, SetWindowPos, ShowWindow, GWL_EXSTYLE, IDC_ARROW, SWP_FRAMECHANGED,
-    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_HIDE, SW_SHOWNOACTIVATE, WNDCLASSEXW,
-    WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
+    CreateWindowExW, GetCursorPos, GetWindowLongPtrW, IsWindowVisible, LoadCursorW,
+    RegisterClassExW, SetWindowLongPtrW, SetWindowPos, ShowWindow, GWL_EXSTYLE, IDC_ARROW,
+    SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_HIDE,
+    SW_SHOWNOACTIVATE, WINDOW_LONG_PTR_INDEX, WNDCLASSEXW, WS_EX_APPWINDOW, WS_EX_NOACTIVATE,
+    WS_EX_TOOLWINDOW, WS_POPUP,
 };
 
 use crate::app_icon::{apply_window_icon, large_app_icon, small_app_icon};
@@ -25,7 +27,45 @@ use crate::dock_menu::show_dock_context_menu;
 use crate::fluent_menu::{fluent_menu_wnd_proc, show_fluent_menu};
 use crate::folder_popup::{folder_popup_wnd_proc, show_folder_popup};
 
+const GWLP_OWNER_INDEX: WINDOW_LONG_PTR_INDEX = WINDOW_LONG_PTR_INDEX(-8);
+
 static POPUP_CLASSES_ONCE: Once = Once::new();
+
+thread_local! {
+    static HIDDEN_OWNER_HWND: Cell<isize> = const { Cell::new(0) };
+}
+
+fn ensure_hidden_owner_hwnd() -> isize {
+    HIDDEN_OWNER_HWND.with(|cell| {
+        let cur = cell.get();
+        if cur != 0 {
+            return cur;
+        }
+        // SAFETY: Creating a never-shown 0x0 WS_EX_TOOLWINDOW owner using built-in STATIC class.
+        let created = unsafe {
+            let hmod = GetModuleHandleW(None).ok();
+            let hinst = hmod.map(HINSTANCE::from);
+            CreateWindowExW(
+                WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+                w!("STATIC"),
+                w!(""),
+                WS_POPUP,
+                0,
+                0,
+                0,
+                0,
+                None,
+                None,
+                hinst,
+                None,
+            )
+            .ok()
+        };
+        let raw = created.map_or(0, |h| h.0 as isize);
+        cell.set(raw);
+        raw
+    })
+}
 
 pub fn apply_window_app_icon(hwnd_raw: isize) {
     if hwnd_raw == 0 {
@@ -42,22 +82,30 @@ pub fn set_window_skip_taskbar(hwnd_raw: isize, skip: bool) {
     let hwnd = HWND(hwnd_raw as *mut c_void);
     let tool_bit = WS_EX_TOOLWINDOW.0 as isize;
     let app_bit = WS_EX_APPWINDOW.0 as isize;
+    let owner_target = if skip { ensure_hidden_owner_hwnd() } else { 0 };
     // SAFETY: `hwnd_raw` is a live top-level Win32 HWND owned by the caller on the UI thread.
     unsafe {
         let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-        let next = if skip {
+        let next_ex = if skip {
             (ex | tool_bit) & !app_bit
         } else {
             (ex & !tool_bit) | app_bit
         };
-        if next == ex {
+        let cur_owner = GetWindowLongPtrW(hwnd, GWLP_OWNER_INDEX);
+        let need_owner = skip && owner_target != 0 && cur_owner != owner_target;
+        if next_ex == ex && !need_owner {
             return;
         }
         let was_visible = IsWindowVisible(hwnd).as_bool();
         if was_visible {
             let _ = ShowWindow(hwnd, SW_HIDE);
         }
-        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, next);
+        if need_owner {
+            SetWindowLongPtrW(hwnd, GWLP_OWNER_INDEX, owner_target);
+        }
+        if next_ex != ex {
+            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, next_ex);
+        }
         let _ = SetWindowPos(
             hwnd,
             None,
@@ -82,6 +130,20 @@ pub fn move_window_phys(hwnd_raw: isize, x: i32, y: i32) {
     // SAFETY: `hwnd_raw` is a valid Win32 HWND; SetWindowPos moves without changing size/z-order.
     unsafe {
         let _ = SetWindowPos(hwnd, None, x, y, 0, 0, flags);
+    }
+}
+
+pub fn set_window_bounds_phys(hwnd_raw: isize, x: i32, y: i32, width: i32, height: i32) {
+    if hwnd_raw == 0 {
+        return;
+    }
+    let hwnd = HWND(hwnd_raw as *mut c_void);
+    let flags = SWP_NOZORDER | SWP_NOACTIVATE;
+    let w = width.max(1);
+    let h = height.max(1);
+    // SAFETY: `hwnd_raw` is a valid Win32 HWND; SetWindowPos applies exact physical rect.
+    unsafe {
+        let _ = SetWindowPos(hwnd, None, x, y, w, h, flags);
     }
 }
 

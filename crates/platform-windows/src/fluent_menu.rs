@@ -9,7 +9,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, VK_ESCAPE};
 use windows::Win32::UI::WindowsAndMessaging::{
     DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW, KillTimer, SetTimer, ShowWindow,
     TranslateMessage, MSG, SW_SHOW, WA_INACTIVE, WM_ACTIVATE, WM_CANCELMODE, WM_KEYDOWN,
-    WM_KILLFOCUS, WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONUP, WM_TIMER,
+    WM_KILLFOCUS, WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_TIMER,
 };
 
 use crate::fluent_menu_hook::{
@@ -181,7 +181,7 @@ pub(crate) unsafe extern "system" fn fluent_menu_wnd_proc(
             handle_mouse_leave(hwnd);
             LRESULT(0)
         }
-        WM_LBUTTONUP | WM_RBUTTONUP => {
+        WM_LBUTTONUP => {
             handle_mouse_click(hwnd, lparam_point(lparam));
             LRESULT(0)
         }

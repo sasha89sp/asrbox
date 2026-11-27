@@ -78,7 +78,7 @@ component DockTile inherits Rectangle {
         ? (root.icon-size + root.icon-frame-px * 2 + 88px)
         : (root.icon-size + root.icon-frame-px * 2);
     height: root.label-mode == 1
-        ? (root.icon-size + root.icon-frame-px * 2 + 14px)
+        ? (root.icon-size + root.icon-frame-px * 2 + 18px)
         : (root.icon-size + root.icon-frame-px * 2);
     border-radius: Math.clamp(root.icon-size * 0.22, 8px, 14px);
     background: ta.pressed
@@ -106,7 +106,7 @@ component DockTile inherits Rectangle {
             }
         }
         pointer-event(ev) => {
-            if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
+            if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.up) {
                 root.right-clicked(root.item.id, root.item.is-separator);
             } else if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
                 if (root.launch-anim) {
@@ -223,9 +223,13 @@ export component DockWindow inherits Window {
     title: "asrbox — Док";
     no-frame: true;
     background: transparent;
-    preferred-width: 480px;
-    preferred-height: 76px;
+    width: root.dock-width;
+    height: root.dock-height;
+    preferred-width: root.dock-width;
+    preferred-height: root.dock-height;
 
+    in property <length> dock-width: 480px;
+    in property <length> dock-height: 76px;
     in property <string> dock-name: "Док 1";
     in property <bool> is-horizontal: true;
     in property <length> icon-size: 44px;
@@ -279,7 +283,7 @@ export component DockWindow inherits Window {
             pointer-event(ev) => {
                 if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down && !root.locked) {
                     root.drag-window();
-                } else if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
+                } else if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.up) {
                     root.open-context-menu(-1, false);
                 }
             }
@@ -313,7 +317,7 @@ export component DockWindow inherits Window {
                     pointer-event(ev) => {
                         if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
                             root.drag-window();
-                        } else if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
+                        } else if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.up) {
                             root.open-context-menu(-1, false);
                         }
                     }
@@ -323,7 +327,7 @@ export component DockWindow inherits Window {
             for it in root.items : Rectangle {
                 width: it.is-separator ? 10px
                     : (root.label-mode == 2 ? (root.tile-span + 88px) : root.tile-span);
-                height: root.label-mode == 1 ? (root.tile-span + 14px) : root.tile-span;
+                height: root.label-mode == 1 ? (root.tile-span + 18px) : root.tile-span;
                 background: transparent;
 
                 if (it.is-separator) : Rectangle {
@@ -336,7 +340,7 @@ export component DockWindow inherits Window {
 
                     TouchArea {
                         pointer-event(ev) => {
-                            if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
+                            if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.up) {
                                 root.open-context-menu(it.id, true);
                             }
                         }
@@ -384,7 +388,7 @@ export component DockWindow inherits Window {
                     mouse-cursor: pointer;
                     clicked => { root.open-settings(); }
                     pointer-event(ev) => {
-                        if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
+                        if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.up) {
                             root.open-context-menu(-1, false);
                         }
                     }
@@ -420,7 +424,7 @@ export component DockWindow inherits Window {
                     pointer-event(ev) => {
                         if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
                             root.drag-window();
-                        } else if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
+                        } else if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.up) {
                             root.open-context-menu(-1, false);
                         }
                     }
@@ -430,7 +434,7 @@ export component DockWindow inherits Window {
             for it in root.items : Rectangle {
                 width: root.label-mode == 2 ? (root.tile-span + 88px) : root.tile-span;
                 height: it.is-separator ? 10px
-                    : (root.label-mode == 1 ? (root.tile-span + 14px) : root.tile-span);
+                    : (root.label-mode == 1 ? (root.tile-span + 18px) : root.tile-span);
                 background: transparent;
 
                 if (it.is-separator) : Rectangle {
@@ -443,7 +447,7 @@ export component DockWindow inherits Window {
 
                     TouchArea {
                         pointer-event(ev) => {
-                            if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
+                            if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.up) {
                                 root.open-context-menu(it.id, true);
                             }
                         }
@@ -491,7 +495,7 @@ export component DockWindow inherits Window {
                     mouse-cursor: pointer;
                     clicked => { root.open-settings(); }
                     pointer-event(ev) => {
-                        if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
+                        if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.up) {
                             root.open-context-menu(-1, false);
                         }
                     }

@@ -22,7 +22,7 @@ use crate::dock_view::{
 use crate::generated::ui::DockWindow;
 use crate::settings_state::apply_theme_to_window;
 use crate::vibrancy::{
-    apply_acrylic_vibrancy, apply_window_opacity, configure_desktop_window,
+    apply_acrylic_vibrancy, apply_window_opacity, configure_desktop_window, enforce_skip_taskbar,
     install_dock_window_hooks, move_window_to, resize_window_to, select_winit_backend,
     set_window_layer, set_window_visible, start_window_drag, window_hwnd_raw, DesktopWindowSpec,
 };
@@ -237,7 +237,9 @@ fn sync_single_dock(
         let weak = win.as_weak();
         Timer::single_shot(Duration::from_millis(60), move || {
             if let Some(u) = weak.upgrade() {
+                resize_window_to(u.window(), width, height);
                 move_window_to(u.window(), x, y);
+                enforce_skip_taskbar(u.window());
             }
         });
         s.windows.insert(cfg.id, win);

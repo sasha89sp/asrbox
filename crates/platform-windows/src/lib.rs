@@ -105,8 +105,9 @@ pub use job::{is_process_alive, JobObject};
 pub use shell::pick_icon_file;
 #[cfg(windows)]
 pub use slint_host::{
-    apply_window_app_icon, cursor_screen_pos, move_window_phys, set_window_skip_taskbar,
-    show_dock_native_menu, show_folder_native_popup, show_native_fluent_menu,
+    apply_window_app_icon, cursor_screen_pos, move_window_phys, set_window_bounds_phys,
+    set_window_skip_taskbar, show_dock_native_menu, show_folder_native_popup,
+    show_native_fluent_menu,
 };
 #[cfg(windows)]
 pub use sys_telemetry::SysTelemetryCollector;

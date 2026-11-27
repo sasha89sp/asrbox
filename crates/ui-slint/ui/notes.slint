@@ -104,7 +104,7 @@ export component NotesWindow inherits Window {
             // Right-click anywhere on empty space opens native Fluent menu
             TouchArea {
                 pointer-event(ev) => {
-                    if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
+                    if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.up) {
                         root.open-context-menu();
                     }
                 }
@@ -229,7 +229,7 @@ export component NotesWindow inherits Window {
                                         f-ta := TouchArea {
                                             mouse-cursor: pointer;
                                             pointer-event(ev) => {
-                                                if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
+                                                if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.up) {
                                                     root.open-context-menu();
                                                 }
                                             }
@@ -354,7 +354,7 @@ export component NotesWindow inherits Window {
                                         n-ta := TouchArea {
                                             mouse-cursor: pointer;
                                             pointer-event(ev) => {
-                                                if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
+                                                if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.up) {
                                                     root.open-context-menu();
                                                 }
                                             }

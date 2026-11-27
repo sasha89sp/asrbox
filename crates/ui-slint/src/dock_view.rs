@@ -5,7 +5,7 @@ use asrbox_mod_dock::{DockAlignment, DockConfig, DockEdge, DockItem, DockLabelMo
 use asrbox_platform_api::{
     DockMenuAction, DockMenuState, DockMenuVisibility, PixelRect, WidgetLayer,
 };
-use slint::{ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::dock_icons::{is_folder_target, resolve_dock_target, DockIconCache};
 use crate::generated::ui::{DockWindow, SlintDockIconRow};
@@ -23,7 +23,7 @@ fn compute_dock_size(cfg: &DockConfig) -> (u32, u32) {
         icon + frame2
     };
     let tile_h = if lm == 1 {
-        icon + frame2 + 14
+        icon + frame2 + 18
     } else {
         icon + frame2
     };
@@ -51,11 +51,12 @@ fn compute_dock_size(cfg: &DockConfig) -> (u32, u32) {
     if count > 1 {
         main_len += gap * (count - 1);
     }
-    let cross_len = (if horiz { tile_h } else { tile_w }) + pad * 2;
+    let main_total = main_len + 4;
+    let cross_total = (if horiz { tile_h } else { tile_w }) + pad * 2 + 4;
     if horiz {
-        (main_len.max(88), cross_len.max(56))
+        (main_total.max(88), cross_total.max(56))
     } else {
-        (cross_len.max(56), main_len.max(88))
+        (cross_total.max(56), main_total.max(88))
     }
 }
 
@@ -101,6 +102,11 @@ pub fn sync_dock_window(
     icons: &mut DockIconCache,
     can_remove: bool,
 ) {
+    let (dock_w, dock_h) = compute_dock_size(cfg);
+    ui.set_dock_width(dock_w as f32);
+    ui.set_dock_height(dock_h as f32);
+    ui.window()
+        .set_size(slint::LogicalSize::new(dock_w as f32, dock_h as f32));
     ui.set_dock_name(SharedString::from(cfg.name.as_str()));
     ui.set_is_horizontal(cfg.edge.is_horizontal());
     ui.set_icon_size(f32::from(cfg.icon_size_px.clamp(24, 128)));

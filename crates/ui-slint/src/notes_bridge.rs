@@ -18,9 +18,10 @@ use crate::notes_view::{
 };
 use crate::settings_state::apply_theme_to_window;
 use crate::vibrancy::{
-    apply_window_opacity, apply_window_vibrancy, install_bounds_tracker, minimize_window,
-    restore_or_center_window, select_winit_backend, set_window_layer, start_window_drag,
-    start_window_resize, toggle_maximize_window, window_hwnd_raw, DesktopWindowSpec,
+    apply_acrylic_vibrancy, apply_window_opacity, enforce_skip_taskbar, install_bounds_tracker,
+    minimize_window, restore_or_center_window, select_winit_backend, set_window_layer,
+    start_window_drag, start_window_resize, toggle_maximize_window, window_hwnd_raw,
+    DesktopWindowSpec,
 };
 use crate::win_os::{primary_work_area, show_native_fluent_menu};
 
@@ -79,6 +80,12 @@ pub fn run_notes_window(paths: AppPaths, app_version: &str) -> Result<(), String
                 opacity_percent: g.cfg.opacity_percent,
             };
             restore_or_center_window(win.window(), wa, spec, true);
+            let weak_tb = win.as_weak();
+            Timer::single_shot(Duration::from_millis(90), move || {
+                if let Some(u) = weak_tb.upgrade() {
+                    enforce_skip_taskbar(u.window());
+                }
+            });
         }
     });
 
@@ -422,7 +429,8 @@ fn refresh_notes_from_disk(weak: &Weak<NotesWindow>) {
         let dark = apply_theme_to_window(&ui, app);
         if dark != g.last_dark {
             g.last_dark = dark;
-            apply_window_vibrancy(ui.window(), dark);
+            apply_acrylic_vibrancy(ui.window(), dark);
+            enforce_skip_taskbar(ui.window());
         }
         if let Ok(fresh) = load_notes_config(&g.paths.notes_cfg) {
             g.cfg.show_folders_pane = fresh.show_folders_pane;

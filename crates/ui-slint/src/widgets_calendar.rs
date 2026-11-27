@@ -19,9 +19,9 @@ use slint::{Color, ComponentHandle, ModelRc, SharedString, Timer, TimerMode, Vec
 use crate::generated::ui::{CalendarWindow, SlintCalEventRow};
 use crate::settings_state::apply_theme_to_window;
 use crate::vibrancy::{
-    apply_acrylic_vibrancy, apply_window_opacity, configure_desktop_window, install_bounds_tracker,
-    move_window_to, resize_window_to, set_window_layer, set_window_visible, start_window_drag,
-    start_window_resize, DesktopWindowSpec,
+    apply_acrylic_vibrancy, apply_window_opacity, configure_desktop_window, enforce_skip_taskbar,
+    install_bounds_tracker, move_window_to, resize_window_to, set_window_layer, set_window_visible,
+    start_window_drag, start_window_resize, DesktopWindowSpec,
 };
 use crate::win_os::{
     emit_config_changed, emit_open_settings, emit_worker_log, http_get, idx_to_layer, layer_to_idx,
@@ -189,6 +189,7 @@ fn apply_calendar_window_state(state: &SharedCalendar, safe_mode: bool, trigger_
                 Timer::single_shot(Duration::from_millis(60), move || {
                     if let Some(u) = weak.upgrade() {
                         move_window_to(u.window(), saved_x, saved_y);
+                        enforce_skip_taskbar(u.window());
                     }
                 });
                 s.window_shown = true;

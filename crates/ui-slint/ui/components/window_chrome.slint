@@ -330,7 +330,7 @@ export component FramelessTitleBar inherits Rectangle {
         pointer-event(ev) => {
             if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
                 root.drag-window();
-            } else if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
+            } else if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.up) {
                 root.right-clicked();
             }
         }

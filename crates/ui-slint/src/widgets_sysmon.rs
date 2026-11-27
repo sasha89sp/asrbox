@@ -16,9 +16,9 @@ use slint::{ComponentHandle, Timer};
 use crate::generated::ui::SysMonitorWindow;
 use crate::settings_state::apply_theme_to_window;
 use crate::vibrancy::{
-    apply_acrylic_vibrancy, apply_window_opacity, configure_desktop_window, install_bounds_tracker,
-    move_window_to, resize_window_to, set_window_layer, set_window_visible, start_window_drag,
-    start_window_resize, DesktopWindowSpec,
+    apply_acrylic_vibrancy, apply_window_opacity, configure_desktop_window, enforce_skip_taskbar,
+    install_bounds_tracker, move_window_to, resize_window_to, set_window_layer, set_window_visible,
+    start_window_drag, start_window_resize, DesktopWindowSpec,
 };
 use crate::widgets_sysmon_view::sync_sysmon_ui;
 use crate::win_os::{
@@ -154,6 +154,7 @@ fn apply_sysmon_window_state(state: &SharedSysMon, safe_mode: bool) {
             Timer::single_shot(Duration::from_millis(60), move || {
                 if let Some(u) = weak.upgrade() {
                     move_window_to(u.window(), saved_x, saved_y);
+                    enforce_skip_taskbar(u.window());
                 }
             });
             s.window_shown = true;
