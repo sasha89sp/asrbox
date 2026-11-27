@@ -37,6 +37,7 @@ export component SettingsOverlayView inherits VerticalLayout {
     callback apply-size-preset(int, int);
     callback open-overlay-cfg();
 
+    min-width: 0px;
     spacing: 12px;
 
     AccordionCard {
@@ -57,11 +58,13 @@ export component SettingsOverlayView inherits VerticalLayout {
 
         SettingRow {
             title: Theme.is-ru ? "Показывать только во время игр" : "Show Only During Games";
+            inline-control: true;
             GlassSwitch { checked: root.auto-games-only; toggled(v) => { root.set-auto-games-only(v); } }
         }
 
         SettingRow {
             title: Theme.is-ru ? "FSO / Topmost поверх полноэкранных игр" : "FSO / Topmost Over Fullscreen";
+            inline-control: true;
             GlassSwitch { checked: root.force-topmost; toggled(v) => { root.set-force-topmost(v); } }
         }
 
@@ -70,6 +73,7 @@ export component SettingsOverlayView inherits VerticalLayout {
             subtitle: Theme.is-ru
                 ? "Автоматически выключается при закрытии Настроек или старте игры"
                 : "Auto-disables when Settings close or game starts";
+            inline-control: true;
             GlassSwitch { checked: root.setup-mode; toggled(v) => { root.set-setup-mode(v); } }
         }
 
@@ -97,9 +101,9 @@ export component SettingsOverlayView inherits VerticalLayout {
 
         SettingRow {
             title: Theme.is-ru ? "Быстрые пресеты размера" : "Quick Size Presets";
-            GlassButton { label: "Компакт"; compact: true; clicked => { root.apply-size-preset(280, 160); } }
-            GlassButton { label: "Стандарт"; compact: true; clicked => { root.apply-size-preset(340, 196); } }
-            GlassButton { label: "Широкий"; compact: true; clicked => { root.apply-size-preset(420, 224); } }
+            GlassButton { horizontal-stretch: 1; label: "Компакт"; compact: true; clicked => { root.apply-size-preset(280, 160); } }
+            GlassButton { horizontal-stretch: 1; label: "Стандарт"; compact: true; clicked => { root.apply-size-preset(340, 196); } }
+            GlassButton { horizontal-stretch: 1; label: "Широкий"; compact: true; clicked => { root.apply-size-preset(420, 224); } }
         }
 
         SettingRow {

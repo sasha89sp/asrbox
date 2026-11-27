@@ -22,6 +22,27 @@ export component VectorIconClose inherits Rectangle {
     }
 }
 
+export component VectorIconMenu inherits Rectangle {
+    in property <length> size: 15px;
+    in property <color> icon-color: Theme.text-primary;
+    width: root.size;
+    height: root.size;
+    background: transparent;
+
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: 16;
+        viewbox-height: 16;
+        stroke: root.icon-color;
+        stroke-width: 1.6px;
+        fill: transparent;
+        commands: "M 2.5 4 L 13.5 4 M 2.5 8 L 13.5 8 M 2.5 12 L 13.5 12";
+    }
+}
+
 export component VectorIconChevron inherits Rectangle {
     in property <length> size: 12px;
     in property <bool> up: false;

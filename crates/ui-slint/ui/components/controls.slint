@@ -42,6 +42,7 @@ export component GlassButton inherits Rectangle {
     in property <bool> compact: false;
     callback clicked();
 
+    min-width: 0px;
     min-height: root.compact ? 26px : 30px;
     border-radius: 6px;
     background:
@@ -59,13 +60,14 @@ export component GlassButton inherits Rectangle {
     animate background { duration: 130ms; easing: ease-out; }
 
     HorizontalLayout {
-        padding-left: root.compact ? 9px : 12px;
-        padding-right: root.compact ? 9px : 12px;
+        padding-left: root.compact ? 8px : 12px;
+        padding-right: root.compact ? 8px : 12px;
         padding-top: root.compact ? 3px : 5px;
         padding-bottom: root.compact ? 3px : 5px;
         alignment: center;
 
         Text {
+            min-width: 0px;
             text: root.label;
             color:
                 root.variant == "primary" ? Theme.accent-fg :
@@ -75,6 +77,7 @@ export component GlassButton inherits Rectangle {
             font-weight: root.variant == "primary" ? 600 : 500;
             vertical-alignment: center;
             horizontal-alignment: center;
+            overflow: elide;
         }
     }
 
@@ -92,6 +95,7 @@ export component GlassInput inherits Rectangle {
     callback edited(string);
     callback accepted(string);
 
+    min-width: 0px;
     height: 30px;
     border-radius: 6px;
     background: Theme.input-bg;
@@ -178,10 +182,14 @@ export component GlassSlider inherits HorizontalLayout {
     }
 
     spacing: 10px;
-    alignment: end;
+    alignment: stretch;
+    horizontal-stretch: 1;
+    min-width: 140px;
 
     track-box := Rectangle {
-        width: 150px;
+        horizontal-stretch: 1;
+        min-width: 78px;
+        preferred-width: 150px;
         height: 26px;
         background: transparent;
 
@@ -280,7 +288,9 @@ export component CustomComboBox inherits Rectangle {
     in property <string> current-value: "";
     callback selected(int);
 
-    min-width: 180px;
+    min-width: 120px;
+    preferred-width: 184px;
+    horizontal-stretch: 1;
     height: 30px;
     border-radius: 6px;
     background: ta.has-hover ? Theme.hover-bg : Theme.input-bg;
@@ -297,6 +307,7 @@ export component CustomComboBox inherits Rectangle {
 
         Text {
             horizontal-stretch: 1;
+            min-width: 0px;
             text: root.current-value;
             color: Theme.text-primary;
             font-size: 12px;
@@ -323,7 +334,7 @@ export component CustomComboBox inherits Rectangle {
     popup := PopupWindow {
         x: 0px;
         y: root.height + 4px;
-        width: Math.max(root.width, 190px);
+        width: Math.max(root.width, 160px);
         close-policy: PopupClosePolicy.close-on-click-outside;
 
         Rectangle {
@@ -391,23 +402,42 @@ export component SettingRow inherits Rectangle {
     in property <string> badge-icon: "";
     in property <color> badge-bg: transparent;
     in property <bool> show-divider: true;
+    in property <bool> inline-control: false;
 
-    min-height: root.subtitle == "" ? 44px : 54px;
+    private property <bool> has-ctrl: ctrl.preferred-height > 0px;
+    private property <bool> stacked: !root.inline-control && root.has-ctrl && root.width < 460px;
+    private property <length> pad-x: root.width < 400px ? 12px : 16px;
+    private property <length> inner-w: Math.max(0px, root.width - root.pad-x * 2);
+    private property <length> ctrl-inline-w: root.has-ctrl
+        ? Math.min(ctrl.preferred-width, Math.max(0px, root.inner-w * 0.54))
+        : 0px;
+
+    min-width: 0px;
+    preferred-height: root.stacked
+        ? (hdr.preferred-height + ctrl.preferred-height + 24px)
+        : Math.max(
+            root.subtitle == "" ? 44px : 54px,
+            Math.max(hdr.preferred-height, ctrl.preferred-height) + 16px
+        );
+    min-height: self.preferred-height;
     background: transparent;
 
     if (root.show-divider) : Rectangle {
+        x: 0px;
         y: 0px;
         width: 100%;
         height: 1px;
         background: Theme.divider-color;
     }
 
-    HorizontalLayout {
-        padding-left: 16px;
-        padding-right: 16px;
-        padding-top: 8px;
-        padding-bottom: 8px;
-        spacing: 12px;
+    hdr := HorizontalLayout {
+        x: root.pad-x;
+        y: root.stacked ? 8px : Math.max(8px, (root.height - self.height) / 2);
+        width: root.stacked
+            ? root.inner-w
+            : Math.max(0px, root.inner-w - (root.has-ctrl ? (root.ctrl-inline-w + 12px) : 0px));
+        height: self.preferred-height;
+        spacing: 10px;
         alignment: stretch;
 
         if (root.badge-icon != "") : VerticalLayout {
@@ -433,10 +463,12 @@ export component SettingRow inherits Rectangle {
 
         VerticalLayout {
             horizontal-stretch: 1;
+            min-width: 0px;
             alignment: center;
             spacing: 2px;
 
             Text {
+                min-width: 0px;
                 text: root.title;
                 color: Theme.text-primary;
                 font-size: 13px;
@@ -445,18 +477,24 @@ export component SettingRow inherits Rectangle {
             }
 
             if (root.subtitle != "") : Text {
+                min-width: 0px;
                 text: root.subtitle;
                 color: Theme.text-secondary;
                 font-size: 11.5px;
                 wrap: word-wrap;
             }
         }
+    }
 
-        HorizontalLayout {
-            spacing: 8px;
-            alignment: end;
-            @children
-        }
+    ctrl := HorizontalLayout {
+        visible: root.has-ctrl;
+        spacing: 8px;
+        alignment: root.stacked ? stretch : end;
+        width: root.stacked ? root.inner-w : root.ctrl-inline-w;
+        height: self.preferred-height;
+        x: root.stacked ? root.pad-x : Math.max(root.pad-x, root.width - root.pad-x - self.width);
+        y: root.stacked ? (14px + hdr.preferred-height) : Math.max(8px, (root.height - self.height) / 2);
+        @children
     }
 }
 
@@ -468,6 +506,7 @@ export component AccordionCard inherits Rectangle {
     in property <bool> accent-top: false;
     callback toggled();
 
+    min-width: 0px;
     border-radius: 10px;
     background: Theme.card-bg;
     border-width: (root.highlighted || root.accent-top) ? 1.5px : 1px;
@@ -504,13 +543,14 @@ export component AccordionCard inherits Rectangle {
             animate background { duration: 120ms; }
 
             HorizontalLayout {
-                padding-left: 16px;
-                padding-right: 14px;
-                spacing: 10px;
+                padding-left: root.width < 400px ? 12px : 16px;
+                padding-right: root.width < 400px ? 10px : 14px;
+                spacing: 8px;
                 alignment: stretch;
 
                 Text {
                     horizontal-stretch: 1;
+                    min-width: 0px;
                     text: root.title;
                     color: Theme.text-primary;
                     font-size: 14px;
@@ -519,11 +559,14 @@ export component AccordionCard inherits Rectangle {
                     overflow: elide;
                 }
 
-                if (root.summary != "") : Text {
+                if (root.summary != "" && root.width >= 340px) : Text {
+                    max-width: root.width * 0.34;
+                    min-width: 0px;
                     text: root.summary;
                     color: Theme.text-secondary;
                     font-size: 11.5px;
                     vertical-alignment: center;
+                    overflow: elide;
                 }
 
                 VerticalLayout {
@@ -565,9 +608,10 @@ export component ThemePreviewCard inherits VerticalLayout {
 
     spacing: 8px;
     horizontal-stretch: 1;
+    min-width: 0px;
 
     Rectangle {
-        height: 112px;
+        height: 104px;
         border-radius: 10px;
         background: root.is-dark-card ? #181B20 : #F1F5F9;
         border-width: root.selected ? 2px : 1px;
@@ -576,7 +620,7 @@ export component ThemePreviewCard inherits VerticalLayout {
         drop-shadow-color: root.selected ? Theme.accent-glow : transparent;
         clip: true;
 
-        // Mini window mockup inside card (mirrors target screenshot)
+        // Mini window mockup inside card (fluid percentages for any width)
         VerticalLayout {
             padding: 8px;
             spacing: 6px;
@@ -594,7 +638,7 @@ export component ThemePreviewCard inherits VerticalLayout {
                 VerticalLayout {
                     alignment: center;
                     Rectangle {
-                        width: 44px;
+                        width: 36px;
                         height: 6px;
                         border-radius: 3px;
                         background: root.is-dark-card ? rgba(241, 245, 249, 0.30) : rgba(15, 23, 42, 0.25);
@@ -618,7 +662,7 @@ export component ThemePreviewCard inherits VerticalLayout {
                 spacing: 6px;
 
                 Rectangle {
-                    width: 46px;
+                    width: 28%;
                     border-radius: 5px;
                     background: root.is-dark-card ? rgba(255, 255, 255, 0.05) : rgba(15, 23, 42, 0.06);
 
@@ -641,9 +685,9 @@ export component ThemePreviewCard inherits VerticalLayout {
                     VerticalLayout {
                         padding: 6px;
                         spacing: 5px;
-                        Rectangle { width: 52px; height: 7px; border-radius: 3px; background: root.is-dark-card ? rgba(241, 245, 249, 0.35) : rgba(15, 23, 42, 0.30); }
+                        Rectangle { width: 55%; height: 7px; border-radius: 3px; background: root.is-dark-card ? rgba(241, 245, 249, 0.35) : rgba(15, 23, 42, 0.30); }
                         Rectangle { height: 5px; border-radius: 2px; background: root.is-dark-card ? rgba(255, 255, 255, 0.12) : rgba(15, 23, 42, 0.10); }
-                        Rectangle { width: 82px; height: 5px; border-radius: 2px; background: root.is-dark-card ? rgba(255, 255, 255, 0.10) : rgba(15, 23, 42, 0.08); }
+                        Rectangle { width: 78%; height: 5px; border-radius: 2px; background: root.is-dark-card ? rgba(255, 255, 255, 0.10) : rgba(15, 23, 42, 0.08); }
                         Rectangle { vertical-stretch: 1; background: transparent; }
                         HorizontalLayout {
                             alignment: end;

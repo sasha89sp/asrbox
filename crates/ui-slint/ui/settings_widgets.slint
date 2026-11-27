@@ -109,10 +109,11 @@ export component SettingsWidgetsView inherits VerticalLayout {
     callback toggle-notes-pane(int);
     callback open-notes-folder();
 
+    min-width: 0px;
     spacing: 12px;
 
-    // 4-widget segmented selector
-    HorizontalLayout {
+    // 4-widget segmented selector (1x4 >= 380px, 2x2 on narrow mobile)
+    if (root.width >= 380px) : HorizontalLayout {
         height: 34px;
         vertical-stretch: 0;
         spacing: 6px;
@@ -147,6 +148,50 @@ export component SettingsWidgetsView inherits VerticalLayout {
             active: root.selected-widget == 3;
             compact: true;
             clicked => { root.selected-widget = 3; root.select-widget(3); }
+        }
+    }
+
+    if (root.width < 380px) : VerticalLayout {
+        spacing: 6px;
+        HorizontalLayout {
+            height: 32px;
+            spacing: 6px;
+            GlassButton {
+                horizontal-stretch: 1;
+                height: 32px;
+                label: Theme.is-ru ? "Календарь" : "Calendar";
+                active: root.selected-widget == 0;
+                compact: true;
+                clicked => { root.selected-widget = 0; root.select-widget(0); }
+            }
+            GlassButton {
+                horizontal-stretch: 1;
+                height: 32px;
+                label: Theme.is-ru ? "Монитор" : "SysMonitor";
+                active: root.selected-widget == 1;
+                compact: true;
+                clicked => { root.selected-widget = 1; root.select-widget(1); }
+            }
+        }
+        HorizontalLayout {
+            height: 32px;
+            spacing: 6px;
+            GlassButton {
+                horizontal-stretch: 1;
+                height: 32px;
+                label: Theme.is-ru ? "Погода" : "Weather";
+                active: root.selected-widget == 2;
+                compact: true;
+                clicked => { root.selected-widget = 2; root.select-widget(2); }
+            }
+            GlassButton {
+                horizontal-stretch: 1;
+                height: 32px;
+                label: Theme.is-ru ? "Заметки" : "Notes";
+                active: root.selected-widget == 3;
+                compact: true;
+                clicked => { root.selected-widget = 3; root.select-widget(3); }
+            }
         }
     }
 
@@ -206,7 +251,9 @@ export component SettingsWidgetsView inherits VerticalLayout {
         SettingRow {
             title: Theme.is-ru ? "Добавить календарь (.ics URL)" : "Add Calendar (.ics URL)";
             GlassInput {
-                width: 220px;
+                horizontal-stretch: 1;
+                min-width: 120px;
+                preferred-width: 220px;
                 text <=> root.cal-url-input;
                 placeholder: "https://.../basic.ics";
             }
@@ -222,11 +269,13 @@ export component SettingsWidgetsView inherits VerticalLayout {
         }
         if (root.cal-commented-hint) : SettingRow {
             title: Theme.is-ru ? "В widgets.cfg есть закомментированные календари (#)" : "Commented calendars found in widgets.cfg";
+            inline-control: true;
             GlassButton { label: Theme.is-ru ? "Включить" : "Enable"; variant: "primary"; compact: true; clicked => { root.uncomment-cal(); } }
         }
         for src in root.cal-sources : SettingRow {
             title: src.id;
             subtitle: src.url;
+            inline-control: true;
             GlassButton { label: "×"; variant: "danger"; compact: true; clicked => { root.remove-cal-source(src.index); } }
         }
     }
@@ -294,7 +343,9 @@ export component SettingsWidgetsView inherits VerticalLayout {
             title: Theme.is-ru ? "Город" : "City";
             subtitle: Theme.is-ru ? "Геокодируется автоматически (например, Москва, Казань)" : "Auto-geocoded city name";
             GlassInput {
-                width: 170px;
+                horizontal-stretch: 1;
+                min-width: 110px;
+                preferred-width: 170px;
                 text <=> root.weather-city;
                 placeholder: "Москва";
                 accepted(val) => { root.apply-weather-city(val); }
@@ -331,7 +382,9 @@ export component SettingsWidgetsView inherits VerticalLayout {
             title: "X-Yandex-Weather-Key";
             subtitle: root.weather-has-yandex-key ? "Ключ сохранён в Windows Credential Manager" : "Введите API-ключ Яндекс.Погоды";
             GlassInput {
-                width: 160px;
+                horizontal-stretch: 1;
+                min-width: 100px;
+                preferred-width: 160px;
                 text <=> root.weather-yandex-key-input;
                 placeholder: "API Key";
                 is-password: true;
@@ -408,9 +461,9 @@ export component SettingsWidgetsView inherits VerticalLayout {
         }
         SettingRow {
             title: Theme.is-ru ? "Видимые колонки (минимум 1)" : "Visible Panes (min 1)";
-            GlassButton { label: Theme.is-ru ? "Папки" : "Folders"; active: root.notes-pane-folders; compact: true; clicked => { root.toggle-notes-pane(0); } }
-            GlassButton { label: Theme.is-ru ? "Список" : "List"; active: root.notes-pane-list; compact: true; clicked => { root.toggle-notes-pane(1); } }
-            GlassButton { label: Theme.is-ru ? "Редактор" : "Editor"; active: root.notes-pane-editor; compact: true; clicked => { root.toggle-notes-pane(2); } }
+            GlassButton { horizontal-stretch: 1; label: Theme.is-ru ? "Папки" : "Folders"; active: root.notes-pane-folders; compact: true; clicked => { root.toggle-notes-pane(0); } }
+            GlassButton { horizontal-stretch: 1; label: Theme.is-ru ? "Список" : "List"; active: root.notes-pane-list; compact: true; clicked => { root.toggle-notes-pane(1); } }
+            GlassButton { horizontal-stretch: 1; label: Theme.is-ru ? "Редактор" : "Editor"; active: root.notes-pane-editor; compact: true; clicked => { root.toggle-notes-pane(2); } }
         }
     }
 }

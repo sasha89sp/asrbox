@@ -32,8 +32,8 @@
 ## Файлы Slint (`ui/`)
 
 - `ui/app.slint`, `ui/theme.slint` — токены Concentric Fluent Glass (Dark/Light, 5 акцентов) и модели.
-- `ui/components/{asr_logo,window_chrome,controls}.slint` — векторные иконки (`VectorIcon*`), полноширинная перетаскиваемая шапка с красной `✕`, `WindowResizeHandles`, `GlassSlider` и `AccordionCard` (с `accent-top`).
-- `ui/settings*.slint` (`settings`, `settings_general`, `settings_dock`, `settings_widgets`, `settings_overlay`, `settings_tools`) — окно Настроек (6 разделов вкл. «Диагностика и логи» и «История версий»).
+- `ui/components/{asr_logo,window_chrome,controls}.slint` — векторные иконки (`VectorIcon*`, вкл. `VectorIconMenu`), полноширинная перетаскиваемая шапка с красной `✕`, `WindowResizeHandles`, резиновые `GlassSlider`/`CustomComboBox`/`SettingRow` (контейнерный перенос `< 460 px`) и `AccordionCard`.
+- `ui/settings*.slint` (`settings`, `settings_general`, `settings_dock`, `settings_widgets`, `settings_overlay`, `settings_tools`) — адаптивное окно Настроек (от `360 px`: Desktop `210 px` / Icon Rail `60 px` / Mobile Hamburger Drawer `☰`, 6 разделов).
 - `ui/notes.slint` — 3-колоночное окно Заметок и задач с нативным ПКМ-меню.
 - `ui/widget_{weather,sysmon,calendar}.slint` — 3 десктопных виджета с 8-сторонним ресайзом и вызовом нативного Win32 Fluent ПКМ-меню по отпусканию ПКМ.
 - `ui/dock.slint` — стеклянная док-панель с постоянными настраиваемыми рамками плиток (`icon-frame-px`), стеклянным hover-тултипом и вызовами нативного ПКМ-меню.

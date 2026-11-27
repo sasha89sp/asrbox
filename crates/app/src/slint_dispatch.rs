@@ -121,7 +121,15 @@ impl<I: IconProvider> AppController<I> {
             .rev()
             .filter(|e| filter.is_none_or(|m| e.module == m))
             .take(80)
-            .map(|e| format!("{} [{}] [{}] {}", e.timestamp, e.level.tag(), e.module, e.message))
+            .map(|e| {
+                format!(
+                    "{} [{}] [{}] {}",
+                    e.timestamp,
+                    e.level.tag(),
+                    e.module,
+                    e.message
+                )
+            })
             .collect();
         diag_logs.reverse();
         UiRuntimeStatus {

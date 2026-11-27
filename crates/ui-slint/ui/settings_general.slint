@@ -131,6 +131,7 @@ export component SettingsGeneralView inherits VerticalLayout {
     callback open-diagnostics();
     callback open-changelog();
 
+    min-width: 0px;
     spacing: 12px;
 
     // 1. Оформление и тема (exact mockup layout!)
@@ -146,8 +147,8 @@ export component SettingsGeneralView inherits VerticalLayout {
 
         // Theme Selection miniature preview cards
         VerticalLayout {
-            padding-left: 16px;
-            padding-right: 16px;
+            padding-left: root.width < 400px ? 12px : 16px;
+            padding-right: root.width < 400px ? 12px : 16px;
             padding-top: 8px;
             padding-bottom: 12px;
             spacing: 10px;
@@ -160,7 +161,7 @@ export component SettingsGeneralView inherits VerticalLayout {
             }
 
             HorizontalLayout {
-                spacing: 14px;
+                spacing: root.width < 400px ? 8px : 14px;
 
                 ThemePreviewCard {
                     label: Theme.is-ru ? "Тёмная" : "Dark";
@@ -184,8 +185,10 @@ export component SettingsGeneralView inherits VerticalLayout {
             show-divider: true;
 
             HorizontalLayout {
-                width: 344px;
-                spacing: 8px;
+                horizontal-stretch: 1;
+                min-width: 190px;
+                preferred-width: 300px;
+                spacing: 6px;
 
                 AccentSwatch {
                     base-color: #2B90FF;
@@ -272,6 +275,7 @@ export component SettingsGeneralView inherits VerticalLayout {
             badge-bg: Theme.success;
             title: Theme.is-ru ? "Автозагрузка с Windows" : "Launch with Windows";
             subtitle: "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+            inline-control: true;
             GlassSwitch {
                 checked: root.autostart-enabled;
                 toggled(v) => { root.set-autostart(v); }
@@ -367,32 +371,83 @@ export component SettingsGeneralView inherits VerticalLayout {
             badge-bg: root.backup-busy ? Theme.warning : Theme.success;
             title: Theme.is-ru ? "Локальный и облачный бэкап" : "Local & Cloud Backup";
             subtitle: root.cloud-status != "" ? root.cloud-status : root.backup-summary;
+        }
 
-            GlassButton {
-                label: Theme.is-ru ? "Полный бэкап" : "Full Backup";
-                variant: "primary";
-                compact: true;
-                clicked => { root.backup-full-now(); }
+        VerticalLayout {
+            padding-left: root.width < 400px ? 12px : 16px;
+            padding-right: root.width < 400px ? 12px : 16px;
+            padding-top: 2px;
+            padding-bottom: 10px;
+            spacing: 6px;
+
+            if (root.width >= 460px) : HorizontalLayout {
+                spacing: 8px;
+                GlassButton {
+                    horizontal-stretch: 1;
+                    label: Theme.is-ru ? "Полный бэкап" : "Full Backup";
+                    variant: "primary";
+                    compact: true;
+                    clicked => { root.backup-full-now(); }
+                }
+                GlassButton {
+                    horizontal-stretch: 1;
+                    label: Theme.is-ru ? "Настройки" : "Config Only";
+                    compact: true;
+                    clicked => { root.backup-settings-now(); }
+                }
+                GlassButton {
+                    horizontal-stretch: 1;
+                    label: Theme.is-ru ? "В облако" : "Upload";
+                    compact: true;
+                    clicked => { root.upload-latest-backup(); }
+                }
+                GlassButton {
+                    horizontal-stretch: 1;
+                    label: Theme.is-ru ? "Папка" : "Folder";
+                    compact: true;
+                    clicked => { root.open-backups-folder(); }
+                }
             }
-            GlassButton {
-                label: Theme.is-ru ? "Настройки" : "Config Only";
-                compact: true;
-                clicked => { root.backup-settings-now(); }
-            }
-            GlassButton {
-                label: Theme.is-ru ? "В облако" : "Upload";
-                compact: true;
-                clicked => { root.upload-latest-backup(); }
-            }
-            GlassButton {
-                label: Theme.is-ru ? "Папка" : "Folder";
-                compact: true;
-                clicked => { root.open-backups-folder(); }
+
+            if (root.width < 460px) : VerticalLayout {
+                spacing: 6px;
+                HorizontalLayout {
+                    spacing: 6px;
+                    GlassButton {
+                        horizontal-stretch: 1;
+                        label: Theme.is-ru ? "Полный бэкап" : "Full Backup";
+                        variant: "primary";
+                        compact: true;
+                        clicked => { root.backup-full-now(); }
+                    }
+                    GlassButton {
+                        horizontal-stretch: 1;
+                        label: Theme.is-ru ? "Настройки" : "Config Only";
+                        compact: true;
+                        clicked => { root.backup-settings-now(); }
+                    }
+                }
+                HorizontalLayout {
+                    spacing: 6px;
+                    GlassButton {
+                        horizontal-stretch: 1;
+                        label: Theme.is-ru ? "В облако" : "Upload";
+                        compact: true;
+                        clicked => { root.upload-latest-backup(); }
+                    }
+                    GlassButton {
+                        horizontal-stretch: 1;
+                        label: Theme.is-ru ? "Папка" : "Folder";
+                        compact: true;
+                        clicked => { root.open-backups-folder(); }
+                    }
+                }
             }
         }
 
         SettingRow {
             title: Theme.is-ru ? "Автовыгрузка бэкапа в WebDAV" : "Auto-upload Backup to WebDAV";
+            inline-control: true;
             GlassSwitch {
                 checked: root.backup-auto-upload;
                 toggled(v) => { root.set-auto-upload(v); }
@@ -404,6 +459,7 @@ export component SettingsGeneralView inherits VerticalLayout {
             subtitle: root.backup-has-zip-pw
                 ? (Theme.is-ru ? "Пароль сохранён в Windows Credential Manager" : "Password saved in Windows Credential Manager")
                 : (Theme.is-ru ? "Пароль не задан (минимум 4 символа)" : "No password saved (min 4 chars)");
+            inline-control: true;
             GlassSwitch {
                 checked: root.backup-encrypt-zip;
                 toggled(v) => { root.set-encrypt-zip(v); }
@@ -414,7 +470,9 @@ export component SettingsGeneralView inherits VerticalLayout {
             title: Theme.is-ru ? "Пароль архива AES-256" : "AES-256 Archive Password";
             show-divider: false;
             GlassInput {
-                width: 180px;
+                horizontal-stretch: 1;
+                min-width: 110px;
+                preferred-width: 180px;
                 text <=> root.zip-pw-input;
                 placeholder: Theme.is-ru ? "Новый пароль..." : "New password...";
                 is-password: true;
@@ -474,30 +532,41 @@ export component SettingsGeneralView inherits VerticalLayout {
         }
 
         if (root.show-add-webdav) : VerticalLayout {
-            padding-left: 16px;
-            padding-right: 16px;
+            padding-left: root.width < 400px ? 12px : 16px;
+            padding-right: root.width < 400px ? 12px : 16px;
             padding-top: 6px;
             padding-bottom: 10px;
             spacing: 8px;
 
-            HorizontalLayout {
+            CustomComboBox {
+                model: ["Яндекс.Диск", "Облако Mail.ru", "Свой HTTPS"];
+                current-index: root.draft-provider-index;
+                current-value: root.draft-provider-index == 0
+                    ? "Яндекс.Диск"
+                    : (root.draft-provider-index == 1 ? "Облако Mail.ru" : "Свой HTTPS");
+                selected(idx) => { root.draft-provider-index = idx; }
+            }
+            if (root.draft-provider-index == 2) : GlassInput {
+                horizontal-stretch: 1;
+                text <=> root.draft-url;
+                placeholder: "https://webdav.example.com";
+            }
+            if (root.width >= 420px) : HorizontalLayout {
                 spacing: 8px;
-                CustomComboBox {
-                    model: ["Яндекс.Диск", "Облако Mail.ru", "Свой HTTPS"];
-                    current-index: root.draft-provider-index;
-                    current-value: root.draft-provider-index == 0
-                        ? "Яндекс.Диск"
-                        : (root.draft-provider-index == 1 ? "Облако Mail.ru" : "Свой HTTPS");
-                    selected(idx) => { root.draft-provider-index = idx; }
-                }
-                if (root.draft-provider-index == 2) : GlassInput {
+                GlassInput {
                     horizontal-stretch: 1;
-                    text <=> root.draft-url;
-                    placeholder: "https://webdav.example.com";
+                    text <=> root.draft-user;
+                    placeholder: Theme.is-ru ? "Логин / Email" : "Username / Email";
+                }
+                GlassInput {
+                    horizontal-stretch: 1;
+                    text <=> root.draft-pass;
+                    placeholder: Theme.is-ru ? "Пароль приложения" : "App password";
+                    is-password: true;
                 }
             }
-            HorizontalLayout {
-                spacing: 8px;
+            if (root.width < 420px) : VerticalLayout {
+                spacing: 6px;
                 GlassInput {
                     horizontal-stretch: 1;
                     text <=> root.draft-user;
@@ -518,7 +587,7 @@ export component SettingsGeneralView inherits VerticalLayout {
                     placeholder: "/asrbox-backups";
                 }
                 GlassButton {
-                    label: Theme.is-ru ? "Сохранить сервер" : "Save Server";
+                    label: Theme.is-ru ? "Сохранить" : "Save";
                     variant: "primary";
                     compact: true;
                     clicked => {
@@ -542,6 +611,7 @@ export component SettingsGeneralView inherits VerticalLayout {
             badge-bg: #6366F1;
             title: Theme.is-ru ? "Для разработчика · Исходный код GitHub" : "Developer · GitHub Source Backup";
             subtitle: root.gh-status != "" ? root.gh-status : (root.gh-has-token ? "PAT токен сохранён в Credential Manager" : "Вложить zipball ветки в бэкап без Git");
+            inline-control: true;
             GlassSwitch {
                 checked: root.gh-include-in-backup;
                 toggled(v) => { root.set-gh-include(v); }
@@ -549,35 +619,60 @@ export component SettingsGeneralView inherits VerticalLayout {
         }
 
         VerticalLayout {
-            padding-left: 16px;
-            padding-right: 16px;
+            padding-left: root.width < 400px ? 12px : 16px;
+            padding-right: root.width < 400px ? 12px : 16px;
             padding-bottom: 10px;
             spacing: 8px;
 
-            HorizontalLayout {
+            if (root.width >= 460px) : HorizontalLayout {
                 spacing: 8px;
                 GlassInput {
-                    horizontal-stretch: 1;
+                    horizontal-stretch: 2;
                     text <=> root.gh-repo;
                     placeholder: "owner/repo";
                 }
                 GlassInput {
-                    width: 110px;
+                    horizontal-stretch: 1;
+                    max-width: 110px;
                     text <=> root.gh-branch;
                     placeholder: "main";
                 }
                 GlassInput {
-                    width: 150px;
+                    horizontal-stretch: 1;
+                    max-width: 160px;
                     text <=> root.gh-token-input;
                     placeholder: "GitHub PAT";
                     is-password: true;
                 }
             }
+            if (root.width < 460px) : VerticalLayout {
+                spacing: 6px;
+                GlassInput {
+                    horizontal-stretch: 1;
+                    text <=> root.gh-repo;
+                    placeholder: "owner/repo";
+                }
+                HorizontalLayout {
+                    spacing: 6px;
+                    GlassInput {
+                        width: 92px;
+                        text <=> root.gh-branch;
+                        placeholder: "main";
+                    }
+                    GlassInput {
+                        horizontal-stretch: 1;
+                        text <=> root.gh-token-input;
+                        placeholder: "GitHub PAT";
+                        is-password: true;
+                    }
+                }
+            }
             HorizontalLayout {
-                spacing: 8px;
-                alignment: end;
+                spacing: 6px;
+                alignment: root.width < 460px ? stretch : end;
                 GlassButton {
-                    label: Theme.is-ru ? "Сохранить GitHub" : "Save GitHub";
+                    horizontal-stretch: root.width < 460px ? 1 : 0;
+                    label: Theme.is-ru ? "Сохранить" : "Save";
                     compact: true;
                     clicked => {
                         root.save-gh-settings(root.gh-repo, root.gh-branch, root.gh-token-input);
@@ -585,12 +680,13 @@ export component SettingsGeneralView inherits VerticalLayout {
                     }
                 }
                 GlassButton {
-                    label: Theme.is-ru ? "Скачать сейчас" : "Download Now";
+                    horizontal-stretch: root.width < 460px ? 1 : 0;
+                    label: Theme.is-ru ? "Скачать" : "Download";
                     compact: true;
                     clicked => { root.download-gh-now(); }
                 }
                 if (root.gh-has-token) : GlassButton {
-                    label: Theme.is-ru ? "Удалить токен" : "Clear Token";
+                    label: Theme.is-ru ? "Сброс PAT" : "Clear";
                     variant: "danger";
                     compact: true;
                     clicked => { root.clear-gh-token(); }
@@ -625,17 +721,20 @@ export component SettingsGeneralView inherits VerticalLayout {
         SettingRow {
             title: Theme.is-ru ? "Добавить элементы для синхронизации" : "Add Sync Items";
             GlassButton {
+                horizontal-stretch: 1;
                 label: Theme.is-ru ? "+ Файлы" : "+ Files";
                 compact: true;
                 clicked => { root.pick-sync-files(); }
             }
             GlassButton {
+                horizontal-stretch: 1;
                 label: Theme.is-ru ? "+ Папка" : "+ Folder";
                 compact: true;
                 clicked => { root.pick-sync-folder(); }
             }
             GlassButton {
-                label: Theme.is-ru ? "Синхронизировать" : "Sync Now";
+                horizontal-stretch: 1;
+                label: Theme.is-ru ? (root.width < 420px ? "Синхр." : "Синхронизировать") : "Sync";
                 variant: "primary";
                 compact: true;
                 clicked => { root.sync-files-now(); }
@@ -645,6 +744,7 @@ export component SettingsGeneralView inherits VerticalLayout {
         for item in root.sync-items : SettingRow {
             title: item.local-path;
             subtitle: item.kind-label;
+            inline-control: true;
             GlassButton {
                 label: "×";
                 variant: "danger";
@@ -679,6 +779,7 @@ export component SettingsGeneralView inherits VerticalLayout {
 
         SettingRow {
             title: Theme.is-ru ? "Подробное логирование (TRACE)" : "Verbose Logging (TRACE)";
+            inline-control: true;
             GlassSwitch {
                 checked: root.diag-verbose;
                 toggled(v) => { root.set-diag-verbose(v); }
@@ -687,6 +788,7 @@ export component SettingsGeneralView inherits VerticalLayout {
 
         SettingRow {
             title: Theme.is-ru ? "Запись логов в файл (data/logs)" : "Write Logs to File (data/logs)";
+            inline-control: true;
             GlassSwitch {
                 checked: root.diag-file-log;
                 toggled(v) => { root.set-diag-file-log(v); }
@@ -699,12 +801,14 @@ export component SettingsGeneralView inherits VerticalLayout {
                 ? "Открыть полный журнал событий, метрики модулей и CHANGELOG"
                 : "Open live event log, module metrics and CHANGELOG";
             GlassButton {
-                label: Theme.is-ru ? "Диагностика и логи →" : "Diagnostics & Logs →";
+                horizontal-stretch: 1;
+                label: Theme.is-ru ? (root.width < 420px ? "Диагностика →" : "Диагностика и логи →") : "Diagnostics →";
                 variant: "primary";
                 compact: true;
                 clicked => { root.open-diagnostics(); }
             }
             GlassButton {
+                horizontal-stretch: 1;
                 label: Theme.is-ru ? "История версий →" : "Changelog →";
                 compact: true;
                 clicked => { root.open-changelog(); }
@@ -714,12 +818,14 @@ export component SettingsGeneralView inherits VerticalLayout {
         SettingRow {
             title: Theme.is-ru ? "Диагностический отчёт" : "Diagnostics Report";
             GlassButton {
-                label: Theme.is-ru ? "Копировать отчёт" : "Copy Report";
+                horizontal-stretch: 1;
+                label: Theme.is-ru ? "Копировать" : "Copy Report";
                 compact: true;
                 clicked => { root.copy-diag-report(); }
             }
             GlassButton {
-                label: Theme.is-ru ? "Сохранить отчёт" : "Save Report";
+                horizontal-stretch: 1;
+                label: Theme.is-ru ? "Сохранить" : "Save Report";
                 compact: true;
                 clicked => { root.save-diag-report(); }
             }

@@ -10,6 +10,8 @@ import {
 import { AsrGlassLogo } from "components/asr_logo.slint";
 import {
     FramelessTitleBar,
+    VectorIconClose,
+    VectorIconMenu,
     VectorIconNav,
     WindowResizeHandles,
 } from "components/window_chrome.slint";
@@ -24,6 +26,7 @@ component NavItem inherits Rectangle {
     in property <int> icon-kind: 0;
     in property <string> label;
     in property <bool> active: false;
+    in property <bool> icon-only: false;
     callback clicked();
 
     height: 38px;
@@ -39,7 +42,7 @@ component NavItem inherits Rectangle {
     animate background { duration: 150ms; easing: ease-out; }
 
     // Left 3x16px crisp white active pill
-    if (root.active) : Rectangle {
+    if (root.active && !root.icon-only) : Rectangle {
         x: 4px;
         y: (parent.height - 16px) / 2;
         width: 3px;
@@ -49,21 +52,21 @@ component NavItem inherits Rectangle {
     }
 
     HorizontalLayout {
-        padding-left: 14px;
-        padding-right: 12px;
-        spacing: 10px;
-        alignment: start;
+        padding-left: root.icon-only ? 0px : 14px;
+        padding-right: root.icon-only ? 0px : 12px;
+        spacing: root.icon-only ? 0px : 10px;
+        alignment: root.icon-only ? center : start;
 
         VerticalLayout {
             alignment: center;
             VectorIconNav {
                 kind: root.icon-kind;
-                size: 14px;
+                size: root.icon-only ? 16px : 14px;
                 icon-color: root.active ? #FFFFFF : Theme.text-secondary;
             }
         }
 
-        Text {
+        if (!root.icon-only) : Text {
             text: root.label;
             color: root.active ? #FFFFFF : Theme.text-secondary;
             font-size: 13px;
@@ -83,14 +86,20 @@ export component SettingsWindow inherits Window {
     title: "Настройки — asrbox";
     preferred-width: 860px;
     preferred-height: 560px;
-    min-width: 720px;
-    min-height: 480px;
+    min-width: 360px;
+    min-height: 460px;
     no-frame: true;
     background: transparent;
     default-font-family: "Segoe UI";
 
+    in property <bool> desktop-chrome: true;
+    private property <bool> is-mobile: root.width < 520px;
+    private property <bool> is-rail: root.width >= 520px && root.width < 760px;
+    private property <bool> is-desktop: root.width >= 760px;
+    private property <bool> drawer-open: false;
+
     in property <string> app-version: "0.1.0";
-    in-out property <int> active-tab: 0; // 0=General, 1=Dock, 2=Widgets, 3=Overlay
+    in-out property <int> active-tab: 0; // 0=General, 1=Dock, 2=Widgets, 3=Overlay, 4=Diag, 5=Changelog
     in-out property <string> search-query: "";
     in property <string> status-banner: "";
 
@@ -268,7 +277,7 @@ export component SettingsWindow inherits Window {
             height: 100%;
             spacing: 0px;
 
-            FramelessTitleBar {
+            if (root.desktop-chrome) : FramelessTitleBar {
                 title: (Theme.is-ru ? "Настройки — asrbox v" : "Settings — asrbox v") + root.app-version;
                 drag-window => { root.drag-window(); }
                 minimize-clicked => { root.minimize-window(); }
@@ -280,15 +289,15 @@ export component SettingsWindow inherits Window {
                 vertical-stretch: 1;
                 spacing: 0px;
 
-                // Left Sidebar (210px, Theme.sidebar-bg)
-                Rectangle {
-                    width: 210px;
+                // Responsive Left Sidebar: 210px on Desktop, 60px Icon Rail on Tablet, hidden on Mobile (<520px)
+                if (!root.is-mobile) : Rectangle {
+                    width: root.is-desktop ? 210px : 60px;
                     background: Theme.sidebar-bg;
 
                     VerticalLayout {
-                        padding-left: 14px;
-                        padding-right: 14px;
-                        padding-top: 22px;
+                        padding-left: root.is-desktop ? 14px : 8px;
+                        padding-right: root.is-desktop ? 14px : 8px;
+                        padding-top: root.is-desktop ? 22px : 14px;
                         padding-bottom: 14px;
                         spacing: 6px;
 
@@ -299,10 +308,13 @@ export component SettingsWindow inherits Window {
 
                             HorizontalLayout {
                                 alignment: center;
-                                AsrGlassLogo { size: 54px; show-glow: true; }
+                                AsrGlassLogo {
+                                    size: root.is-desktop ? 54px : 32px;
+                                    show-glow: true;
+                                }
                             }
 
-                            Text {
+                            if (root.is-desktop) : Text {
                                 text: "asrbox";
                                 color: Theme.text-primary;
                                 font-size: 16px;
@@ -310,7 +322,7 @@ export component SettingsWindow inherits Window {
                                 horizontal-alignment: center;
                             }
 
-                            Text {
+                            if (root.is-desktop) : Text {
                                 text: "v" + root.app-version;
                                 color: Theme.text-muted;
                                 font-size: 11.5px;
@@ -318,10 +330,11 @@ export component SettingsWindow inherits Window {
                             }
                         }
 
-                        Rectangle { height: 14px; background: transparent; }
+                        Rectangle { height: root.is-desktop ? 14px : 10px; background: transparent; }
 
                         NavItem {
                             icon-kind: 0;
+                            icon-only: !root.is-desktop;
                             label: Theme.is-ru ? "Общие настройки" : "General";
                             active: root.active-tab == 0;
                             clicked => {
@@ -331,6 +344,7 @@ export component SettingsWindow inherits Window {
                         }
                         NavItem {
                             icon-kind: 1;
+                            icon-only: !root.is-desktop;
                             label: Theme.is-ru ? "Док-панели" : "Dock Panels";
                             active: root.active-tab == 1;
                             clicked => {
@@ -340,6 +354,7 @@ export component SettingsWindow inherits Window {
                         }
                         NavItem {
                             icon-kind: 2;
+                            icon-only: !root.is-desktop;
                             label: Theme.is-ru ? "Виджеты" : "Widgets";
                             active: root.active-tab == 2;
                             clicked => {
@@ -349,6 +364,7 @@ export component SettingsWindow inherits Window {
                         }
                         NavItem {
                             icon-kind: 3;
+                            icon-only: !root.is-desktop;
                             label: Theme.is-ru ? "Игровой оверлей" : "Game Overlay";
                             active: root.active-tab == 3;
                             clicked => {
@@ -364,6 +380,7 @@ export component SettingsWindow inherits Window {
 
                         NavItem {
                             icon-kind: 6;
+                            icon-only: !root.is-desktop;
                             label: Theme.is-ru ? "Диагностика и логи" : "Diagnostics";
                             active: root.active-tab == 4;
                             clicked => {
@@ -374,6 +391,7 @@ export component SettingsWindow inherits Window {
                         }
                         NavItem {
                             icon-kind: 7;
+                            icon-only: !root.is-desktop;
                             label: Theme.is-ru ? "История версий" : "Changelog";
                             active: root.active-tab == 5;
                             clicked => {
@@ -384,7 +402,7 @@ export component SettingsWindow inherits Window {
 
                         Rectangle { vertical-stretch: 1; background: transparent; }
 
-                        if (root.status-banner != "") : Rectangle {
+                        if (root.is-desktop && root.status-banner != "") : Rectangle {
                             border-radius: 6px;
                             background: Theme.card-bg;
                             border-width: 1px;
@@ -414,47 +432,108 @@ export component SettingsWindow inherits Window {
                 // Right Workspace
                 VerticalLayout {
                     horizontal-stretch: 1;
+                    min-width: 0px;
                     spacing: 0px;
 
-                    // Header row: 20px SemiBold title + 220x30px Search input
-                    HorizontalLayout {
-                        padding-left: 22px;
-                        padding-right: 22px;
-                        padding-top: 16px;
-                        padding-bottom: 12px;
-                        spacing: 12px;
-                        alignment: stretch;
+                    // Responsive Header: Hamburger + Title + Search (2 rows on mobile)
+                    VerticalLayout {
+                        padding-left: root.is-mobile ? 12px : 22px;
+                        padding-right: root.is-mobile ? 12px : 22px;
+                        padding-top: root.is-mobile ? 10px : 16px;
+                        padding-bottom: 10px;
+                        spacing: 8px;
 
-                        Text {
-                            horizontal-stretch: 1;
-                            text:
-                                root.active-tab == 1 ? (Theme.is-ru ? "Док-панели" : "Dock Panels") :
-                                root.active-tab == 2 ? (Theme.is-ru ? "Виджеты" : "Widgets") :
-                                root.active-tab == 3 ? (Theme.is-ru ? "Игровой оверлей" : "Game Overlay") :
-                                root.active-tab == 4 ? (Theme.is-ru ? "Диагностика и логи" : "Diagnostics & Logs") :
-                                root.active-tab == 5 ? (Theme.is-ru ? "История версий" : "Version History") :
-                                (Theme.is-ru ? "Общие настройки" : "General Settings");
-                            color: Theme.text-primary;
-                            font-size: 20px;
-                            font-weight: 600;
-                            vertical-alignment: center;
+                        HorizontalLayout {
+                            spacing: 10px;
+                            alignment: stretch;
+
+                            if (root.is-mobile) : Rectangle {
+                                width: 34px;
+                                height: 34px;
+                                border-radius: 8px;
+                                background: menu-ta.pressed
+                                    ? Theme.press-bg
+                                    : (menu-ta.has-hover ? Theme.hover-bg : Theme.card-bg);
+                                border-width: 1px;
+                                border-color: root.drawer-open ? Theme.accent : Theme.border-color;
+
+                                VectorIconMenu {
+                                    x: (parent.width - self.width) / 2;
+                                    y: (parent.height - self.height) / 2;
+                                    size: 16px;
+                                    icon-color: Theme.text-primary;
+                                }
+
+                                menu-ta := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => { root.drawer-open = !root.drawer-open; }
+                                }
+                            }
+
+                            Text {
+                                horizontal-stretch: 1;
+                                min-width: 0px;
+                                text:
+                                    root.active-tab == 1 ? (Theme.is-ru ? "Док-панели" : "Dock Panels") :
+                                    root.active-tab == 2 ? (Theme.is-ru ? "Виджеты" : "Widgets") :
+                                    root.active-tab == 3 ? (Theme.is-ru ? "Игровой оверлей" : "Game Overlay") :
+                                    root.active-tab == 4 ? (Theme.is-ru ? "Диагностика и логи" : "Diagnostics & Logs") :
+                                    root.active-tab == 5 ? (Theme.is-ru ? "История версий" : "Version History") :
+                                    (Theme.is-ru ? "Общие настройки" : "General Settings");
+                                color: Theme.text-primary;
+                                font-size: root.is-mobile ? 17px : 20px;
+                                font-weight: 600;
+                                vertical-alignment: center;
+                                overflow: elide;
+                            }
+
+                            if (!root.is-mobile) : GlassInput {
+                                width: root.is-rail ? 170px : 220px;
+                                text <=> root.search-query;
+                                placeholder: Theme.is-ru ? "Поиск" : "Search";
+                                trailing-icon: "🔍";
+                                edited(q) => { root.search-changed(q); }
+                            }
                         }
 
-                        GlassInput {
-                            width: 220px;
+                        if (root.is-mobile) : GlassInput {
+                            horizontal-stretch: 1;
                             text <=> root.search-query;
-                            placeholder: Theme.is-ru ? "Поиск" : "Search";
+                            placeholder: Theme.is-ru ? "Поиск настроек..." : "Search settings...";
                             trailing-icon: "🔍";
                             edited(q) => { root.search-changed(q); }
+                        }
+
+                        if (!root.is-desktop && root.status-banner != "") : Rectangle {
+                            border-radius: 6px;
+                            background: Theme.card-bg;
+                            border-width: 1px;
+                            border-color: Theme.border-color;
+
+                            HorizontalLayout {
+                                padding-left: 10px;
+                                padding-right: 10px;
+                                padding-top: 6px;
+                                padding-bottom: 6px;
+                                Text {
+                                    min-width: 0px;
+                                    text: root.status-banner;
+                                    color: Theme.text-secondary;
+                                    font-size: 11px;
+                                    wrap: word-wrap;
+                                }
+                            }
                         }
                     }
 
                     scroll := ScrollView {
                         vertical-stretch: 1;
+                        horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
 
                         VerticalLayout {
-                            padding-left: 22px;
-                            padding-right: 22px;
+                            width: Math.max(0px, scroll.visible-width);
+                            padding-left: root.is-mobile ? 12px : 22px;
+                            padding-right: root.is-mobile ? 12px : 22px;
                             padding-top: 4px;
                             padding-bottom: 22px;
                             spacing: 12px;
@@ -769,7 +848,154 @@ export component SettingsWindow inherits Window {
             }
         }
 
-        WindowResizeHandles {
+        // Mobile Hamburger Slide-over Drawer (< 520px)
+        if (root.is-mobile && root.drawer-open) : Rectangle {
+            x: 0px;
+            y: root.desktop-chrome ? 36px : 0px;
+            width: parent.width;
+            height: Math.max(0px, parent.height - (root.desktop-chrome ? 36px : 0px));
+            background: rgba(0, 0, 0, 0.54);
+
+            TouchArea {
+                clicked => { root.drawer-open = false; }
+            }
+
+            Rectangle {
+                x: 0px;
+                y: 0px;
+                width: Math.min(252px, parent.width - 44px);
+                height: parent.height;
+                background: Theme.sidebar-bg;
+                border-width: 1px;
+                border-color: Theme.border-strong;
+                drop-shadow-blur: 24px;
+                drop-shadow-color: rgba(0, 0, 0, 0.55);
+
+                // Prevent backdrop dismiss when clicking inside drawer surface
+                TouchArea {}
+
+                VerticalLayout {
+                    padding: 14px;
+                    spacing: 6px;
+
+                    HorizontalLayout {
+                        spacing: 10px;
+                        alignment: stretch;
+
+                        AsrGlassLogo { size: 30px; show-glow: true; }
+
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            alignment: center;
+                            Text {
+                                text: "asrbox";
+                                color: Theme.text-primary;
+                                font-size: 14px;
+                                font-weight: 600;
+                            }
+                            Text {
+                                text: "v" + root.app-version;
+                                color: Theme.text-muted;
+                                font-size: 11px;
+                            }
+                        }
+
+                        Rectangle {
+                            width: 30px;
+                            height: 30px;
+                            border-radius: 7px;
+                            background: close-drw.has-hover ? Theme.hover-bg : transparent;
+
+                            VectorIconClose {
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                                size: 12px;
+                                icon-color: Theme.text-secondary;
+                            }
+
+                            close-drw := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { root.drawer-open = false; }
+                            }
+                        }
+                    }
+
+                    Rectangle { height: 6px; background: transparent; }
+
+                    NavItem {
+                        icon-kind: 0;
+                        label: Theme.is-ru ? "Общие настройки" : "General";
+                        active: root.active-tab == 0;
+                        clicked => {
+                            root.active-tab = 0;
+                            scroll.viewport-y = 0px;
+                            root.drawer-open = false;
+                        }
+                    }
+                    NavItem {
+                        icon-kind: 1;
+                        label: Theme.is-ru ? "Док-панели" : "Dock Panels";
+                        active: root.active-tab == 1;
+                        clicked => {
+                            root.active-tab = 1;
+                            scroll.viewport-y = 0px;
+                            root.drawer-open = false;
+                        }
+                    }
+                    NavItem {
+                        icon-kind: 2;
+                        label: Theme.is-ru ? "Виджеты" : "Widgets";
+                        active: root.active-tab == 2;
+                        clicked => {
+                            root.active-tab = 2;
+                            scroll.viewport-y = 0px;
+                            root.drawer-open = false;
+                        }
+                    }
+                    NavItem {
+                        icon-kind: 3;
+                        label: Theme.is-ru ? "Игровой оверлей" : "Game Overlay";
+                        active: root.active-tab == 3;
+                        clicked => {
+                            root.active-tab = 3;
+                            scroll.viewport-y = 0px;
+                            root.drawer-open = false;
+                        }
+                    }
+
+                    Rectangle {
+                        height: 1px;
+                        background: Theme.divider-color;
+                    }
+
+                    NavItem {
+                        icon-kind: 6;
+                        label: Theme.is-ru ? "Диагностика и логи" : "Diagnostics";
+                        active: root.active-tab == 4;
+                        clicked => {
+                            root.active-tab = 4;
+                            scroll.viewport-y = 0px;
+                            root.drawer-open = false;
+                            root.dispatch("refresh_diag", "");
+                        }
+                    }
+                    NavItem {
+                        icon-kind: 7;
+                        label: Theme.is-ru ? "История версий" : "Changelog";
+                        active: root.active-tab == 5;
+                        clicked => {
+                            root.active-tab = 5;
+                            scroll.viewport-y = 0px;
+                            root.drawer-open = false;
+                        }
+                    }
+
+                    Rectangle { vertical-stretch: 1; background: transparent; }
+                }
+            }
+        }
+
+        if (root.desktop-chrome) : WindowResizeHandles {
             resize-window(dir) => { root.resize-window(dir); }
         }
     }

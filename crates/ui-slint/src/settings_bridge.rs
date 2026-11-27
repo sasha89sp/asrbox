@@ -83,20 +83,24 @@ pub fn run_settings_window(
     Timer::single_shot(Duration::from_millis(24), move || {
         if let Some(win) = weak_vib.upgrade() {
             let wa = primary_work_area();
-            center_window_in_work_area(win.window(), wa, 860, 560, 720, 480);
+            center_window_in_work_area(win.window(), wa, 860, 560, 360, 460);
             apply_settings_chrome(win.window(), initial_dark);
         }
     });
 
     let diag_timer = Timer::default();
     let weak_diag = ui.as_weak();
-    diag_timer.start(TimerMode::Repeated, Duration::from_millis(1500), move || {
-        if let Some(win) = weak_diag.upgrade() {
-            if win.get_active_tab() == 4 && win.get_diag_monitor_enabled() {
-                emit_cmd("refresh_diag", "");
+    diag_timer.start(
+        TimerMode::Repeated,
+        Duration::from_millis(1500),
+        move || {
+            if let Some(win) = weak_diag.upgrade() {
+                if win.get_active_tab() == 4 && win.get_diag_monitor_enabled() {
+                    emit_cmd("refresh_diag", "");
+                }
             }
-        }
-    });
+        },
+    );
 
     ui.run().map_err(|e| format!("run SettingsWindow: {e}"))
 }

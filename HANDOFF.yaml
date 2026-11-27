@@ -3,29 +3,29 @@ updated: 2026-11-27
 spec_ids: [NF-001, NF-002, NF-005, NF-006, NF-007, DK-018, DK-019, ST-001, WG-022]
 atlas_updated: true
 last_session:
-  goal: "Перевод ПКМ-меню виджетов на нативное Win32 Fluent-меню, COM ITaskbarList::DeleteTab + DPI-позиционирование доков, возврат «Диагностики и логов» и «Истории версий», исправление GlassSlider/ScrollView и визуальная доводка Настроек под макет"
+  goal: "Исправление ошибки CI cargo fmt --check и перевод окна Настроек на полностью адаптивный mobile-ready дизайн (от 360 px) с кнопкой-гамбургером"
   done:
-    - "crates/platform-windows/src/slint_host.rs: добавлен COM ITaskbarList::DeleteTab в set_window_skip_taskbar для гарантированного скрытия доков/виджетов из панели задач"
-    - "crates/ui-slint/src/{vibrancy,dock_view,dock_runner}.rs: добавлены winit_scale_factor и focus_window; compute_dock_rect переведён на физические DPI-пиксели; двойной enforce_skip_taskbar (60/250 мс)"
-    - "crates/ui-slint/src/widgets_menu.rs + widgets_{weather,sysmon,calendar}.rs + ui/widget_*.slint: Slint PopupWindow полностью заменены на нативное Win32 Fluent ПКМ-меню по PointerEventKind.up; удалена неиспользуемая win_os::idx_to_layer"
-    - "crates/ui-slint/ui/settings_tools.slint + settings.slint + settings_general.slint + ipc_proto.rs + settings_{state,bridge}.rs + app/src/{slint_dispatch,settings_general}.rs: восстановлены вкладки «Диагностика и логи» (живые метрики/логи 1.5 с, фильтр, очистка, отчёты) и «История версий» (CHANGELOG.md + пути) из трея и сайдбара"
-    - "crates/ui-slint/ui/{theme,components/controls,settings,settings_dock,settings_general}.slint: исправлен GlassSlider (x: 0px), сброс ScrollView и высота 32 px шапки выбора дока, усилена палитра тёмного стекла, добавлены accent-top свечение и градиент активного NavItem под эталонный макет"
-    - "Обновлены crates/{ui-slint,platform-windows}/MAP.md, CHANGELOG.md и HANDOFF.yaml"
+    - "crates/app/src/slint_dispatch.rs + crates/ui-slint/src/settings_bridge.rs: исправлены оба расхождения cargo fmt --check из лога GitHub Actions; минимальный размер SettingsWindow снижен до 360×460 px"
+    - "crates/ui-slint/ui/components/{window_chrome,controls}.slint: добавлена векторная иконка VectorIconMenu (☰); SettingRow получил контейнерный перенос (< 460 px) и inline-control для одиночных переключателей; GlassSlider, CustomComboBox, GlassButton, GlassInput, AccordionCard и ThemePreviewCard переведены на резиновые размеры без жёстких ширин"
+    - "crates/ui-slint/ui/settings.slint: реализованы 3 брейкпоинта (Desktop >= 760 px / Icon Rail 520–759 px / Mobile < 520 px с выдвижным Drawer по ☰ и 2-строчной шапкой поиска), флаг desktop-chrome и жёсткая привязка ScrollView к scroll.visible-width (ScrollBarPolicy.always-off)"
+    - "crates/ui-slint/ui/settings_{general,dock,widgets,overlay,tools}.slint: убраны фиксированные ширины (AccentSwatch, GlassInput), добавлены 2×2 сетки для бэкапа и выбора виджетов на узких экранах, адаптивные формы WebDAV/GitHub, 2-строчная шапка дока и корректный elide/wrap во всех карточках (Заметки не трогались по просьбе владельца)"
+    - "Обновлены CHANGELOG.md, crates/ui-slint/MAP.md и HANDOFF.yaml"
   not_done:
-    - "Прогон GitHub Actions (.github/workflows/ci.yml) на windows-latest и живая проверка 4 исправлений на Windows 11"
+    - "Прогон GitHub Actions (.github/workflows/ci.yml) на windows-latest и живая проверка адаптивных Настроек (включая сужение до 360 px и меню-гамбургер) на Windows 11"
   verified:
     ci_build: false
     tests: false
     manual_run: false
 open_bugs: [BUG-003, BUG-004, BUG-005, BUG-006, BUG-007, BUG-008, BUG-009, BUG-010, BUG-011, BUG-012, BUG-013]
-next_step: "Прогнать GitHub Actions (windows-latest): cargo fmt --check, clippy -D warnings, xtask atlas-check, тесты, размер .exe < 25 МБ и --selftest, затем проверить 4 пункта на Windows 11"
+next_step: "Прогнать GitHub Actions (windows-latest): cargo fmt --check, clippy -D warnings, xtask atlas-check, тесты, размер .exe < 25 МБ и --selftest, затем проверить адаптивные Настройки на Windows 11"
 touched_files:
-  - CHANGELOG.md, HANDOFF.yaml, crates/ui-slint/MAP.md, crates/platform-windows/MAP.md
-  - crates/platform-windows/src/slint_host.rs
-  - crates/app/src/{slint_dispatch.rs, settings_general.rs}
-  - crates/ui-slint/src/{lib.rs, vibrancy.rs, win_os.rs, ipc_proto.rs, dock_view.rs, dock_runner.rs, widgets_menu.rs, widgets_weather.rs, widgets_weather_data.rs, widgets_sysmon.rs, widgets_sysmon_view.rs, widgets_calendar.rs, settings_state.rs, settings_bridge.rs}
-  - crates/ui-slint/ui/{theme.slint, components/controls.slint, settings.slint, settings_general.slint, settings_dock.slint, settings_tools.slint, widget_weather.slint, widget_sysmon.slint, widget_calendar.slint}
+  - CHANGELOG.md, HANDOFF.yaml, crates/ui-slint/MAP.md
+  - crates/app/src/slint_dispatch.rs
+  - crates/ui-slint/src/settings_bridge.rs
+  - crates/ui-slint/ui/components/{window_chrome.slint, controls.slint}
+  - crates/ui-slint/ui/{settings.slint, settings_general.slint, settings_dock.slint, settings_widgets.slint, settings_overlay.slint, settings_tools.slint}
 warnings:
   - "Сборка и тесты не запускались локально (отсутствует cargo); требуется прогон GitHub Actions windows-latest и живая проверка на Windows 11"
 ideas:
+  - "Адаптивный мобильный режим для окна Заметок (после проверки Настроек)"
   - "Глобальный хоткей показа/скрытия игрового оверлея"
