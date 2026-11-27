@@ -11,6 +11,7 @@ mod settings_state_tabs;
 mod tray_runner;
 mod vibrancy;
 mod widgets_calendar;
+mod widgets_menu;
 mod widgets_runner;
 mod widgets_sysmon;
 mod widgets_sysmon_view;

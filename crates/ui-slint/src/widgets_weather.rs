@@ -17,12 +17,11 @@ use crate::settings_state::apply_theme_to_window;
 use crate::vibrancy::{
     apply_acrylic_vibrancy, apply_window_opacity, configure_desktop_window, enforce_skip_taskbar,
     install_bounds_tracker, move_window_to, resize_window_to, set_window_layer, set_window_visible,
-    start_window_drag, start_window_resize, DesktopWindowSpec,
+    start_window_drag, start_window_resize, window_hwnd_raw, DesktopWindowSpec,
 };
+use crate::widgets_menu::{show_widget_context_menu, WidgetMenuChoice, WidgetMenuParams};
 use crate::widgets_weather_data::{fetch_weather_blocking, sync_weather_ui, WeatherFetchPayload};
-use crate::win_os::{
-    emit_config_changed, emit_open_settings, emit_worker_log, idx_to_layer, open_text_file,
-};
+use crate::win_os::{emit_config_changed, emit_open_settings, emit_worker_log, open_text_file};
 
 thread_local! {
     static WEATHER_SLOT: RefCell<Option<SharedWeather>> = const { RefCell::new(None) };
@@ -36,6 +35,7 @@ pub struct WeatherSlintState {
     pub is_hybrid: bool,
     pub error: Option<String>,
     pub loading: bool,
+    pub appearance: AppearanceConfig,
     pub vis: WidgetMenuVisibility,
     pub dark: bool,
     pub window_shown: bool,
@@ -62,6 +62,7 @@ pub fn create_weather_controller(
         is_hybrid: false,
         error: None,
         loading: false,
+        appearance,
         vis,
         dark,
         window_shown: false,
@@ -91,6 +92,7 @@ pub fn reload_weather(
         if let Ok(fresh) = load_weather_config(&s.cfg_path) {
             s.cfg = fresh;
         }
+        s.appearance = appearance;
         s.vis = vis;
         let dark = apply_theme_to_window(&s.ui, appearance);
         if dark != s.dark {
@@ -271,42 +273,64 @@ fn wire_weather_menu_callbacks(state: &SharedWeather) {
         emit_config_changed("widgets");
     });
     let st = Rc::clone(state);
-    ui.on_set_layer(move |idx| {
-        let mut s = st.borrow_mut();
-        s.cfg.layer = idx_to_layer(idx);
-        set_window_layer(s.ui.window(), s.cfg.layer);
-        let _ = save_weather_config(&s.cfg_path, &s.cfg);
-        sync_weather_ui(&s);
-        emit_config_changed("widgets");
-    });
-    let st = Rc::clone(state);
-    ui.on_set_opacity(move |pct| {
-        let mut s = st.borrow_mut();
-        s.cfg.opacity_percent = pct.clamp(20, 100) as u8;
-        apply_window_opacity(s.ui.window(), s.cfg.opacity_percent);
-        let _ = save_weather_config(&s.cfg_path, &s.cfg);
-        sync_weather_ui(&s);
-        emit_config_changed("widgets");
-    });
-    let st = Rc::clone(state);
-    ui.on_set_interval_min(move |mins| {
-        let clamped = mins.clamp(5, 360) as u32;
-        {
-            let mut s = st.borrow_mut();
-            s.cfg.refresh_interval_min = clamped;
-            let _ = save_weather_config(&s.cfg_path, &s.cfg);
-            sync_weather_ui(&s);
+    ui.on_open_context_menu(move || open_weather_context_menu(&st));
+}
+
+fn open_weather_context_menu(state: &SharedWeather) {
+    const INTERVALS: [(u32, &str); 3] = [(15, "15 минут"), (30, "30 минут"), (60, "60 минут")];
+    let choice = {
+        let s = state.borrow();
+        let hwnd = window_hwnd_raw(s.ui.window());
+        show_widget_context_menu(&WidgetMenuParams {
+            hwnd_raw: hwnd,
+            appearance: s.appearance,
+            vis: s.vis,
+            refresh_label: "Обновить прогноз",
+            settings_label: "Настройки погоды",
+            config_label: "Открыть weather.cfg",
+            layer: s.cfg.layer,
+            opacity_percent: s.cfg.opacity_percent,
+            interval_title: "Обновление",
+            interval_options: &INTERVALS,
+            current_interval: s.cfg.refresh_interval_min,
+        })
+    };
+    let Some(act) = choice else {
+        return;
+    };
+    match act {
+        WidgetMenuChoice::Refresh => trigger_weather_refresh(state, false),
+        WidgetMenuChoice::OpenSettings => emit_open_settings("weather"),
+        WidgetMenuChoice::OpenConfig => {
+            let path = state.borrow().cfg_path.clone();
+            let _ = open_text_file(&path);
         }
-        arm_weather_timer(&st, clamped);
-        emit_config_changed("widgets");
-    });
-    let st = Rc::clone(state);
-    ui.on_open_config(move || {
-        let path = st.borrow().cfg_path.clone();
-        let _ = open_text_file(&path);
-    });
-    let st = Rc::clone(state);
-    ui.on_hide_widget(move || toggle_weather_visible(&st));
+        WidgetMenuChoice::SetLayer(layer) => {
+            let mut s = state.borrow_mut();
+            s.cfg.layer = layer;
+            set_window_layer(s.ui.window(), layer);
+            let _ = save_weather_config(&s.cfg_path, &s.cfg);
+            emit_config_changed("widgets");
+        }
+        WidgetMenuChoice::SetOpacity(pct) => {
+            let mut s = state.borrow_mut();
+            s.cfg.opacity_percent = pct;
+            apply_window_opacity(s.ui.window(), pct);
+            let _ = save_weather_config(&s.cfg_path, &s.cfg);
+            emit_config_changed("widgets");
+        }
+        WidgetMenuChoice::SetInterval(mins) => {
+            let clamped = mins.clamp(5, 360);
+            {
+                let mut s = state.borrow_mut();
+                s.cfg.refresh_interval_min = clamped;
+                let _ = save_weather_config(&s.cfg_path, &s.cfg);
+            }
+            arm_weather_timer(state, clamped);
+            emit_config_changed("widgets");
+        }
+        WidgetMenuChoice::HideWidget => toggle_weather_visible(state),
+    }
 }
 
 fn apply_fetch_result(state: &SharedWeather, payload: WeatherFetchPayload) {

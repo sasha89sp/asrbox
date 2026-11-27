@@ -13,7 +13,11 @@ use windows::Win32::Foundation::{
     GetLastError, ERROR_CLASS_ALREADY_EXISTS, HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM,
 };
 use windows::Win32::Graphics::Gdi::HBRUSH;
+use windows::Win32::System::Com::{
+    CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED,
+};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::UI::Shell::{ITaskbarList, TaskbarList};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, GetCursorPos, GetWindowLongPtrW, IsWindowVisible, LoadCursorW,
     RegisterClassExW, SetWindowLongPtrW, SetWindowPos, ShowWindow, GWL_EXSTYLE, IDC_ARROW,
@@ -75,6 +79,20 @@ pub fn apply_window_app_icon(hwnd_raw: isize) {
     apply_window_icon(hwnd);
 }
 
+fn delete_taskbar_tab(hwnd: HWND) {
+    // SAFETY: Standard STA COM call to ITaskbarList::DeleteTab on UI thread for live HWND.
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let created: Result<ITaskbarList, _> =
+            CoCreateInstance(&TaskbarList, None, CLSCTX_INPROC_SERVER);
+        if let Ok(list) = created {
+            if list.HrInit().is_ok() {
+                let _ = list.DeleteTab(hwnd);
+            }
+        }
+    }
+}
+
 pub fn set_window_skip_taskbar(hwnd_raw: isize, skip: bool) {
     if hwnd_raw == 0 {
         return;
@@ -93,31 +111,33 @@ pub fn set_window_skip_taskbar(hwnd_raw: isize, skip: bool) {
         };
         let cur_owner = GetWindowLongPtrW(hwnd, GWLP_OWNER_INDEX);
         let need_owner = skip && owner_target != 0 && cur_owner != owner_target;
-        if next_ex == ex && !need_owner {
-            return;
+        if next_ex != ex || need_owner {
+            let was_visible = IsWindowVisible(hwnd).as_bool();
+            if was_visible {
+                let _ = ShowWindow(hwnd, SW_HIDE);
+            }
+            if need_owner {
+                SetWindowLongPtrW(hwnd, GWLP_OWNER_INDEX, owner_target);
+            }
+            if next_ex != ex {
+                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, next_ex);
+            }
+            let _ = SetWindowPos(
+                hwnd,
+                None,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+            );
+            if was_visible {
+                let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+            }
         }
-        let was_visible = IsWindowVisible(hwnd).as_bool();
-        if was_visible {
-            let _ = ShowWindow(hwnd, SW_HIDE);
-        }
-        if need_owner {
-            SetWindowLongPtrW(hwnd, GWLP_OWNER_INDEX, owner_target);
-        }
-        if next_ex != ex {
-            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, next_ex);
-        }
-        let _ = SetWindowPos(
-            hwnd,
-            None,
-            0,
-            0,
-            0,
-            0,
-            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
-        );
-        if was_visible {
-            let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
-        }
+    }
+    if skip {
+        delete_taskbar_tab(hwnd);
     }
 }
 

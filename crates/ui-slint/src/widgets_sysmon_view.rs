@@ -5,7 +5,7 @@ use slint::{ModelRc, SharedString, VecModel};
 
 use crate::generated::ui::{SlintSysDriveRow, SlintSysProcRow, SysMonitorWindow};
 use crate::widgets_sysmon::SysMonSlintState;
-use crate::win_os::{layer_to_idx, local_time_now};
+use crate::win_os::local_time_now;
 
 pub(crate) fn sync_sysmon_ui(s: &SysMonSlintState) {
     let ui = &s.ui;
@@ -30,15 +30,6 @@ pub(crate) fn sync_sysmon_ui(s: &SysMonSlintState) {
     sync_gpu_section(ui, d);
     sync_ram_and_drives(ui, d);
     sync_net_and_procs(ui, d);
-    ui.set_layer_index(layer_to_idx(s.cfg.layer));
-    ui.set_opacity_pct(i32::from(s.cfg.opacity_percent));
-    ui.set_refresh_ms(s.cfg.refresh_interval_ms as i32);
-    ui.set_vis_refresh(s.vis.show_refresh);
-    ui.set_vis_layer(s.vis.show_layer);
-    ui.set_vis_opacity(s.vis.show_opacity);
-    ui.set_vis_interval(s.vis.show_interval);
-    ui.set_vis_open_config(s.vis.show_open_config);
-    ui.set_vis_hide(s.vis.show_hide);
 }
 
 fn sync_cpu_section(ui: &SysMonitorWindow, d: &SysTelemetry, refresh_ms: u32) {

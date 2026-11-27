@@ -42,14 +42,6 @@ pub fn layer_to_idx(layer: WidgetLayer) -> i32 {
     }
 }
 
-pub fn idx_to_layer(idx: i32) -> WidgetLayer {
-    match idx {
-        1 => WidgetLayer::Normal,
-        2 => WidgetLayer::Topmost,
-        _ => WidgetLayer::Wallpaper,
-    }
-}
-
 #[cfg(windows)]
 pub fn is_parent_alive(pid: u32) -> bool {
     pid == 0 || asrbox_platform_windows::is_process_alive(pid)

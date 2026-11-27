@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::rc::Rc;
 
 use asrbox_core::{load_modules_config, IsolationMode, ModuleId};
-use asrbox_mod_about::AppPaths;
+use asrbox_mod_about::{changelog_text, AppPaths};
 use asrbox_mod_backup::{load_backup_config, load_github_config};
 use asrbox_mod_webdav::{load_sync_config, load_webdav_store};
 use asrbox_platform_api::{load_appearance_config, AppLanguage, AppearanceConfig, FontRenderer};
@@ -144,9 +144,28 @@ fn apply_general_state(ui: &SettingsWindow, ctx: &SettingsViewContext<'_>, lang:
     apply_backup_state(ui, ctx, lang);
     apply_sync_state(ui, ctx, lang);
     ui.set_diag_summary(SharedString::from(ctx.runtime.diag_summary.as_str()));
+    ui.set_diag_monitor_enabled(ctx.runtime.diag_monitor_enabled);
     ui.set_diag_verbose(ctx.runtime.diag_verbose);
     ui.set_diag_file_log(ctx.runtime.diag_file_log);
+    let filter_lbl = if ctx.runtime.diag_filter_label.is_empty() {
+        "Все"
+    } else {
+        ctx.runtime.diag_filter_label.as_str()
+    };
+    ui.set_diag_filter_label(SharedString::from(filter_lbl));
+    let log_rows: Vec<SharedString> = ctx
+        .runtime
+        .diag_logs
+        .iter()
+        .map(|s| SharedString::from(s.as_str()))
+        .collect();
+    ui.set_diag_logs(ModelRc::from(Rc::new(VecModel::from(log_rows))));
     ui.set_data_dir_text(SharedString::from(ctx.paths.data_dir.display().to_string()));
+    ui.set_exe_path_text(SharedString::from(ctx.paths.exe_path.display().to_string()));
+    if ctx.refresh_inputs {
+        let ch: Vec<SharedString> = changelog_text().lines().map(Into::into).collect();
+        ui.set_changelog_lines(ModelRc::from(Rc::new(VecModel::from(ch))));
+    }
 }
 
 fn apply_backup_state(ui: &SettingsWindow, ctx: &SettingsViewContext<'_>, lang: AppLanguage) {

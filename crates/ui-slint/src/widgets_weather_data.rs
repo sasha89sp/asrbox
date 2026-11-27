@@ -10,7 +10,7 @@ use slint::{ModelRc, SharedString, VecModel};
 
 use crate::generated::ui::{SlintWeatherDayRow, SlintWeatherHourRow};
 use crate::widgets_weather::WeatherSlintState;
-use crate::win_os::{cred_load, http_get, layer_to_idx, local_time_now};
+use crate::win_os::{cred_load, http_get, local_time_now};
 
 pub(crate) struct WeatherFetchPayload {
     pub(crate) city_override: Option<(String, f64, f64)>,
@@ -150,17 +150,8 @@ pub(crate) fn sync_weather_ui(s: &WeatherSlintState) {
         s.cfg.provider.display_name()
     )));
     ui.set_forecast_days(i32::from(normalize_forecast_days(s.cfg.forecast_days)));
-    ui.set_layer_index(layer_to_idx(s.cfg.layer));
-    ui.set_opacity_pct(i32::from(s.cfg.opacity_percent));
-    ui.set_interval_min(s.cfg.refresh_interval_min as i32);
     ui.set_loading(s.loading);
     ui.set_error_text(SharedString::from(s.error.as_deref().unwrap_or("")));
-    ui.set_vis_refresh(s.vis.show_refresh);
-    ui.set_vis_layer(s.vis.show_layer);
-    ui.set_vis_opacity(s.vis.show_opacity);
-    ui.set_vis_interval(s.vis.show_interval);
-    ui.set_vis_open_config(s.vis.show_open_config);
-    ui.set_vis_hide(s.vis.show_hide);
     sync_weather_metrics_and_lists(s);
 }
 

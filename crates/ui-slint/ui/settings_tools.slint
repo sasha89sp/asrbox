@@ -1,0 +1,263 @@
+import { Theme, SlintModuleRow } from "theme.slint";
+import {
+    AccordionCard,
+    SettingRow,
+    GlassSwitch,
+    GlassButton,
+} from "components/controls.slint";
+
+export component SettingsDiagnosticsView inherits VerticalLayout {
+    in property <string> diag-summary: "";
+    in property <bool> diag-monitor-enabled: true;
+    in property <bool> diag-verbose: false;
+    in property <bool> diag-file-log: false;
+    in property <string> diag-filter-label: "Все";
+    in property <[SlintModuleRow]> modules: [];
+    in property <[string]> diag-logs: [];
+
+    private property <bool> exp-telemetry: true;
+    private property <bool> exp-modules: true;
+    private property <bool> exp-logs: true;
+
+    callback toggle-monitor(bool);
+    callback set-verbose(bool);
+    callback set-file-log(bool);
+    callback cycle-filter();
+    callback refresh-now();
+    callback clear-logs();
+    callback copy-report();
+    callback save-report();
+    callback restart-module(string);
+
+    spacing: 12px;
+
+    AccordionCard {
+        title: Theme.is-ru ? "Телеметрия и диагностика" : "Telemetry & Diagnostics";
+        summary: root.diag-monitor-enabled
+            ? (Theme.is-ru ? "Живой мониторинг" : "Live")
+            : (Theme.is-ru ? "Пауза" : "Paused");
+        expanded: root.exp-telemetry;
+        accent-top: true;
+        toggled => { root.exp-telemetry = !root.exp-telemetry; }
+
+        SettingRow {
+            badge-icon: "●";
+            badge-bg: root.diag-monitor-enabled ? Theme.success : Theme.text-muted;
+            title: Theme.is-ru ? "Показатели процесса" : "Process Metrics";
+            subtitle: root.diag-summary != ""
+                ? root.diag-summary
+                : (Theme.is-ru ? "Ожидание данных..." : "Waiting for telemetry...");
+
+            GlassButton {
+                label: Theme.is-ru ? "Обновить" : "Refresh";
+                compact: true;
+                clicked => { root.refresh-now(); }
+            }
+            GlassButton {
+                label: Theme.is-ru ? "Копировать" : "Copy";
+                compact: true;
+                clicked => { root.copy-report(); }
+            }
+            GlassButton {
+                label: Theme.is-ru ? "Сохранить" : "Save";
+                variant: "primary";
+                compact: true;
+                clicked => { root.save-report(); }
+            }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Автообновление показателей (1.5 с)" : "Live Refresh (1.5 s)";
+            subtitle: Theme.is-ru
+                ? "Отключите для 0% нагрузки в фоне на вкладке диагностики"
+                : "Disable for zero polling while viewing diagnostics";
+            GlassSwitch {
+                checked: root.diag-monitor-enabled;
+                toggled(v) => { root.toggle-monitor(v); }
+            }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Подробное логирование (TRACE)" : "Verbose Logging (TRACE)";
+            GlassSwitch {
+                checked: root.diag-verbose;
+                toggled(v) => { root.set-verbose(v); }
+            }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Запись логов в файл (data/logs)" : "Write Logs to File (data/logs)";
+            GlassSwitch {
+                checked: root.diag-file-log;
+                toggled(v) => { root.set-file-log(v); }
+            }
+        }
+    }
+
+    AccordionCard {
+        title: Theme.is-ru ? "Состояние модулей" : "Modules Health";
+        summary: "\{root.modules.length}";
+        expanded: root.exp-modules;
+        toggled => { root.exp-modules = !root.exp-modules; }
+
+        for m in root.modules : SettingRow {
+            badge-icon: m.running ? "●" : "○";
+            badge-bg: m.running ? Theme.success : Theme.text-muted;
+            title: m.label;
+            subtitle: m.status-text;
+
+            GlassButton {
+                label: Theme.is-ru ? "Перезапуск" : "Restart";
+                compact: true;
+                clicked => { root.restart-module(m.id); }
+            }
+        }
+    }
+
+    AccordionCard {
+        title: Theme.is-ru ? "Журнал событий" : "Event Log";
+        summary: "\{root.diag-logs.length}";
+        expanded: root.exp-logs;
+        toggled => { root.exp-logs = !root.exp-logs; }
+
+        SettingRow {
+            title: Theme.is-ru ? "Фильтр по модулю" : "Module Filter";
+            subtitle: Theme.is-ru
+                ? "Отображаются последние 80 записей буфера диагностики"
+                : "Showing latest 80 diagnostic ring-buffer entries";
+
+            GlassButton {
+                label: (Theme.is-ru ? "Модуль: " : "Module: ") + root.diag-filter-label;
+                active: root.diag-filter-label != "Все";
+                compact: true;
+                clicked => { root.cycle-filter(); }
+            }
+            GlassButton {
+                label: Theme.is-ru ? "Очистить" : "Clear";
+                variant: "danger";
+                compact: true;
+                clicked => { root.clear-logs(); }
+            }
+        }
+
+        VerticalLayout {
+            padding-left: 16px;
+            padding-right: 16px;
+            padding-top: 6px;
+            padding-bottom: 10px;
+
+            Rectangle {
+                border-radius: 8px;
+                background: Theme.input-bg;
+                border-width: 1px;
+                border-color: Theme.border-color;
+
+                VerticalLayout {
+                    padding: 10px;
+                    spacing: 4px;
+
+                    if (root.diag-logs.length == 0) : Text {
+                        text: Theme.is-ru ? "Записей журнала пока нет." : "No log entries yet.";
+                        color: Theme.text-muted;
+                        font-size: 11.5px;
+                    }
+
+                    for line in root.diag-logs : Text {
+                        text: line;
+                        color: Theme.text-secondary;
+                        font-family: "Consolas";
+                        font-size: 11px;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component SettingsChangelogView inherits VerticalLayout {
+    in property <string> app-version: "0.2.0";
+    in property <string> data-dir-text: "";
+    in property <string> exe-path-text: "";
+    in property <[string]> changelog-lines: [];
+
+    private property <bool> exp-about: true;
+    private property <bool> exp-history: true;
+
+    callback open-data-folder();
+    callback copy-paths();
+
+    spacing: 12px;
+
+    AccordionCard {
+        title: Theme.is-ru ? "О программе и портативные пути" : "About & Portable Paths";
+        summary: "v\{root.app-version}";
+        expanded: root.exp-about;
+        accent-top: true;
+        toggled => { root.exp-about = !root.exp-about; }
+
+        SettingRow {
+            badge-icon: "i";
+            badge-bg: Theme.accent;
+            title: "asrbox v\{root.app-version} · Portable (Windows x64)";
+            subtitle: Theme.is-ru
+                ? "Настройки, кэш, заметки и логи хранятся в папке data рядом с asrbox.exe"
+                : "Config, cache, notes and logs live in the data folder next to asrbox.exe";
+
+            GlassButton {
+                label: Theme.is-ru ? "Папка data" : "Data Folder";
+                variant: "primary";
+                compact: true;
+                clicked => { root.open-data-folder(); }
+            }
+            GlassButton {
+                label: Theme.is-ru ? "Скопировать пути" : "Copy Paths";
+                compact: true;
+                clicked => { root.copy-paths(); }
+            }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Исполняемый файл" : "Executable";
+            subtitle: root.exe-path-text;
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Папка данных (data)" : "Data Directory";
+            subtitle: root.data-dir-text;
+        }
+    }
+
+    AccordionCard {
+        title: Theme.is-ru ? "История версий (CHANGELOG.md)" : "Version History (CHANGELOG.md)";
+        summary: "\{root.changelog-lines.length}";
+        expanded: root.exp-history;
+        toggled => { root.exp-history = !root.exp-history; }
+
+        VerticalLayout {
+            padding-left: 16px;
+            padding-right: 16px;
+            padding-top: 8px;
+            padding-bottom: 12px;
+
+            Rectangle {
+                border-radius: 8px;
+                background: Theme.input-bg;
+                border-width: 1px;
+                border-color: Theme.border-color;
+
+                VerticalLayout {
+                    padding: 12px;
+                    spacing: 4px;
+
+                    for line in root.changelog-lines : Text {
+                        text: line;
+                        color: Theme.text-primary;
+                        font-size: 12px;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+        }
+    }
+}

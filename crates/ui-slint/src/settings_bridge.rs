@@ -7,14 +7,14 @@ use std::time::Duration;
 
 use asrbox_mod_about::AppPaths;
 use asrbox_mod_settings::ui_state_store::{load_expanded_sections, save_expanded_sections};
-use slint::{ComponentHandle, SharedString, Timer, Weak};
+use slint::{ComponentHandle, SharedString, Timer, TimerMode, Weak};
 
 use crate::generated::ui::SettingsWindow;
 use crate::ipc_proto::{decode_runtime_status, encode_ui_cmd, escape_field, UiRuntimeStatus};
 use crate::settings_state::{apply_settings_state, SettingsViewContext};
 use crate::vibrancy::{
-    apply_settings_chrome, center_window_in_work_area, minimize_window, select_winit_backend,
-    start_window_drag, start_window_resize, toggle_maximize_window,
+    apply_settings_chrome, center_window_in_work_area, focus_window, minimize_window,
+    select_winit_backend, start_window_drag, start_window_resize, toggle_maximize_window,
 };
 use crate::win_os::primary_work_area;
 
@@ -59,7 +59,7 @@ pub fn run_settings_window(
     select_winit_backend()?;
     let ui = SettingsWindow::new().map_err(|e| format!("create SettingsWindow: {e}"))?;
     ui.set_app_version(SharedString::from(app_version));
-    ui.set_active_tab(initial_tab.clamp(0, 3));
+    ui.set_active_tab(initial_tab.clamp(0, 5));
     ui.set_selected_widget(initial_widget.clamp(0, 3));
 
     let expanded = load_expanded_sections(&paths.settings_ui_cfg);
@@ -85,6 +85,16 @@ pub fn run_settings_window(
             let wa = primary_work_area();
             center_window_in_work_area(win.window(), wa, 860, 560, 720, 480);
             apply_settings_chrome(win.window(), initial_dark);
+        }
+    });
+
+    let diag_timer = Timer::default();
+    let weak_diag = ui.as_weak();
+    diag_timer.start(TimerMode::Repeated, Duration::from_millis(1500), move || {
+        if let Some(win) = weak_diag.upgrade() {
+            if win.get_active_tab() == 4 && win.get_diag_monitor_enabled() {
+                emit_cmd("refresh_diag", "");
+            }
         }
     });
 
@@ -261,11 +271,13 @@ fn apply_host_line(weak: &Weak<SettingsWindow>, line: &str) {
         } else if let Some(rest) = line.strip_prefix("TAB|") {
             let mut p = rest.splitn(2, '|');
             if let Some(tab) = p.next().and_then(|s| s.parse::<i32>().ok()) {
-                ui.set_active_tab(tab.clamp(0, 3));
+                ui.set_active_tab(tab.clamp(0, 5));
             }
             if let Some(sub) = p.next().and_then(|s| s.parse::<i32>().ok()) {
                 ui.set_selected_widget(sub.clamp(0, 3));
             }
+            ui.invoke_reset_scroll();
+            focus_window(ui.window());
             rc.borrow_mut().sync_ui(&ui, true);
         }
     });

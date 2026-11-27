@@ -18,12 +18,11 @@ use crate::settings_state::apply_theme_to_window;
 use crate::vibrancy::{
     apply_acrylic_vibrancy, apply_window_opacity, configure_desktop_window, enforce_skip_taskbar,
     install_bounds_tracker, move_window_to, resize_window_to, set_window_layer, set_window_visible,
-    start_window_drag, start_window_resize, DesktopWindowSpec,
+    start_window_drag, start_window_resize, window_hwnd_raw, DesktopWindowSpec,
 };
+use crate::widgets_menu::{show_widget_context_menu, WidgetMenuChoice, WidgetMenuParams};
 use crate::widgets_sysmon_view::sync_sysmon_ui;
-use crate::win_os::{
-    emit_config_changed, emit_open_settings, idx_to_layer, launch_system_tool, open_text_file,
-};
+use crate::win_os::{emit_config_changed, emit_open_settings, launch_system_tool, open_text_file};
 
 thread_local! {
     static SYSMON_SLOT: RefCell<Option<SharedSysMon>> = const { RefCell::new(None) };
@@ -34,6 +33,7 @@ pub struct SysMonSlintState {
     pub cfg_path: PathBuf,
     pub cfg: SysMonitorConfig,
     pub data: SysTelemetry,
+    pub appearance: AppearanceConfig,
     pub vis: WidgetMenuVisibility,
     pub dark: bool,
     pub window_shown: bool,
@@ -65,6 +65,7 @@ pub fn create_sysmon_controller(
         cfg_path,
         cfg,
         data: SysTelemetry::default(),
+        appearance,
         vis,
         dark,
         window_shown: false,
@@ -96,6 +97,7 @@ pub fn reload_sysmon(
         if let Ok(fresh) = load_sysmon_config(&s.cfg_path) {
             s.cfg = fresh;
         }
+        s.appearance = appearance;
         s.vis = vis;
         s.sampler_ms
             .store(s.cfg.refresh_interval_ms, Ordering::Relaxed);
@@ -281,38 +283,65 @@ fn wire_sysmon_callbacks(state: &SharedSysMon) {
 fn wire_sysmon_menu_callbacks(state: &SharedSysMon) {
     let ui = &state.borrow().ui;
     let st = Rc::clone(state);
-    ui.on_set_layer(move |idx| {
-        let mut s = st.borrow_mut();
-        s.cfg.layer = idx_to_layer(idx);
-        set_window_layer(s.ui.window(), s.cfg.layer);
-        let _ = save_sysmon_config(&s.cfg_path, &s.cfg);
-        sync_sysmon_ui(&s);
-        emit_config_changed("widgets");
-    });
-    let st = Rc::clone(state);
-    ui.on_set_opacity(move |pct| {
-        let mut s = st.borrow_mut();
-        s.cfg.opacity_percent = pct.clamp(20, 100) as u8;
-        apply_window_opacity(s.ui.window(), s.cfg.opacity_percent);
-        let _ = save_sysmon_config(&s.cfg_path, &s.cfg);
-        sync_sysmon_ui(&s);
-        emit_config_changed("widgets");
-    });
-    let st = Rc::clone(state);
-    ui.on_set_refresh_ms(move |ms| {
-        let mut s = st.borrow_mut();
-        let clamped = (ms.max(500) as u32).clamp(MIN_REFRESH_MS, MAX_REFRESH_MS);
-        s.cfg.refresh_interval_ms = clamped;
-        s.sampler_ms.store(clamped, Ordering::Relaxed);
-        let _ = save_sysmon_config(&s.cfg_path, &s.cfg);
-        sync_sysmon_ui(&s);
-        emit_config_changed("widgets");
-    });
-    let st = Rc::clone(state);
-    ui.on_open_config(move || {
-        let path = st.borrow().cfg_path.clone();
-        let _ = open_text_file(&path);
-    });
-    let st = Rc::clone(state);
-    ui.on_hide_widget(move || toggle_sysmon_visible(&st));
+    ui.on_open_context_menu(move || open_sysmon_context_menu(&st));
+}
+
+fn open_sysmon_context_menu(state: &SharedSysMon) {
+    const INTERVALS: [(u32, &str); 4] = [
+        (1000, "1 сек"),
+        (2000, "2 сек"),
+        (3000, "3 сек"),
+        (5000, "5 сек"),
+    ];
+    let choice = {
+        let s = state.borrow();
+        let hwnd = window_hwnd_raw(s.ui.window());
+        show_widget_context_menu(&WidgetMenuParams {
+            hwnd_raw: hwnd,
+            appearance: s.appearance,
+            vis: s.vis,
+            refresh_label: "Обновить датчики",
+            settings_label: "Настройки монитора",
+            config_label: "Открыть sysmon.cfg",
+            layer: s.cfg.layer,
+            opacity_percent: s.cfg.opacity_percent,
+            interval_title: "Частота опроса",
+            interval_options: &INTERVALS,
+            current_interval: s.cfg.refresh_interval_ms,
+        })
+    };
+    let Some(act) = choice else {
+        return;
+    };
+    match act {
+        WidgetMenuChoice::Refresh => kick_sysmon_sample(state),
+        WidgetMenuChoice::OpenSettings => emit_open_settings("sysmon"),
+        WidgetMenuChoice::OpenConfig => {
+            let path = state.borrow().cfg_path.clone();
+            let _ = open_text_file(&path);
+        }
+        WidgetMenuChoice::SetLayer(layer) => {
+            let mut s = state.borrow_mut();
+            s.cfg.layer = layer;
+            set_window_layer(s.ui.window(), layer);
+            let _ = save_sysmon_config(&s.cfg_path, &s.cfg);
+            emit_config_changed("widgets");
+        }
+        WidgetMenuChoice::SetOpacity(pct) => {
+            let mut s = state.borrow_mut();
+            s.cfg.opacity_percent = pct;
+            apply_window_opacity(s.ui.window(), pct);
+            let _ = save_sysmon_config(&s.cfg_path, &s.cfg);
+            emit_config_changed("widgets");
+        }
+        WidgetMenuChoice::SetInterval(ms) => {
+            let mut s = state.borrow_mut();
+            let clamped = ms.clamp(MIN_REFRESH_MS, MAX_REFRESH_MS);
+            s.cfg.refresh_interval_ms = clamped;
+            s.sampler_ms.store(clamped, Ordering::Relaxed);
+            let _ = save_sysmon_config(&s.cfg_path, &s.cfg);
+            emit_config_changed("widgets");
+        }
+        WidgetMenuChoice::HideWidget => toggle_sysmon_visible(state),
+    }
 }

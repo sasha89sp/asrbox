@@ -24,7 +24,8 @@ use crate::settings_state::apply_theme_to_window;
 use crate::vibrancy::{
     apply_acrylic_vibrancy, apply_window_opacity, configure_desktop_window, enforce_skip_taskbar,
     install_dock_window_hooks, move_window_to, resize_window_to, select_winit_backend,
-    set_window_layer, set_window_visible, start_window_drag, window_hwnd_raw, DesktopWindowSpec,
+    set_window_layer, set_window_visible, start_window_drag, window_hwnd_raw, winit_scale_factor,
+    DesktopWindowSpec,
 };
 use crate::win_os::{
     activate_or_launch, emit_config_changed, emit_open_settings, emit_worker_log, emit_worker_msg,
@@ -200,8 +201,9 @@ fn sync_single_dock(
     work_area: PixelRect,
     can_remove: bool,
 ) {
-    let (x, y, width, height) = compute_dock_rect(cfg, work_area);
     if let Some(win) = s.windows.get(&cfg.id) {
+        let sf = winit_scale_factor(win.window());
+        let (x, y, width, height) = compute_dock_rect(cfg, work_area, sf);
         let dark = apply_theme_to_window(win, s.appearance);
         if dark != s.dark {
             s.dark = dark;
@@ -219,6 +221,8 @@ fn sync_single_dock(
         sync_dock_window(&win, cfg, &s.running_exes, &mut s.icons, can_remove);
         wire_dock_window(&win, cfg.id);
         let _ = win.show();
+        let sf = winit_scale_factor(win.window());
+        let (x, y, width, height) = compute_dock_rect(cfg, work_area, sf);
         configure_desktop_window(
             win.window(),
             DesktopWindowSpec {
@@ -234,14 +238,20 @@ fn sync_single_dock(
                 opacity_percent: cfg.opacity_percent,
             },
         );
-        let weak = win.as_weak();
-        Timer::single_shot(Duration::from_millis(60), move || {
-            if let Some(u) = weak.upgrade() {
-                resize_window_to(u.window(), width, height);
-                move_window_to(u.window(), x, y);
-                enforce_skip_taskbar(u.window());
-            }
-        });
+        let cfg_snap = cfg.clone();
+        for delay_ms in [60u64, 250u64] {
+            let weak = win.as_weak();
+            let cfg_c = cfg_snap.clone();
+            Timer::single_shot(Duration::from_millis(delay_ms), move || {
+                if let Some(u) = weak.upgrade() {
+                    let sf_now = winit_scale_factor(u.window());
+                    let (nx, ny, nw, nh) = compute_dock_rect(&cfg_c, work_area, sf_now);
+                    resize_window_to(u.window(), nw, nh);
+                    move_window_to(u.window(), nx, ny);
+                    enforce_skip_taskbar(u.window());
+                }
+            });
+        }
         s.windows.insert(cfg.id, win);
     }
 }

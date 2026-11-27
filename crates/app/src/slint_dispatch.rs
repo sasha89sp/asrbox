@@ -32,6 +32,15 @@ impl<I: IconProvider> AppController<I> {
             WidgetSubTab::Weather => 2,
             WidgetSubTab::Notes => 3,
         };
+        self.open_slint_settings_raw(host, tab_idx, sub_idx);
+    }
+
+    pub(crate) fn open_slint_settings_raw<H: DockPlatform + WidgetPlatform + ToolsPlatform>(
+        &mut self,
+        host: &mut H,
+        tab_idx: i32,
+        sub_idx: i32,
+    ) {
         let status = self.build_ui_runtime_status(host);
         if let Err(err) = self.slint_ui.open_settings(tab_idx, sub_idx, &status) {
             self.debug
@@ -104,6 +113,17 @@ impl<I: IconProvider> AppController<I> {
             })
             .collect();
         let bkp_view = self.backup.backup_view(self.appearance.language);
+        let filter = self.debug.filter_module();
+        let mut diag_logs: Vec<String> = self
+            .debug
+            .entries()
+            .iter()
+            .rev()
+            .filter(|e| filter.is_none_or(|m| e.module == m))
+            .take(80)
+            .map(|e| format!("{} [{}] [{}] {}", e.timestamp, e.level.tag(), e.module, e.message))
+            .collect();
+        diag_logs.reverse();
         UiRuntimeStatus {
             autostart: host.is_autostart_enabled(),
             has_zip_pw: self.backup.has_zip_password,
@@ -113,9 +133,12 @@ impl<I: IconProvider> AppController<I> {
             diag_verbose: self.debug.verbose_trace(),
             diag_file_log: self.debug.file_logging(),
             backup_busy: bkp_view.busy,
+            diag_monitor_enabled: self.diagnostics_monitor_enabled,
             diag_summary,
             status_banner: self.last_ui_status_msg.clone(),
+            diag_filter_label: self.debug.filter_label().to_owned(),
             modules,
+            diag_logs,
         }
     }
 
@@ -248,6 +271,23 @@ impl<I: IconProvider> AppController<I> {
         act: &str,
         arg: &str,
     ) -> Option<(bool, bool)> {
+        match act {
+            "refresh_diag" => return Some((true, false)),
+            "toggle_diag_monitor" => {
+                self.diagnostics_monitor_enabled = arg == "1";
+                return Some((true, false));
+            }
+            "cycle_diag_filter" => {
+                self.debug.cycle_filter();
+                return Some((true, false));
+            }
+            "clear_diag_logs" => {
+                self.debug.clear(host.local_time_now());
+                self.last_ui_status_msg = "Логи очищены".to_owned();
+                return Some((true, false));
+            }
+            _ => {}
+        }
         let mut notes_dirty = false;
         let action = match act {
             "reset_all" => {

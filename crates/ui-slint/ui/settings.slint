@@ -18,6 +18,7 @@ import { SettingsGeneralView } from "settings_general.slint";
 import { SettingsDockView } from "settings_dock.slint";
 import { SettingsWidgetsView } from "settings_widgets.slint";
 import { SettingsOverlayView } from "settings_overlay.slint";
+import { SettingsDiagnosticsView, SettingsChangelogView } from "settings_tools.slint";
 
 component NavItem inherits Rectangle {
     in property <int> icon-kind: 0;
@@ -26,23 +27,25 @@ component NavItem inherits Rectangle {
     callback clicked();
 
     height: 38px;
-    border-radius: 8px;
+    border-radius: 9px;
     background: root.active
-        ? @linear-gradient(90deg, Theme.accent-tint 0%, Theme.accent-glow 100%)
+        ? @linear-gradient(90deg, Theme.accent 0%, Theme.accent-hover 100%)
         : (ta.has-hover ? Theme.hover-bg : transparent);
     border-width: root.active ? 1px : 0px;
-    border-color: root.active ? Theme.accent : transparent;
+    border-color: root.active ? rgba(255, 255, 255, 0.28) : transparent;
+    drop-shadow-blur: root.active ? 14px : 0px;
+    drop-shadow-color: root.active ? Theme.accent-glow : transparent;
 
     animate background { duration: 150ms; easing: ease-out; }
 
-    // Left 3x16px active accent pill
+    // Left 3x16px crisp white active pill
     if (root.active) : Rectangle {
-        x: 3px;
+        x: 4px;
         y: (parent.height - 16px) / 2;
         width: 3px;
         height: 16px;
         border-radius: 1.5px;
-        background: Theme.accent;
+        background: #FFFFFF;
     }
 
     HorizontalLayout {
@@ -56,13 +59,13 @@ component NavItem inherits Rectangle {
             VectorIconNav {
                 kind: root.icon-kind;
                 size: 14px;
-                icon-color: root.active ? Theme.text-primary : Theme.text-secondary;
+                icon-color: root.active ? #FFFFFF : Theme.text-secondary;
             }
         }
 
         Text {
             text: root.label;
-            color: root.active ? Theme.text-primary : Theme.text-secondary;
+            color: root.active ? #FFFFFF : Theme.text-secondary;
             font-size: 13px;
             font-weight: root.active ? 600 : 500;
             vertical-alignment: center;
@@ -149,9 +152,14 @@ export component SettingsWindow inherits Window {
     in property <string> sync-status: "";
     in property <[SlintSyncItemRow]> sync-items: [];
     in property <string> diag-summary: "";
+    in property <bool> diag-monitor-enabled: true;
     in property <bool> diag-verbose: false;
     in property <bool> diag-file-log: false;
+    in property <string> diag-filter-label: "Все";
+    in property <[string]> diag-logs: [];
     in property <string> data-dir-text: "";
+    in property <string> exe-path-text: "";
+    in property <[string]> changelog-lines: [];
 
     // Dock state
     in property <[string]> dock-names: ["Док 1"];
@@ -239,6 +247,10 @@ export component SettingsWindow inherits Window {
     callback save-webdav-server(int, string, string, string, string);
     callback save-gh-settings(string, string, string);
 
+    public function reset-scroll() {
+        scroll.viewport-y = 0px;
+    }
+
     // Outer Concentric Fluent Glass frame (8px matches Windows 11 DWMWCP_ROUND)
     Rectangle {
         width: 100%;
@@ -312,25 +324,62 @@ export component SettingsWindow inherits Window {
                             icon-kind: 0;
                             label: Theme.is-ru ? "Общие настройки" : "General";
                             active: root.active-tab == 0;
-                            clicked => { root.active-tab = 0; }
+                            clicked => {
+                                root.active-tab = 0;
+                                scroll.viewport-y = 0px;
+                            }
                         }
                         NavItem {
                             icon-kind: 1;
                             label: Theme.is-ru ? "Док-панели" : "Dock Panels";
                             active: root.active-tab == 1;
-                            clicked => { root.active-tab = 1; }
+                            clicked => {
+                                root.active-tab = 1;
+                                scroll.viewport-y = 0px;
+                            }
                         }
                         NavItem {
                             icon-kind: 2;
                             label: Theme.is-ru ? "Виджеты" : "Widgets";
                             active: root.active-tab == 2;
-                            clicked => { root.active-tab = 2; }
+                            clicked => {
+                                root.active-tab = 2;
+                                scroll.viewport-y = 0px;
+                            }
                         }
                         NavItem {
                             icon-kind: 3;
                             label: Theme.is-ru ? "Игровой оверлей" : "Game Overlay";
                             active: root.active-tab == 3;
-                            clicked => { root.active-tab = 3; }
+                            clicked => {
+                                root.active-tab = 3;
+                                scroll.viewport-y = 0px;
+                            }
+                        }
+
+                        Rectangle {
+                            height: 1px;
+                            background: Theme.divider-color;
+                        }
+
+                        NavItem {
+                            icon-kind: 6;
+                            label: Theme.is-ru ? "Диагностика и логи" : "Diagnostics";
+                            active: root.active-tab == 4;
+                            clicked => {
+                                root.active-tab = 4;
+                                scroll.viewport-y = 0px;
+                                root.dispatch("refresh_diag", "");
+                            }
+                        }
+                        NavItem {
+                            icon-kind: 7;
+                            label: Theme.is-ru ? "История версий" : "Changelog";
+                            active: root.active-tab == 5;
+                            clicked => {
+                                root.active-tab = 5;
+                                scroll.viewport-y = 0px;
+                            }
                         }
 
                         Rectangle { vertical-stretch: 1; background: transparent; }
@@ -382,6 +431,8 @@ export component SettingsWindow inherits Window {
                                 root.active-tab == 1 ? (Theme.is-ru ? "Док-панели" : "Dock Panels") :
                                 root.active-tab == 2 ? (Theme.is-ru ? "Виджеты" : "Widgets") :
                                 root.active-tab == 3 ? (Theme.is-ru ? "Игровой оверлей" : "Game Overlay") :
+                                root.active-tab == 4 ? (Theme.is-ru ? "Диагностика и логи" : "Diagnostics & Logs") :
+                                root.active-tab == 5 ? (Theme.is-ru ? "История версий" : "Version History") :
                                 (Theme.is-ru ? "Общие настройки" : "General Settings");
                             color: Theme.text-primary;
                             font-size: 20px;
@@ -398,13 +449,14 @@ export component SettingsWindow inherits Window {
                         }
                     }
 
-                    ScrollView {
+                    scroll := ScrollView {
                         vertical-stretch: 1;
 
                         VerticalLayout {
                             padding-left: 22px;
                             padding-right: 22px;
-                            padding-bottom: 20px;
+                            padding-top: 4px;
+                            padding-bottom: 22px;
                             spacing: 12px;
 
                             if (root.active-tab == 0) : SettingsGeneralView {
@@ -490,6 +542,15 @@ export component SettingsWindow inherits Window {
                                 save-diag-report => { root.dispatch("save_diag_report", ""); }
                                 open-data-folder => { root.dispatch("open_data_folder", ""); }
                                 copy-paths => { root.dispatch("copy_paths", ""); }
+                                open-diagnostics => {
+                                    root.active-tab = 4;
+                                    scroll.viewport-y = 0px;
+                                    root.dispatch("refresh_diag", "");
+                                }
+                                open-changelog => {
+                                    root.active-tab = 5;
+                                    scroll.viewport-y = 0px;
+                                }
                             }
 
                             if (root.active-tab == 1) : SettingsDockView {
@@ -671,6 +732,36 @@ export component SettingsWindow inherits Window {
                                 set-refresh-ms(v) => { root.dispatch("ov_refresh_ms", "\{v}"); }
                                 apply-size-preset(w, h) => { root.dispatch("ov_preset", "\{w}|\{h}"); }
                                 open-overlay-cfg => { root.dispatch("open_overlay_cfg", ""); }
+                            }
+
+                            if (root.active-tab == 4) : SettingsDiagnosticsView {
+                                diag-summary: root.diag-summary;
+                                diag-monitor-enabled: root.diag-monitor-enabled;
+                                diag-verbose: root.diag-verbose;
+                                diag-file-log: root.diag-file-log;
+                                diag-filter-label: root.diag-filter-label;
+                                modules: root.modules;
+                                diag-logs: root.diag-logs;
+
+                                toggle-monitor(v) => { root.dispatch("toggle_diag_monitor", v ? "1" : "0"); }
+                                set-verbose(v) => { root.dispatch("set_diag_verbose", v ? "1" : "0"); }
+                                set-file-log(v) => { root.dispatch("set_diag_file_log", v ? "1" : "0"); }
+                                cycle-filter => { root.dispatch("cycle_diag_filter", ""); }
+                                refresh-now => { root.dispatch("refresh_diag", ""); }
+                                clear-logs => { root.dispatch("clear_diag_logs", ""); }
+                                copy-report => { root.dispatch("copy_diag_report", ""); }
+                                save-report => { root.dispatch("save_diag_report", ""); }
+                                restart-module(id) => { root.dispatch("restart_module", id); }
+                            }
+
+                            if (root.active-tab == 5) : SettingsChangelogView {
+                                app-version: root.app-version;
+                                data-dir-text: root.data-dir-text;
+                                exe-path-text: root.exe-path-text;
+                                changelog-lines: root.changelog-lines;
+
+                                open-data-folder => { root.dispatch("open_data_folder", ""); }
+                                copy-paths => { root.dispatch("copy_paths", ""); }
                             }
                         }
                     }

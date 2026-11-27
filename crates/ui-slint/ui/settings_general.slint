@@ -128,6 +128,8 @@ export component SettingsGeneralView inherits VerticalLayout {
     callback save-diag-report();
     callback open-data-folder();
     callback copy-paths();
+    callback open-diagnostics();
+    callback open-changelog();
 
     spacing: 12px;
 
@@ -139,6 +141,7 @@ export component SettingsGeneralView inherits VerticalLayout {
             : (Theme.is-ru ? "Светлая" : "Light");
         expanded: root.exp-appearance;
         highlighted: root.hi-appearance;
+        accent-top: true;
         toggled => { root.toggle-section("appearance"); }
 
         // Theme Selection miniature preview cards
@@ -687,6 +690,24 @@ export component SettingsGeneralView inherits VerticalLayout {
             GlassSwitch {
                 checked: root.diag-file-log;
                 toggled(v) => { root.set-diag-file-log(v); }
+            }
+        }
+
+        SettingRow {
+            title: Theme.is-ru ? "Диагностика и история версий" : "Diagnostics & Version History";
+            subtitle: Theme.is-ru
+                ? "Открыть полный журнал событий, метрики модулей и CHANGELOG"
+                : "Open live event log, module metrics and CHANGELOG";
+            GlassButton {
+                label: Theme.is-ru ? "Диагностика и логи →" : "Diagnostics & Logs →";
+                variant: "primary";
+                compact: true;
+                clicked => { root.open-diagnostics(); }
+            }
+            GlassButton {
+                label: Theme.is-ru ? "История версий →" : "Changelog →";
+                compact: true;
+                clicked => { root.open-changelog(); }
             }
         }
 

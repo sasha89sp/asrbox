@@ -18,9 +18,12 @@ pub struct UiRuntimeStatus {
     pub diag_verbose: bool,
     pub diag_file_log: bool,
     pub backup_busy: bool,
+    pub diag_monitor_enabled: bool,
     pub diag_summary: String,
     pub status_banner: String,
+    pub diag_filter_label: String,
     pub modules: Vec<UiModuleStatus>,
+    pub diag_logs: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -142,8 +145,13 @@ pub fn encode_runtime_status(st: &UiRuntimeStatus) -> String {
             )
         })
         .collect();
+    let logs: Vec<String> = st
+        .diag_logs
+        .iter()
+        .map(|l| escape_sub(l.as_str()))
+        .collect();
     format!(
-        "STATUS|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
+        "STATUS|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
         b(st.autostart),
         b(st.has_zip_pw),
         b(st.has_gh_tok),
@@ -152,20 +160,23 @@ pub fn encode_runtime_status(st: &UiRuntimeStatus) -> String {
         b(st.diag_verbose),
         b(st.diag_file_log),
         b(st.backup_busy),
+        b(st.diag_monitor_enabled),
         escape_field(&st.diag_summary),
         escape_field(&st.status_banner),
+        escape_field(&st.diag_filter_label),
         escape_field(&mods.join(";")),
+        escape_field(&logs.join(";")),
     )
 }
 
 pub fn decode_runtime_status(line: &str) -> Option<UiRuntimeStatus> {
     let rest = line.trim().strip_prefix("STATUS|")?;
     let cols: Vec<&str> = rest.split('|').collect();
-    if cols.len() != 11 {
+    if cols.len() != 14 {
         return None;
     }
     let flag = |s: &str| s == "1";
-    let mods_raw = unescape_field(cols[10]);
+    let mods_raw = unescape_field(cols[12]);
     let mut modules = Vec::new();
     for entry in mods_raw.split(';').filter(|s| !s.is_empty()) {
         let mut p = entry.splitn(4, '~');
@@ -179,6 +190,11 @@ pub fn decode_runtime_status(line: &str) -> Option<UiRuntimeStatus> {
             });
         }
     }
+    let diag_logs = unescape_field(cols[13])
+        .split(';')
+        .filter(|s| !s.is_empty())
+        .map(unescape_sub)
+        .collect();
     Some(UiRuntimeStatus {
         autostart: flag(cols[0]),
         has_zip_pw: flag(cols[1]),
@@ -188,9 +204,12 @@ pub fn decode_runtime_status(line: &str) -> Option<UiRuntimeStatus> {
         diag_verbose: flag(cols[5]),
         diag_file_log: flag(cols[6]),
         backup_busy: flag(cols[7]),
-        diag_summary: unescape_field(cols[8]),
-        status_banner: unescape_field(cols[9]),
+        diag_monitor_enabled: flag(cols[8]),
+        diag_summary: unescape_field(cols[9]),
+        status_banner: unescape_field(cols[10]),
+        diag_filter_label: unescape_field(cols[11]),
         modules,
+        diag_logs,
     })
 }
 
@@ -258,14 +277,17 @@ mod tests {
             has_zip_pw: true,
             has_ya_key: true,
             diag_verbose: true,
+            diag_monitor_enabled: true,
             diag_summary: "RAM 18.2 МБ | CPU 0.1%".to_owned(),
             status_banner: "OK".to_owned(),
+            diag_filter_label: "Все".to_owned(),
             modules: vec![UiModuleStatus {
                 id: "dock".to_owned(),
                 enabled: true,
                 running: true,
                 status_text: "PID 1234 · работает".to_owned(),
             }],
+            diag_logs: vec!["12:00:00 [INFO] [app] старт; ок | ~100%".to_owned()],
             ..UiRuntimeStatus::default()
         };
         assert_eq!(decode_runtime_status(&encode_runtime_status(&st)), Some(st));

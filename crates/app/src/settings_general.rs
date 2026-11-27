@@ -25,12 +25,13 @@ impl<I: IconProvider> AppController<I> {
         host: &mut H,
         tab: BrowserTab,
     ) {
+        let tab_idx = match &tab {
+            BrowserTab::Diagnostics => 4,
+            BrowserTab::VersionHistory => 5,
+            BrowserTab::WebDavBrowser { .. } => 0,
+        };
         self.settings_ui.open_browser_tab(tab);
-        self.open_slint_settings(
-            host,
-            asrbox_mod_settings::SettingsTab::General,
-            self.settings_ui.selected_widget,
-        );
+        self.open_slint_settings_raw(host, tab_idx, 0);
     }
 
     pub(crate) fn apply_appearance_change<H: DockPlatform + WidgetPlatform + ToolsPlatform>(

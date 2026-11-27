@@ -37,6 +37,12 @@ pub fn enforce_skip_taskbar(window: &slint::Window) {
     let _ = window.with_winit_window(hide_from_taskbar_winit);
 }
 
+pub fn winit_scale_factor(window: &slint::Window) -> f64 {
+    let mut sf = f64::from(window.scale_factor().max(1.0));
+    let _ = window.with_winit_window(|w| sf = w.scale_factor().max(1.0));
+    sf
+}
+
 #[cfg(windows)]
 fn apply_bounds_phys(w: &winit::window::Window, x: i32, y: i32, lw: u32, lh: u32) {
     let sf = w.scale_factor().max(1.0);
@@ -92,8 +98,7 @@ pub fn apply_acrylic_vibrancy(window: &slint::Window, _dark: bool) {
 #[cfg(windows)]
 pub fn apply_window_opacity(window: &slint::Window, opacity_percent: u8) {
     let _ = window.with_winit_window(|w| {
-        let hwnd = extract_hwnd(w);
-        asrbox_platform_windows::set_window_opacity_alpha(hwnd, opacity_percent);
+        asrbox_platform_windows::set_window_opacity_alpha(extract_hwnd(w), opacity_percent);
     });
 }
 
@@ -332,6 +337,13 @@ pub fn minimize_window(window: &slint::Window) {
 
 pub fn toggle_maximize_window(window: &slint::Window) {
     let _ = window.with_winit_window(|w| w.set_maximized(!w.is_maximized()));
+}
+
+pub fn focus_window(window: &slint::Window) {
+    let _ = window.with_winit_window(|w| {
+        w.set_minimized(false);
+        w.focus_window();
+    });
 }
 
 pub fn install_bounds_tracker<FMove, FResize>(

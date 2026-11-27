@@ -44,7 +44,7 @@ component SysSectionCard inherits Rectangle {
     ta := TouchArea {
         mouse-cursor: pointer;
         pointer-event(ev) => {
-            if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
+            if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.up) {
                 root.right-clicked();
             } else if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.up) {
                 root.clicked();
@@ -96,44 +96,6 @@ component SysSectionCard inherits Rectangle {
     }
 }
 
-component SMenuBtn inherits Rectangle {
-    in property <string> label;
-    in property <bool> checked: false;
-    in property <bool> danger: false;
-    callback clicked();
-
-    height: 28px;
-    border-radius: 6px;
-    background: ta.has-hover
-        ? (root.danger ? Theme.danger : Theme.hover-bg)
-        : (root.checked ? Theme.accent-tint : transparent);
-
-    HorizontalLayout {
-        padding-left: 10px;
-        padding-right: 10px;
-        spacing: 8px;
-        Text {
-            horizontal-stretch: 1;
-            text: root.label;
-            color: (ta.has-hover && root.danger) ? #FFFFFF : Theme.text-primary;
-            font-size: 12px;
-            font-weight: root.checked ? 600 : 400;
-            vertical-alignment: center;
-        }
-        if (root.checked) : Text {
-            text: "●";
-            color: Theme.accent;
-            font-size: 9px;
-            vertical-alignment: center;
-        }
-    }
-
-    ta := TouchArea {
-        mouse-cursor: pointer;
-        clicked => { root.clicked(); }
-    }
-}
-
 export component SysMonitorWindow inherits Window {
     title: "asrbox — Системный монитор";
     no-frame: true;
@@ -172,30 +134,12 @@ export component SysMonitorWindow inherits Window {
 
     in property <[SlintSysProcRow]> top-procs: [];
 
-    in property <int> layer-index: 0;
-    in property <int> opacity-pct: 88;
-    in property <int> refresh-ms: 2000;
-
-    in property <bool> vis-refresh: true;
-    in property <bool> vis-layer: true;
-    in property <bool> vis-opacity: true;
-    in property <bool> vis-interval: true;
-    in property <bool> vis-open-config: true;
-    in property <bool> vis-hide: true;
-
     callback drag-window();
     callback resize-window(int);
     callback open-settings();
     callback refresh-now();
     callback open-section-tool(int);
-    callback set-layer(int);
-    callback set-opacity(int);
-    callback set-refresh-ms(int);
-    callback open-config();
-    callback hide-widget();
-
-    private property <length> ctx-x: 12px;
-    private property <length> ctx-y: 36px;
+    callback open-context-menu();
 
     Rectangle {
         width: 100%;
@@ -215,10 +159,8 @@ export component SysMonitorWindow inherits Window {
 
         TouchArea {
             pointer-event(ev) => {
-                if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
-                    root.ctx-x = Math.clamp(self.mouse-x, 8px, Math.max(8px, root.width - 216px));
-                    root.ctx-y = Math.clamp(self.mouse-y, 8px, Math.max(8px, root.height - 260px));
-                    ctx-menu.show();
+                if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.up) {
+                    root.open-context-menu();
                 }
             }
         }
@@ -240,10 +182,8 @@ export component SysMonitorWindow inherits Window {
                     pointer-event(ev) => {
                         if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
                             root.drag-window();
-                        } else if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.down) {
-                            root.ctx-x = Math.clamp(self.mouse-x, 8px, Math.max(8px, root.width - 216px));
-                            root.ctx-y = 34px;
-                            ctx-menu.show();
+                        } else if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.up) {
+                            root.open-context-menu();
                         }
                     }
                 }
@@ -317,7 +257,7 @@ export component SysMonitorWindow inherits Window {
                 title: "ПРОЦЕССОР";
                 tag: "CPU";
                 clicked => { root.open-section-tool(0); }
-                right-clicked => { root.ctx-x = 24px; root.ctx-y = 48px; ctx-menu.show(); }
+                right-clicked => { root.open-context-menu(); }
 
                 HorizontalLayout {
                     spacing: 8px;
@@ -386,7 +326,7 @@ export component SysMonitorWindow inherits Window {
                 tag: root.gpu-hz-badge;
                 accent-tag: true;
                 clicked => { root.open-section-tool(1); }
-                right-clicked => { root.ctx-x = 24px; root.ctx-y = 120px; ctx-menu.show(); }
+                right-clicked => { root.open-context-menu(); }
 
                 HorizontalLayout {
                     spacing: 8px;
@@ -447,7 +387,7 @@ export component SysMonitorWindow inherits Window {
                 title: "ПАМЯТЬ И ДИСКИ";
                 tag: "RAM / STORAGE";
                 clicked => { root.open-section-tool(2); }
-                right-clicked => { root.ctx-x = 24px; root.ctx-y = 180px; ctx-menu.show(); }
+                right-clicked => { root.open-context-menu(); }
 
                 HorizontalLayout {
                     spacing: 8px;
@@ -504,7 +444,7 @@ export component SysMonitorWindow inherits Window {
                 title: "СЕТЬ И ЗАДЕРЖКИ";
                 tag: "NET / LATENCY";
                 clicked => { root.open-section-tool(3); }
-                right-clicked => { root.ctx-x = 24px; root.ctx-y = 220px; ctx-menu.show(); }
+                right-clicked => { root.open-context-menu(); }
 
                 HorizontalLayout {
                     spacing: 8px;
@@ -543,7 +483,7 @@ export component SysMonitorWindow inherits Window {
                 title: "ТОП-5 ПРОЦЕССОВ В МОМЕНТЕ";
                 tag: "CPU  |  RAM";
                 clicked => { root.open-section-tool(4); }
-                right-clicked => { root.ctx-x = 24px; root.ctx-y = 220px; ctx-menu.show(); }
+                right-clicked => { root.open-context-menu(); }
 
                 for p in root.top-procs : HorizontalLayout {
                     spacing: 8px;
@@ -584,116 +524,6 @@ export component SysMonitorWindow inherits Window {
         WindowResizeHandles {
             show-se-grip: true;
             resize-window(dir) => { root.resize-window(dir); }
-        }
-    }
-
-    ctx-menu := PopupWindow {
-        x: root.ctx-x;
-        y: root.ctx-y;
-        width: 210px;
-        close-policy: PopupClosePolicy.close-on-click-outside;
-
-        Rectangle {
-            border-radius: 10px;
-            background: Theme.popup-bg;
-            border-width: 1px;
-            border-color: Theme.border-strong;
-            drop-shadow-blur: 18px;
-            drop-shadow-color: rgba(0, 0, 0, 0.45);
-            drop-shadow-offset-y: 6px;
-
-            VerticalLayout {
-                padding: 5px;
-                spacing: 2px;
-
-                if (root.vis-refresh) : SMenuBtn {
-                    label: "Обновить датчики";
-                    clicked => { ctx-menu.close(); root.refresh-now(); }
-                }
-                SMenuBtn {
-                    label: "Настройки монитора";
-                    clicked => { ctx-menu.close(); root.open-settings(); }
-                }
-                if (root.vis-open-config) : SMenuBtn {
-                    label: "Открыть sysmon.cfg";
-                    clicked => { ctx-menu.close(); root.open-config(); }
-                }
-
-                if (root.vis-layer) : Rectangle { height: 1px; background: Theme.divider-color; }
-                if (root.vis-layer) : SMenuBtn {
-                    label: "Слой: На рабочем столе";
-                    checked: root.layer-index == 0;
-                    clicked => { ctx-menu.close(); root.set-layer(0); }
-                }
-                if (root.vis-layer) : SMenuBtn {
-                    label: "Слой: Обычный";
-                    checked: root.layer-index == 1;
-                    clicked => { ctx-menu.close(); root.set-layer(1); }
-                }
-                if (root.vis-layer) : SMenuBtn {
-                    label: "Слой: Поверх окон";
-                    checked: root.layer-index == 2;
-                    clicked => { ctx-menu.close(); root.set-layer(2); }
-                }
-
-                if (root.vis-opacity) : Rectangle { height: 1px; background: Theme.divider-color; }
-                if (root.vis-opacity) : HorizontalLayout {
-                    height: 26px;
-                    padding-left: 6px;
-                    padding-right: 6px;
-                    spacing: 4px;
-                    for pct in [65, 80, 90, 100] : Rectangle {
-                        horizontal-stretch: 1;
-                        border-radius: 5px;
-                        background: root.opacity-pct == pct ? Theme.accent : Theme.card-bg;
-                        Text {
-                            width: 100%;
-                            height: 100%;
-                            text: "\{pct}%";
-                            color: root.opacity-pct == pct ? #FFFFFF : Theme.text-primary;
-                            font-size: 10.5px;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
-                        TouchArea {
-                            mouse-cursor: pointer;
-                            clicked => { ctx-menu.close(); root.set-opacity(pct); }
-                        }
-                    }
-                }
-
-                if (root.vis-interval) : HorizontalLayout {
-                    height: 26px;
-                    padding-left: 6px;
-                    padding-right: 6px;
-                    spacing: 4px;
-                    for ms in [1000, 2000, 3000, 5000] : Rectangle {
-                        horizontal-stretch: 1;
-                        border-radius: 5px;
-                        background: root.refresh-ms == ms ? Theme.accent : Theme.card-bg;
-                        Text {
-                            width: 100%;
-                            height: 100%;
-                            text: "\{Math.round((ms * 1.0) / 1000.0)}с";
-                            color: root.refresh-ms == ms ? #FFFFFF : Theme.text-primary;
-                            font-size: 10.5px;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
-                        TouchArea {
-                            mouse-cursor: pointer;
-                            clicked => { ctx-menu.close(); root.set-refresh-ms(ms); }
-                        }
-                    }
-                }
-
-                if (root.vis-hide) : Rectangle { height: 1px; background: Theme.divider-color; }
-                if (root.vis-hide) : SMenuBtn {
-                    label: "Скрыть виджет";
-                    danger: true;
-                    clicked => { ctx-menu.close(); root.hide-widget(); }
-                }
-            }
         }
     }
 }

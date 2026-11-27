@@ -60,36 +60,43 @@ fn compute_dock_size(cfg: &DockConfig) -> (u32, u32) {
     }
 }
 
-pub fn compute_dock_rect(cfg: &DockConfig, work_area: PixelRect) -> (i32, i32, u32, u32) {
+pub fn compute_dock_rect(
+    cfg: &DockConfig,
+    work_area: PixelRect,
+    scale_factor: f64,
+) -> (i32, i32, u32, u32) {
     let (w, h) = compute_dock_size(cfg);
+    let sf = scale_factor.max(1.0);
+    let phys_w = (f64::from(w) * sf).round() as i32;
+    let phys_h = (f64::from(h) * sf).round() as i32;
     if let Some((fx, fy)) = cfg.free_pos {
-        let min_x = work_area.x - (w as i32 / 2);
+        let min_x = work_area.x - (phys_w / 2);
         let max_x = work_area.x + work_area.width as i32 - 32;
         let min_y = work_area.y;
         let max_y = work_area.y + work_area.height as i32 - 32;
         return (fx.clamp(min_x, max_x), fy.clamp(min_y, max_y), w, h);
     }
-    let margin = i32::from(cfg.edge_margin_px);
+    let margin = (f64::from(cfg.edge_margin_px) * sf).round() as i32;
     let offset = match cfg.alignment {
         DockAlignment::Center => 0,
         DockAlignment::Offset(o) => o,
     };
     let (x, y) = match cfg.edge {
         DockEdge::Bottom => (
-            work_area.x + (work_area.width as i32 - w as i32) / 2 + offset,
-            work_area.y + work_area.height as i32 - h as i32 - margin,
+            work_area.x + (work_area.width as i32 - phys_w) / 2 + offset,
+            work_area.y + work_area.height as i32 - phys_h - margin,
         ),
         DockEdge::Top => (
-            work_area.x + (work_area.width as i32 - w as i32) / 2 + offset,
+            work_area.x + (work_area.width as i32 - phys_w) / 2 + offset,
             work_area.y + margin,
         ),
         DockEdge::Left => (
             work_area.x + margin,
-            work_area.y + (work_area.height as i32 - h as i32) / 2 + offset,
+            work_area.y + (work_area.height as i32 - phys_h) / 2 + offset,
         ),
         DockEdge::Right => (
-            work_area.x + work_area.width as i32 - w as i32 - margin,
-            work_area.y + (work_area.height as i32 - h as i32) / 2 + offset,
+            work_area.x + work_area.width as i32 - phys_w - margin,
+            work_area.y + (work_area.height as i32 - phys_h) / 2 + offset,
         ),
     };
     (x, y, w, h)

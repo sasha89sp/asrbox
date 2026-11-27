@@ -21,11 +21,12 @@ use crate::settings_state::apply_theme_to_window;
 use crate::vibrancy::{
     apply_acrylic_vibrancy, apply_window_opacity, configure_desktop_window, enforce_skip_taskbar,
     install_bounds_tracker, move_window_to, resize_window_to, set_window_layer, set_window_visible,
-    start_window_drag, start_window_resize, DesktopWindowSpec,
+    start_window_drag, start_window_resize, window_hwnd_raw, DesktopWindowSpec,
 };
+use crate::widgets_menu::{show_widget_context_menu, WidgetMenuChoice, WidgetMenuParams};
 use crate::win_os::{
-    emit_config_changed, emit_open_settings, emit_worker_log, http_get, idx_to_layer, layer_to_idx,
-    local_time_now, open_text_file, open_url,
+    emit_config_changed, emit_open_settings, emit_worker_log, http_get, local_time_now,
+    open_text_file, open_url,
 };
 
 thread_local! {
@@ -42,6 +43,7 @@ pub struct CalendarSlintState {
     pub events_by_src: HashMap<String, Vec<CalendarEvent>>,
     pub error: Option<String>,
     pub loading: bool,
+    pub appearance: AppearanceConfig,
     pub vis: WidgetMenuVisibility,
     pub dark: bool,
     pub window_shown: bool,
@@ -69,6 +71,7 @@ pub fn create_calendar_controller(
         events_by_src: HashMap::new(),
         error: None,
         loading: false,
+        appearance,
         vis,
         dark,
         window_shown: false,
@@ -97,6 +100,7 @@ pub fn reload_calendar(
         if let Ok(fresh) = load_widget_config(&s.cfg_path) {
             s.cfg = fresh;
         }
+        s.appearance = appearance;
         s.vis = vis;
         let dark = apply_theme_to_window(&s.ui, appearance);
         if dark != s.dark {
@@ -311,31 +315,50 @@ fn wire_calendar_filter_and_menu(state: &SharedCalendar) {
             s.cfg.date_format = s.cfg.date_format.next()
         });
     });
-    ui.on_set_layer(move |idx| {
-        update_cal_cfg(&st3, true, |s| {
-            s.cfg.layer = idx_to_layer(idx);
-            set_window_layer(s.ui.window(), s.cfg.layer);
-        });
-    });
-    let (st4, st5, st6, st7) = (
-        Rc::clone(state),
-        Rc::clone(state),
-        Rc::clone(state),
-        Rc::clone(state),
-    );
-    ui.on_set_opacity(move |pct| {
-        update_cal_cfg(&st4, true, |s| {
-            s.cfg.opacity_percent = pct.clamp(20, 100) as u8;
-            apply_window_opacity(s.ui.window(), s.cfg.opacity_percent);
-        });
-    });
-    ui.on_set_sync_interval(move |sec| {
-        let clamped = (sec.max(60) as u32).clamp(60, 86_400);
-        update_cal_cfg(&st5, true, |s| s.cfg.refresh_interval_sec = clamped);
-        arm_calendar_timer(&st5, clamped);
-    });
-    ui.on_open_config(move || drop(open_text_file(&st6.borrow().cfg_path)));
-    ui.on_hide_widget(move || toggle_calendar_visible(&st7));
+    ui.on_open_context_menu(move || open_calendar_context_menu(&st3));
+}
+
+fn open_calendar_context_menu(state: &SharedCalendar) {
+    const INTERVALS: [(u32, &str); 3] = [(900, "15 минут"), (1800, "30 минут"), (3600, "1 час")];
+    let choice = {
+        let s = state.borrow();
+        let hwnd = window_hwnd_raw(s.ui.window());
+        show_widget_context_menu(&WidgetMenuParams {
+            hwnd_raw: hwnd,
+            appearance: s.appearance,
+            vis: s.vis,
+            refresh_label: "Обновить календарь",
+            settings_label: "Настройки календаря",
+            config_label: "Открыть widgets.cfg",
+            layer: s.cfg.layer,
+            opacity_percent: s.cfg.opacity_percent,
+            interval_title: "Синхронизация",
+            interval_options: &INTERVALS,
+            current_interval: s.cfg.refresh_interval_sec,
+        })
+    };
+    let Some(act) = choice else {
+        return;
+    };
+    match act {
+        WidgetMenuChoice::Refresh => trigger_calendar_refresh(state),
+        WidgetMenuChoice::OpenSettings => emit_open_settings("calendar"),
+        WidgetMenuChoice::OpenConfig => drop(open_text_file(&state.borrow().cfg_path)),
+        WidgetMenuChoice::SetLayer(layer) => update_cal_cfg(state, true, |s| {
+            s.cfg.layer = layer;
+            set_window_layer(s.ui.window(), layer);
+        }),
+        WidgetMenuChoice::SetOpacity(pct) => update_cal_cfg(state, true, |s| {
+            s.cfg.opacity_percent = pct;
+            apply_window_opacity(s.ui.window(), pct);
+        }),
+        WidgetMenuChoice::SetInterval(sec) => {
+            let clamped = sec.clamp(60, 86_400);
+            update_cal_cfg(state, true, |s| s.cfg.refresh_interval_sec = clamped);
+            arm_calendar_timer(state, clamped);
+        }
+        WidgetMenuChoice::HideWidget => toggle_calendar_visible(state),
+    }
 }
 
 fn fetch_sources_blocking(
@@ -387,15 +410,6 @@ fn sync_calendar_ui(s: &CalendarSlintState) {
     ui.set_date_format_label(SharedString::from(s.cfg.date_format.label()));
     ui.set_loading(s.loading);
     ui.set_error_text(SharedString::from(s.error.as_deref().unwrap_or("")));
-    ui.set_layer_index(layer_to_idx(s.cfg.layer));
-    ui.set_opacity_pct(i32::from(s.cfg.opacity_percent));
-    ui.set_sync_interval_sec(s.cfg.refresh_interval_sec as i32);
-    ui.set_vis_refresh(s.vis.show_refresh);
-    ui.set_vis_layer(s.vis.show_layer);
-    ui.set_vis_opacity(s.vis.show_opacity);
-    ui.set_vis_interval(s.vis.show_interval);
-    ui.set_vis_open_config(s.vis.show_open_config);
-    ui.set_vis_hide(s.vis.show_hide);
 
     let mut all: Vec<&CalendarEvent> = s
         .events_by_src

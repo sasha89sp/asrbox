@@ -3,27 +3,28 @@ updated: 2026-11-27
 spec_ids: [NF-001, NF-002, NF-005, NF-006, NF-007, DK-018, DK-019, ST-001, WG-022]
 atlas_updated: true
 last_session:
-  goal: "Исправление 3 живых дефектов Windows 11: скрытие виджетов/доков/Заметок из панели задач, мигающее ПКМ-меню дока при отпускании ПКМ и обрезка ширины док-панелей до 480 px"
+  goal: "Перевод ПКМ-меню виджетов на нативное Win32 Fluent-меню, COM ITaskbarList::DeleteTab + DPI-позиционирование доков, возврат «Диагностики и логов» и «Истории версий», исправление GlassSlider/ScrollView и визуальная доводка Настроек под макет"
   done:
-    - "crates/platform-windows/src/slint_host.rs и lib.rs: скрытый 0x0 WS_EX_TOOLWINDOW-владелец (ensure_hidden_owner_hwnd) + GWLP_HWNDPARENT + WS_EX_TOOLWINDOW в set_window_skip_taskbar; добавлен set_window_bounds_phys"
-    - "crates/platform-windows/src/fluent_menu.rs: WM_RBUTTONUP убран из обработчика клика/закрытия (оставлен WM_LBUTTONUP), чтобы отпускание ПКМ не схлопывало меню"
-    - "crates/ui-slint/ui/{dock,notes,components/window_chrome}.slint: открытие ПКМ-меню перенесено на PointerEventKind.up; в DockWindow добавлены свойства dock-width/dock-height и увеличен запас под подписи (+18 px)"
-    - "crates/ui-slint/src/vibrancy.rs: hide_from_taskbar_winit (Win32 + winit set_skip_taskbar(true)) вызывается строго после всех winit-мутаций; добавлены enforce_skip_taskbar и apply_bounds_phys (SetWindowPos + slint::Window::set_size); удалена неиспользуемая apply_window_vibrancy"
-    - "crates/ui-slint/src/{dock_view,dock_runner,widgets_weather,widgets_sysmon,widgets_calendar,notes_bridge}.rs: синхронизация dock-width/dock-height, отложенный ресайз дока и повторный enforce_skip_taskbar после показа"
-    - "Обновлены CHANGELOG.md и HANDOFF.yaml"
+    - "crates/platform-windows/src/slint_host.rs: добавлен COM ITaskbarList::DeleteTab в set_window_skip_taskbar для гарантированного скрытия доков/виджетов из панели задач"
+    - "crates/ui-slint/src/{vibrancy,dock_view,dock_runner}.rs: добавлены winit_scale_factor и focus_window; compute_dock_rect переведён на физические DPI-пиксели; двойной enforce_skip_taskbar (60/250 мс)"
+    - "crates/ui-slint/src/widgets_menu.rs + widgets_{weather,sysmon,calendar}.rs + ui/widget_*.slint: Slint PopupWindow полностью заменены на нативное Win32 Fluent ПКМ-меню по PointerEventKind.up; удалена неиспользуемая win_os::idx_to_layer"
+    - "crates/ui-slint/ui/settings_tools.slint + settings.slint + settings_general.slint + ipc_proto.rs + settings_{state,bridge}.rs + app/src/{slint_dispatch,settings_general}.rs: восстановлены вкладки «Диагностика и логи» (живые метрики/логи 1.5 с, фильтр, очистка, отчёты) и «История версий» (CHANGELOG.md + пути) из трея и сайдбара"
+    - "crates/ui-slint/ui/{theme,components/controls,settings,settings_dock,settings_general}.slint: исправлен GlassSlider (x: 0px), сброс ScrollView и высота 32 px шапки выбора дока, усилена палитра тёмного стекла, добавлены accent-top свечение и градиент активного NavItem под эталонный макет"
+    - "Обновлены crates/{ui-slint,platform-windows}/MAP.md, CHANGELOG.md и HANDOFF.yaml"
   not_done:
-    - "Прогон GitHub Actions (.github/workflows/ci.yml) на windows-latest и живая проверка 3 исправлений на Windows 11"
+    - "Прогон GitHub Actions (.github/workflows/ci.yml) на windows-latest и живая проверка 4 исправлений на Windows 11"
   verified:
     ci_build: false
     tests: false
     manual_run: false
 open_bugs: [BUG-003, BUG-004, BUG-005, BUG-006, BUG-007, BUG-008, BUG-009, BUG-010, BUG-011, BUG-012, BUG-013]
-next_step: "Прогнать GitHub Actions (windows-latest): cargo fmt --check, clippy -D warnings, xtask atlas-check, тесты, размер .exe < 25 МБ и --selftest, затем проверить 3 пункта на Windows 11"
+next_step: "Прогнать GitHub Actions (windows-latest): cargo fmt --check, clippy -D warnings, xtask atlas-check, тесты, размер .exe < 25 МБ и --selftest, затем проверить 4 пункта на Windows 11"
 touched_files:
-  - CHANGELOG.md, HANDOFF.yaml
-  - crates/platform-windows/src/{lib.rs, slint_host.rs, fluent_menu.rs}
-  - crates/ui-slint/ui/{dock.slint, notes.slint, components/window_chrome.slint}
-  - crates/ui-slint/src/{vibrancy.rs, dock_view.rs, dock_runner.rs, widgets_weather.rs, widgets_sysmon.rs, widgets_calendar.rs, notes_bridge.rs}
+  - CHANGELOG.md, HANDOFF.yaml, crates/ui-slint/MAP.md, crates/platform-windows/MAP.md
+  - crates/platform-windows/src/slint_host.rs
+  - crates/app/src/{slint_dispatch.rs, settings_general.rs}
+  - crates/ui-slint/src/{lib.rs, vibrancy.rs, win_os.rs, ipc_proto.rs, dock_view.rs, dock_runner.rs, widgets_menu.rs, widgets_weather.rs, widgets_weather_data.rs, widgets_sysmon.rs, widgets_sysmon_view.rs, widgets_calendar.rs, settings_state.rs, settings_bridge.rs}
+  - crates/ui-slint/ui/{theme.slint, components/controls.slint, settings.slint, settings_general.slint, settings_dock.slint, settings_tools.slint, widget_weather.slint, widget_sysmon.slint, widget_calendar.slint}
 warnings:
   - "Сборка и тесты не запускались локально (отсутствует cargo); требуется прогон GitHub Actions windows-latest и живая проверка на Windows 11"
 ideas:

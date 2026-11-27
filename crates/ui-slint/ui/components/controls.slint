@@ -194,6 +194,7 @@ export component GlassSlider inherits HorizontalLayout {
 
         // Background track
         Rectangle {
+            x: 0px;
             y: 11px;
             width: parent.width;
             height: 4px;
@@ -205,6 +206,7 @@ export component GlassSlider inherits HorizontalLayout {
 
         // Active accent fill
         Rectangle {
+            x: 0px;
             y: 11px;
             width: parent.width * parent.ratio;
             height: 4px;
@@ -463,20 +465,33 @@ export component AccordionCard inherits Rectangle {
     in property <string> summary: "";
     in-out property <bool> expanded: true;
     in property <bool> highlighted: false;
+    in property <bool> accent-top: false;
     callback toggled();
 
     border-radius: 10px;
     background: Theme.card-bg;
-    border-width: root.highlighted ? 1.5px : 1px;
-    border-color: root.highlighted ? Theme.accent : Theme.border-color;
+    border-width: (root.highlighted || root.accent-top) ? 1.5px : 1px;
+    border-color: (root.highlighted || root.accent-top) ? Theme.accent : Theme.border-color;
     clip: true;
 
-    // Subtle top specular highlight
-    Rectangle {
+    // Signature soft ambient top gradient wash (matches target mockup Appearance card)
+    if (root.accent-top) : Rectangle {
+        x: 0px;
         y: 0px;
         width: 100%;
-        height: 1px;
-        background: Theme.top-shine;
+        height: 52px;
+        background: @linear-gradient(180deg, Theme.accent-tint 0%, transparent 100%);
+    }
+
+    // Subtle top specular highlight / luminous accent edge
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        width: 100%;
+        height: root.accent-top ? 2px : 1px;
+        background: root.accent-top
+            ? @linear-gradient(90deg, Theme.accent 0%, Theme.accent-hover 50%, Theme.accent 100%)
+            : Theme.top-shine;
     }
 
     VerticalLayout {
