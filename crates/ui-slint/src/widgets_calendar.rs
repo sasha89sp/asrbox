@@ -306,7 +306,9 @@ fn wire_calendar_filter_and_menu(state: &SharedCalendar) {
         });
     });
     ui.on_cycle_date_format(move || {
-        update_cal_cfg(&st2, false, |s| s.cfg.date_format = s.cfg.date_format.next());
+        update_cal_cfg(&st2, false, |s| {
+            s.cfg.date_format = s.cfg.date_format.next()
+        });
     });
     ui.on_set_layer(move |idx| {
         update_cal_cfg(&st3, true, |s| {

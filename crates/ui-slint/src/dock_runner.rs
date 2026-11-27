@@ -338,7 +338,11 @@ fn handle_launch_item(dock_id: DockId, item_id: u64) {
     if is_folder_target(&path) {
         if let Ok(Some(chosen)) = show_folder_native_popup(&path, appearance) {
             if let Err(err) = activate_or_launch(&chosen, focus) {
-                emit_worker_log("ERROR", "dock", format!("Запуск {}: {err}", chosen.display()));
+                emit_worker_log(
+                    "ERROR",
+                    "dock",
+                    format!("Запуск {}: {err}", chosen.display()),
+                );
             }
         }
         return;
