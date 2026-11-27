@@ -134,7 +134,6 @@ fn chk_act(id: u32, label: &str, checked: bool) -> FluentMenuItem {
         shortcut: None,
         checked,
         enabled: true,
-        destructive: false,
     }
 }
 
@@ -146,6 +145,5 @@ fn icon_act(id: u32, label: &str, icon: &str) -> FluentMenuItem {
         shortcut: None,
         checked: false,
         enabled: true,
-        destructive: id == 40,
     }
 }
